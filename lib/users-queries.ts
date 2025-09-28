@@ -152,3 +152,41 @@ export const ROLE_MAPPING: Record<RoleLabel, User["role"]> = {
   "Délégué": "delegate",
   "Admin": "super_admin"
 }
+
+export async function getUsersByRole(role: string): Promise<User[]> {
+  const rows = await sql<User[]>`
+    SELECT
+      id::text,
+      name,
+      email,
+      role,
+      agency,
+      password_hash,
+      last_login::text as last_login,
+      created_at::text as created_at
+    FROM users
+    WHERE role = ${role}
+    ORDER BY created_at DESC
+  `
+  return rows
+}
+
+export async function getUsersByRoles(roles: string[]): Promise<User[]> {
+  if (roles.length === 0) return []
+  
+  const rows = await sql<User[]>`
+    SELECT
+      id::text,
+      name,
+      email,
+      role,
+      agency,
+      password_hash,
+      last_login::text as last_login,
+      created_at::text as created_at
+    FROM users
+    WHERE role = ANY(${roles})
+    ORDER BY created_at DESC
+  `
+  return rows
+}

@@ -1,0 +1,152 @@
+import "server-only"
+import { getUsersByRole, getUsersByRoles, type User } from "./users-queries"
+
+// Configuration email
+export interface EmailConfig {
+  smtp: {
+    host: string
+    port: number
+    secure: boolean
+    auth: {
+      user: string
+      pass: string
+    }
+  }
+  from: {
+    name: string
+    email: string
+  }
+}
+
+// Types pour les notifications email
+export interface TransactionEmailData {
+  transactionId: string
+  transactionType: string
+  amount: number
+  currency: string
+  description: string
+  createdBy: string
+  agency: string
+  status: string
+  createdAt: string
+}
+
+export interface DeletionRequestEmailData {
+  transactionId: string
+  transactionType: string
+  amount: number
+  currency: string
+  description: string
+  requestedBy: string
+  agency: string
+  reason?: string
+  requestedAt: string
+}
+
+// Configuration par défaut (à adapter selon votre environnement)
+export const DEFAULT_EMAIL_CONFIG: EmailConfig = {
+  smtp: {
+    host: process.env.SMTP_HOST || "smtp.gmail.com",
+    port: parseInt(process.env.SMTP_PORT || "587"),
+    secure: process.env.SMTP_SECURE === "true",
+    auth: {
+      user: process.env.SMTP_USER || "",
+      pass: process.env.SMTP_PASS || "",
+    },
+  },
+  from: {
+    name: "ZOLL TAX FOREX",
+    email: process.env.FROM_EMAIL || "noreply@zolltaxforex.com",
+  },
+}
+
+// Fonction pour récupérer la configuration email
+export function getEmailConfig(): EmailConfig {
+  return {
+    smtp: {
+      host: process.env.SMTP_HOST || DEFAULT_EMAIL_CONFIG.smtp.host,
+      port: parseInt(process.env.SMTP_PORT || DEFAULT_EMAIL_CONFIG.smtp.port.toString()),
+      secure: process.env.SMTP_SECURE === "true",
+      auth: {
+        user: process.env.SMTP_USER || DEFAULT_EMAIL_CONFIG.smtp.auth.user,
+        pass: process.env.SMTP_PASS || DEFAULT_EMAIL_CONFIG.smtp.auth.pass,
+      },
+    },
+    from: {
+      name: process.env.FROM_NAME || DEFAULT_EMAIL_CONFIG.from.name,
+      email: process.env.FROM_EMAIL || DEFAULT_EMAIL_CONFIG.from.email,
+    },
+  }
+}
+
+// Fonction pour vérifier si l'email est configuré
+export function isEmailConfigured(): boolean {
+  const config = getEmailConfig()
+  return !!(config.smtp.auth.user && config.smtp.auth.pass && config.from.email)
+}
+
+// Fonction pour récupérer les destinataires selon le type de notification
+export async function getEmailRecipients(type: 'transaction_created' | 'transaction_validated' | 'transaction_completed' | 'deletion_requested' | 'deletion_validated'): Promise<{
+  to: User[]
+  cc: User[]
+}> {
+  switch (type) {
+    case 'transaction_created':
+      // Transaction émise par un caissier : auditeurs en TO, directeur et comptables en CC
+      return {
+        to: await getUsersByRole('auditor'),
+        cc: await getUsersByRoles(['director', 'accounting']),
+      }
+    
+    case 'transaction_validated':
+      // Transaction validée par un auditeur : caissier en TO, directeur et comptables en CC
+      return {
+        to: [], // Le caissier sera ajouté dynamiquement
+        cc: await getUsersByRoles(['director', 'accounting']),
+      }
+    
+    case 'transaction_completed':
+      // Transaction clôturée par un caissier : auditeurs en TO, directeur et comptables en CC
+      return {
+        to: await getUsersByRole('auditor'),
+        cc: await getUsersByRoles(['director', 'accounting']),
+      }
+    
+    case 'deletion_requested':
+      // Demande de suppression : comptables en TO, directeur en CC
+      return {
+        to: await getUsersByRole('accounting'),
+        cc: await getUsersByRole('director'),
+      }
+    
+    case 'deletion_validated':
+      // Demande de suppression validée : caissier en TO, directeur en CC
+      return {
+        to: [], // Le caissier sera ajouté dynamiquement
+        cc: await getUsersByRole('director'),
+      }
+    
+    default:
+      return { to: [], cc: [] }
+  }
+}
+
+// Fonction pour formater les adresses email
+export function formatEmailAddresses(users: User[]): string[] {
+  return users.map(user => `${user.name} <${user.email}>`)
+}
+
+// Fonction pour créer les en-têtes email
+export function createEmailHeaders(config: EmailConfig, to: string[], cc: string[] = []): Record<string, string> {
+  const headers: Record<string, string> = {
+    'From': `${config.from.name} <${config.from.email}>`,
+    'To': to.join(', '),
+    'Content-Type': 'text/html; charset=utf-8',
+  }
+  
+  if (cc.length > 0) {
+    headers['Cc'] = cc.join(', ')
+  }
+  
+  return headers
+}

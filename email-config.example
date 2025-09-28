@@ -1,0 +1,19 @@
+# Configuration Email pour ZOLL TAX FOREX
+# Copiez ce fichier vers .env.local et configurez vos paramètres
+
+# Configuration SMTP
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=votre-email@gmail.com
+SMTP_PASS=votre-mot-de-passe-app
+
+# Configuration de l'expéditeur
+FROM_NAME="ZOLL TAX FOREX"
+FROM_EMAIL=noreply@zolltaxforex.com
+
+# Configuration de la base de données (déjà existante)
+DATABASE_URL=postgresql://username:password@hostname/database?sslmode=require
+
+# Mode de développement (pour désactiver l'envoi réel d'emails)
+NODE_ENV=development
