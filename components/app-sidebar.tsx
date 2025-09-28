@@ -17,7 +17,7 @@ import {
   SidebarRail,
   useSidebar,
 } from "@/components/ui/sidebar"
-import { Home, Inbox, CreditCard, BadgeDollarSign, Receipt, FileText, Users, Building2, Gauge, ChevronDown } from 'lucide-react'
+import { Home, CreditCard, BadgeDollarSign, Receipt, FileText, Users, Building2, Gauge, ChevronDown } from 'lucide-react'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 
 export function AppSidebar() {
@@ -26,7 +26,6 @@ export function AppSidebar() {
 
   const mainNav = [
     { title: "Tableau de bord", icon: Home, href: "/dashboard" },
-    { title: "Réception/Envoi", icon: Inbox, href: "/reception" },
     { title: "Gestion Cartes", icon: CreditCard, href: "/cards" },
     { title: "Bureau de change", icon: BadgeDollarSign, href: "/exchange" },
     { title: "Dépenses", icon: Receipt, href: "/expenses" },

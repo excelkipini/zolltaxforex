@@ -60,10 +60,6 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "create_transactions",
     "edit_transactions",
     "delete_transactions",
-    "view_reception",
-    "create_reception",
-    "edit_reception",
-    "delete_reception",
     "view_exchange",
     "create_exchange",
     "edit_exchange",
@@ -135,9 +131,6 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "view_dashboard",
     "view_transactions",
     "create_transactions",
-    "view_reception",
-    "create_reception",
-    "edit_reception",
     "view_transfer",
     "create_transfer",
     "edit_transfer",
@@ -175,7 +168,6 @@ export function getAccessibleMenus(role: Role): string[] {
   if (permissions.includes("view_dashboard")) menus.push("dashboard")
   if (permissions.includes("view_users")) menus.push("users")
   if (permissions.includes("view_agencies")) menus.push("agencies")
-  if (permissions.includes("view_reception")) menus.push("reception")
   if (permissions.includes("view_exchange")) menus.push("exchange")
   if (permissions.includes("view_cards")) menus.push("cards")
   if (permissions.includes("view_rates")) menus.push("rates")
@@ -206,7 +198,6 @@ export function getRoleDisplayName(role: Role): string {
 export function getRolePrimaryActions(role: Role): Array<{ label: string; href: string }> {
   const actions: Record<Role, Array<{ label: string; href: string }>> = {
     cashier: [
-      { label: "Nouvelle transaction", href: "/reception" },
       { label: "Nouveau transfert", href: "/transfer" },
       { label: "Opération change", href: "/exchange" },
     ],
@@ -244,6 +235,6 @@ export const ROLE_DESCRIPTIONS: Record<Role, string> = {
   director: "Supervision globale, gestion des utilisateurs et configuration des taux",
   delegate: "Gestion opérationnelle étendue, supervision d'équipes et validation d'opérations",
   accounting: "Gestion financière, validation des dépenses et génération de rapports comptables",
-  cashier: "Interface opérationnelle pour transactions quotidiennes, cartes et opérations de change",
+  cashier: "Interface opérationnelle pour transferts d'argent, cartes et opérations de change",
   auditor: "Contrôle et audit en mode lecture seule, génération de rapports de conformité",
 }

@@ -3,7 +3,6 @@ export type Locale = "fr" | "en"
 const TITLES: Record<Locale, Record<string, string>> = {
   fr: {
     "/dashboard": "Tableau de bord",
-    "/reception": "Emettre un reçu",
     "/cards": "Gestion des cartes prépayées",
     "/exchange": "Bureau de change",
     "/expenses": "Gestion des dépenses",
@@ -14,7 +13,6 @@ const TITLES: Record<Locale, Record<string, string>> = {
   },
   en: {
     "/dashboard": "Dashboard",
-    "/reception": "Operation Receipt",
     "/cards": "Prepaid Cards Management",
     "/exchange": "Currency Exchange",
     "/expenses": "Expenses Management",

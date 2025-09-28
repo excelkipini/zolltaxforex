@@ -11,7 +11,6 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { LogOut } from "lucide-react"
 import {
   LayoutDashboard,
-  ArrowLeftRight,
   Send,
   CreditCard,
   Banknote,
@@ -41,13 +40,6 @@ export function RoleBasedSidebar({ user }: RoleBasedSidebarProps) {
       icon: LayoutDashboard,
       permission: "view_dashboard" as const,
       primary: false,
-    },
-    {
-      title: "Réception/Envoi",
-      href: "/reception",
-      icon: ArrowLeftRight,
-      permission: "view_reception" as const,
-      primary: user.role === "cashier",
     },
     {
       title: "Transfert d'argent",

@@ -171,3 +171,11 @@ export async function getPendingTransactions(): Promise<Transaction[]> {
   `
   return rows
 }
+
+export async function deleteAllTransactions(): Promise<{ count: number }> {
+  const result = await sql<{ count: number }[]>`
+    DELETE FROM transactions
+    RETURNING COUNT(*) as count
+  `
+  return { count: result[0]?.count || 0 }
+}

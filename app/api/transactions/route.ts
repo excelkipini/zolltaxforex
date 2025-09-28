@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { requireAuth } from "@/lib/auth"
-import { listTransactions, createTransaction, updateTransactionStatus } from "@/lib/transactions-queries"
+import { listTransactions, createTransaction, updateTransactionStatus, deleteAllTransactions } from "@/lib/transactions-queries"
 
 export async function GET() {
   const { user } = await requireAuth()
@@ -73,6 +73,26 @@ export async function PUT(request: NextRequest) {
 
     const transaction = await updateTransactionStatus(id, status, rejection_reason)
     return NextResponse.json({ ok: true, data: transaction })
+  } catch (error: any) {
+    return NextResponse.json({ ok: false, error: error.message }, { status: 500 })
+  }
+}
+
+export async function DELETE() {
+  const { user } = await requireAuth()
+  
+  // Seuls les super administrateurs peuvent supprimer toutes les transactions
+  if (user.role !== "super_admin") {
+    return NextResponse.json({ ok: false, error: "Seuls les super administrateurs peuvent supprimer toutes les transactions" }, { status: 403 })
+  }
+
+  try {
+    const result = await deleteAllTransactions()
+    return NextResponse.json({ 
+      ok: true, 
+      message: `${result.count} transaction(s) supprimée(s) avec succès`,
+      count: result.count 
+    })
   } catch (error: any) {
     return NextResponse.json({ ok: false, error: error.message }, { status: 500 })
   }
