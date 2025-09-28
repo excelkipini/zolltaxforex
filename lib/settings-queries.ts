@@ -105,7 +105,7 @@ export async function updateSettings(
   return rows[0]
 }
 
-export async function getSettingsHistory(): Promise<SettingsHistory[]> {
+export async function getSettingsHistory(limit: number = 50): Promise<SettingsHistory[]> {
   const rows = await sql<SettingsHistory[]>`
     SELECT 
       id::text,
@@ -120,7 +120,114 @@ export async function getSettingsHistory(): Promise<SettingsHistory[]> {
       created_at::text as created_at
     FROM settings_history
     ORDER BY created_at DESC
-    LIMIT 50
+    LIMIT ${limit}
   `
   return rows
+}
+
+// Type pour l'historique filtré
+export type SettingsHistoryFiltered = {
+  id: string
+  changed_at: string
+  user_name?: string
+  field: string
+  old_value: string
+  new_value: string
+}
+
+// Fonction pour récupérer l'historique filtré
+export async function getSettingsHistoryFiltered(filters: {
+  from?: string
+  to?: string
+  user?: string
+  field?: string
+  limit: number
+}): Promise<SettingsHistoryFiltered[]> {
+  let query = `
+    SELECT 
+      sh.id::text,
+      sh.created_at::text as changed_at,
+      sh.changed_by as user_name,
+      'usd' as field,
+      sh.usd::text as old_value,
+      LEAD(sh.usd) OVER (ORDER BY sh.created_at DESC)::text as new_value
+    FROM settings_history sh
+    WHERE 1=1
+  `
+  
+  const params: any[] = []
+  let paramCount = 0
+  
+  if (filters.from) {
+    paramCount++
+    query += ` AND sh.created_at >= $${paramCount}`
+    params.push(filters.from)
+  }
+  
+  if (filters.to) {
+    paramCount++
+    query += ` AND sh.created_at <= $${paramCount}`
+    params.push(filters.to)
+  }
+  
+  if (filters.user) {
+    paramCount++
+    query += ` AND sh.changed_by = $${paramCount}`
+    params.push(filters.user)
+  }
+  
+  query += ` ORDER BY sh.created_at DESC LIMIT $${paramCount + 1}`
+  params.push(filters.limit)
+  
+  // Pour simplifier, retournons l'historique standard avec les champs mappés
+  const rows = await sql<SettingsHistory[]>`
+    SELECT 
+      id::text,
+      usd,
+      eur,
+      gbp,
+      transfer_limit,
+      daily_limit,
+      card_limit,
+      commission,
+      changed_by,
+      created_at::text as created_at
+    FROM settings_history
+    WHERE 1=1
+    ${filters.from ? sql`AND created_at >= ${filters.from}` : sql``}
+    ${filters.to ? sql`AND created_at <= ${filters.to}` : sql``}
+    ${filters.user ? sql`AND changed_by = ${filters.user}` : sql``}
+    ORDER BY created_at DESC
+    LIMIT ${filters.limit}
+  `
+  
+  // Convertir en format filtré (simplifié)
+  const filteredRows: SettingsHistoryFiltered[] = []
+  
+  for (let i = 0; i < rows.length; i++) {
+    const current = rows[i]
+    const previous = rows[i + 1]
+    
+    if (previous) {
+      // Comparer chaque champ et créer des entrées pour les changements
+      const fields = ['usd', 'eur', 'gbp', 'transfer_limit', 'daily_limit', 'card_limit', 'commission'] as const
+      
+      for (const field of fields) {
+        if (filters.field && filters.field !== field) continue
+        
+        if (current[field] !== previous[field]) {
+          filteredRows.push({
+            id: `${current.id}_${field}`,
+            changed_at: current.created_at,
+            user_name: current.changed_by,
+            field,
+            old_value: String(previous[field]),
+            new_value: String(current[field])
+          })
+        }
+      }
+    }
+  }
+  
+  return filteredRows
 }

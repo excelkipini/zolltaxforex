@@ -190,3 +190,66 @@ export async function getUsersByRoles(roles: string[]): Promise<User[]> {
   `
   return rows
 }
+
+// Fonction pour mettre à jour le profil utilisateur
+export async function updateUserProfile(userId: string, name: string, email: string): Promise<User> {
+  const rows = await sql<User[]>`
+    UPDATE users
+    SET 
+      name = ${name},
+      email = ${email},
+      updated_at = NOW()
+    WHERE id = ${userId}::uuid
+    RETURNING 
+      id::text, 
+      name, 
+      email, 
+      role, 
+      agency, 
+      password_hash,
+      last_login::text as last_login,
+      created_at::text as created_at
+  `
+  
+  if (rows.length === 0) {
+    throw new Error("Utilisateur non trouvé")
+  }
+  
+  return rows[0]
+}
+
+// Fonction pour changer le mot de passe utilisateur
+export async function changeUserPassword(userId: string, currentPassword: string, newPassword: string): Promise<boolean> {
+  try {
+    // Vérifier le mot de passe actuel
+    const user = await getUserById(userId)
+    if (!user || !user.password_hash) {
+      return false
+    }
+    
+    const { compare } = await import('bcryptjs')
+    const isCurrentPasswordValid = await compare(currentPassword, user.password_hash)
+    
+    if (!isCurrentPasswordValid) {
+      return false
+    }
+    
+    // Hacher le nouveau mot de passe
+    const { hash } = await import('bcryptjs')
+    const newPasswordHash = await hash(newPassword, 10)
+    
+    // Mettre à jour le mot de passe
+    await sql`
+      UPDATE users
+      SET 
+        password_hash = ${newPasswordHash},
+        updated_at = NOW()
+      WHERE id = ${userId}::uuid
+    `
+    
+    return true
+  } catch (error) {
+    console.error('Erreur lors du changement de mot de passe:', error)
+    return false
+  }
+}
