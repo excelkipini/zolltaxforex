@@ -82,10 +82,10 @@ async function testRealEmailSending() {
     const testTransaction = {
       id: `EMAIL_TEST_${Date.now()}`,
       type: 'transfer',
-      amount: 125000,
+      amount: 150000,
       currency: 'XAF',
-      description: 'Test envoi email - Transfert vers Paris',
-      createdBy: 'caissier@test.com',
+      description: 'Test envoi email - Transfert vers Douala',
+      createdBy: 'gs.kibila@gmail.com', // Stevie comme caissier
       agency: 'Agence Centrale',
       status: 'pending',
       createdAt: new Date().toISOString()
@@ -93,7 +93,7 @@ async function testRealEmailSending() {
     
     // Destinataires de test
     const recipients = {
-      to: ['paul@zolltaxforex.com'], // Auditeur
+      to: ['reye62742@gmail.com'], // Léo comme auditeur
       cc: ['michel.nianga@zolltaxforex.com', 'anne.ominga@zolltaxforex.com'] // Directeur + Comptable
     }
     

@@ -34,32 +34,33 @@ export async function sendEmail(options: EmailSendOptions): Promise<{ success: b
 
     const config = getEmailConfig()
     
-    // En mode développement, on peut utiliser un service comme Nodemailer
-    // Pour la production, utilisez un service comme SendGrid, AWS SES, etc.
-    
-    // Simulation de l'envoi (à remplacer par votre service d'email)
-    console.log('Envoi d\'email:', {
-      from: `${config.from.name} <${config.from.email}>`,
-      to: options.to,
-      cc: options.cc,
-      subject: options.subject,
-      smtp: config.smtp.host
+    // Utiliser Nodemailer pour l'envoi réel
+    const nodemailer = await import('nodemailer')
+    const transporter = nodemailer.createTransport({
+      host: config.smtp.host,
+      port: config.smtp.port,
+      secure: config.smtp.secure,
+      auth: config.smtp.auth
     })
     
-    // Ici vous pouvez intégrer votre service d'email préféré
-    // Exemple avec Nodemailer (nécessite l'installation: npm install nodemailer)
-    /*
-    const nodemailer = require('nodemailer')
-    const transporter = nodemailer.createTransporter(config.smtp)
+    // Vérifier la connexion
+    await transporter.verify()
     
-    await transporter.sendMail({
+    // Envoyer l'email
+    const info = await transporter.sendMail({
       from: `${config.from.name} <${config.from.email}>`,
       to: options.to,
       cc: options.cc,
       subject: options.subject,
       html: options.html
     })
-    */
+    
+    console.log('Email envoyé avec succès:', {
+      messageId: info.messageId,
+      to: options.to,
+      cc: options.cc,
+      subject: options.subject
+    })
     
     return { success: true }
   } catch (error: any) {
