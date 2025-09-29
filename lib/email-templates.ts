@@ -1,6 +1,29 @@
 import "server-only"
 import { TransactionEmailData, DeletionRequestEmailData } from "./email-service"
 
+// Fonctions de traduction
+const translateTransactionType = (type: string): string => {
+  const translations: Record<string, string> = {
+    'transfer': 'Transfert d\'argent',
+    'exchange': 'Bureau de change',
+    'card': 'Gestion de carte',
+    'receipt': 'Reçu',
+    'reception': 'Réception'
+  }
+  return translations[type] || type
+}
+
+const translateTransactionStatus = (status: string): string => {
+  const translations: Record<string, string> = {
+    'pending': 'En attente',
+    'validated': 'Validée',
+    'rejected': 'Rejetée',
+    'completed': 'Terminée',
+    'pending_delete': 'En attente de suppression'
+  }
+  return translations[status] || status
+}
+
 // Template de base pour tous les emails
 const BASE_TEMPLATE = (content: string, title: string) => `
 <!DOCTYPE html>
@@ -110,7 +133,7 @@ const TRANSACTION_DETAILS_TEMPLATE = (data: TransactionEmailData) => `
     </div>
     <div class="detail-row">
         <span class="detail-label">Type:</span>
-        <span class="detail-value">${data.transactionType}</span>
+        <span class="detail-value">${translateTransactionType(data.transactionType)}</span>
     </div>
     <div class="detail-row">
         <span class="detail-label">Montant:</span>
@@ -130,7 +153,7 @@ const TRANSACTION_DETAILS_TEMPLATE = (data: TransactionEmailData) => `
     </div>
     <div class="detail-row">
         <span class="detail-label">Statut:</span>
-        <span class="detail-value">${data.status}</span>
+        <span class="detail-value">${translateTransactionStatus(data.status)}</span>
     </div>
     <div class="detail-row">
         <span class="detail-label">Date:</span>
