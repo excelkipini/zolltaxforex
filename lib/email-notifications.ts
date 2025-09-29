@@ -96,10 +96,11 @@ export async function sendTransactionValidatedNotification(data: TransactionEmai
     const recipients = await getEmailRecipients('transaction_validated')
     const ccEmails = formatEmailAddresses(recipients.cc)
     
-    // Trouver l'email du caissier qui a créé la transaction
-    const cashier = await getUserByEmail(data.createdBy)
+    // Trouver l'email du caissier qui a créé la transaction (par nom)
+    const { getUserByName } = await import('./users-queries')
+    const cashier = await getUserByName(data.createdBy)
     if (!cashier) {
-      throw new Error('Caissier non trouvé')
+      throw new Error(`Caissier non trouvé: ${data.createdBy}`)
     }
     
     const toEmails = [`${cashier.name} <${cashier.email}>`]

@@ -114,6 +114,23 @@ export async function getUserById(id: string): Promise<User | null> {
   return rows[0] || null
 }
 
+export async function getUserByName(name: string): Promise<User | null> {
+  const rows = await sql<User[]>`
+    SELECT 
+      id::text, 
+      name, 
+      email, 
+      role, 
+      agency, 
+      password_hash,
+      last_login::text as last_login,
+      created_at::text as created_at
+    FROM users
+    WHERE name = ${name}
+  `
+  return rows[0] || null
+}
+
 export async function getUserByEmail(email: string): Promise<User | null> {
   const rows = await sql<User[]>`
     SELECT 
