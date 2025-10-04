@@ -34,6 +34,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/hooks/use-toast"
 import type { SessionUser } from "@/lib/auth-client"
 import { useDocumentTitle } from "@/hooks/use-document-title"
+import { PDFReceipt } from "@/components/pdf-receipt"
 import { useExchangeRates } from "@/hooks/use-exchange-rates"
 
 interface AccountingDashboardProps {
@@ -74,9 +75,27 @@ export function AccountingDashboard({ user }: AccountingDashboardProps) {
       if (response.ok && data?.ok && Array.isArray(data.data)) {
         const expenses = data.data
         
-        const pendingExpenses = expenses.filter((e: any) => e.status === 'pending')
-        const approvedExpenses = expenses.filter((e: any) => e.status === 'approved')
-        const rejectedExpenses = expenses.filter((e: any) => e.status === 'rejected')
+        // Pour les comptables et directeurs, afficher toutes les dépenses avec leurs états
+        let pendingExpenses = []
+        let approvedExpenses = []
+        let rejectedExpenses = []
+        
+        if (user.role === "accounting") {
+          // Comptables voient toutes les dépenses, mais se concentrent sur celles en attente de validation comptable
+          pendingExpenses = expenses.filter((e: any) => e.status === 'pending')
+          approvedExpenses = expenses.filter((e: any) => e.status === 'director_approved') // Seulement celles validées par le directeur
+          rejectedExpenses = expenses.filter((e: any) => e.status === 'accounting_rejected' || e.status === 'director_rejected')
+        } else if (user.role === "director") {
+          // Directeurs voient toutes les dépenses, mais se concentrent sur celles en attente de validation directeur
+          pendingExpenses = expenses.filter((e: any) => e.status === 'pending' || e.status === 'accounting_approved') // En attente de validation comptable OU directeur
+          approvedExpenses = expenses.filter((e: any) => e.status === 'director_approved') // Seulement celles validées par le directeur
+          rejectedExpenses = expenses.filter((e: any) => e.status === 'accounting_rejected' || e.status === 'director_rejected')
+        } else {
+          // Autres rôles voient toutes les dépenses
+          pendingExpenses = expenses.filter((e: any) => e.status === 'pending')
+          approvedExpenses = expenses.filter((e: any) => e.status === 'approved' || e.status === 'director_approved')
+          rejectedExpenses = expenses.filter((e: any) => e.status === 'rejected' || e.status === 'director_rejected')
+        }
         
         const totalPendingAmount = pendingExpenses.reduce((sum: number, e: any) => sum + Number(e.amount), 0)
         const totalApprovedAmount = approvedExpenses.reduce((sum: number, e: any) => sum + Number(e.amount), 0)
@@ -153,7 +172,50 @@ export function AccountingDashboard({ user }: AccountingDashboardProps) {
     }
   }
 
-  // Approuver une dépense
+  // Nouvelles fonctions pour le workflow en 2 étapes
+  const validateExpense = async (expenseId: string, approved: boolean, validationType: "accounting" | "director") => {
+    try {
+      const response = await fetch("/api/expenses/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          expenseId, 
+          approved, 
+          validationType,
+          rejectionReason: approved ? undefined : rejectionReason
+        }),
+      })
+      
+      const data = await response.json()
+      
+      if (response.ok && data?.ok) {
+        const action = approved ? "approuvée" : "rejetée"
+        const validator = validationType === "accounting" ? "comptabilité" : "directeur"
+        
+        toast({
+          title: `Dépense ${action}`,
+          description: `Dépense ${action} par la ${validator} avec succès.`,
+        })
+        
+        // Recharger les données
+        await loadStats()
+      } else {
+        toast({
+          title: "Erreur",
+          description: `Erreur lors de la validation: ${data?.error || "Erreur inconnue"}`,
+          variant: "destructive"
+        })
+      }
+    } catch (error) {
+      toast({
+        title: "Erreur réseau",
+        description: "Impossible de valider la dépense. Vérifiez votre connexion.",
+        variant: "destructive"
+      })
+    }
+  }
+
+  // Approuver une dépense (ancienne fonction pour compatibilité)
   const approveExpense = async (expense: any) => {
     try {
       const response = await fetch("/api/expenses", {
@@ -189,54 +251,70 @@ export function AccountingDashboard({ user }: AccountingDashboardProps) {
   }
 
   // Ouvrir le dialogue de rejet
-  const openRejectDialog = (expense: any) => {
-    setExpenseToReject(expense)
+  const openRejectDialog = (expenseId: string, validationType?: "accounting" | "director") => {
+    setExpenseToReject({ id: expenseId })
     setRejectionReason("")
     setRejectDialogOpen(true)
+    // Stocker le type de validation pour l'utiliser dans confirmReject
+    ;(window as any).currentValidationType = validationType
   }
 
   // Confirmer le rejet d'une dépense
   const confirmReject = async () => {
     if (!expenseToReject || !rejectionReason.trim()) return
 
-    try {
-      const response = await fetch("/api/expenses", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: expenseToReject.id,
-          status: "rejected",
-          rejection_reason: rejectionReason.trim()
-        }),
-      })
-      
-      const data = await response.json()
-      
-      if (response.ok && data?.ok) {
-        toast({
-          title: "Dépense rejetée",
-          description: `"${expenseToReject.description}" rejetée avec succès.`,
+    const validationType = (window as any).currentValidationType
+
+    if (validationType) {
+      // Utiliser la nouvelle API de validation
+      await validateExpense(expenseToReject.id, false, validationType)
+    } else {
+      // Utiliser l'ancienne logique pour compatibilité
+      try {
+        const response = await fetch("/api/expenses", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: expenseToReject.id,
+            status: "rejected",
+            rejection_reason: rejectionReason.trim()
+          }),
         })
         
-        // Fermer le dialogue et recharger les données
-        setRejectDialogOpen(false)
-        setExpenseToReject(null)
-        setRejectionReason("")
-        await loadStats()
-      } else {
+        const data = await response.json()
+        
+        if (response.ok && data?.ok) {
+          toast({
+            title: "Dépense rejetée",
+            description: `"${expenseToReject.description}" rejetée avec succès.`,
+          })
+          
+          // Fermer le dialogue et recharger les données
+          setRejectDialogOpen(false)
+          setExpenseToReject(null)
+          setRejectionReason("")
+          await loadStats()
+        } else {
+          toast({
+            title: "Erreur",
+            description: `Erreur lors du rejet: ${data?.error || "Erreur inconnue"}`,
+            variant: "destructive"
+          })
+        }
+      } catch (error) {
         toast({
-          title: "Erreur",
-          description: `Erreur lors du rejet: ${data?.error || "Erreur inconnue"}`,
+          title: "Erreur réseau",
+          description: "Impossible de rejeter la dépense. Vérifiez votre connexion.",
           variant: "destructive"
         })
       }
-    } catch (error) {
-      toast({
-        title: "Erreur réseau",
-        description: "Impossible de rejeter la dépense. Vérifiez votre connexion.",
-        variant: "destructive"
-      })
     }
+
+    // Fermer le dialogue et nettoyer
+    setRejectDialogOpen(false)
+    setExpenseToReject(null)
+    setRejectionReason("")
+    ;(window as any).currentValidationType = undefined
   }
 
   // Formater le montant
@@ -250,25 +328,25 @@ export function AccountingDashboard({ user }: AccountingDashboardProps) {
 
   const statsCards = [
     { 
-      label: "Dépenses en attente", 
+      label: user.role === "director" ? "En attente de validation" : "En attente de validation comptable", 
       value: stats.pendingExpenses.toString(), 
       icon: Clock, 
       color: "text-yellow-600",
-      description: "En attente de validation"
+      description: user.role === "director" ? "Comptable ou directeur" : "En attente de validation"
     },
     { 
-      label: "Dépenses approuvées", 
+      label: "Approuvées par directeur", 
       value: stats.approvedExpenses.toString(), 
       icon: CheckCircle, 
       color: "text-green-600",
-      description: "Validées et approuvées"
+      description: "Validées par le directeur"
     },
     { 
-      label: "Dépenses rejetées", 
+      label: "Rejetées", 
       value: stats.rejectedExpenses.toString(), 
       icon: XCircle, 
       color: "text-red-600",
-      description: "Refusées par le directeur"
+      description: user.role === "director" ? "Comptable ou directeur" : "Comptable ou directeur"
     },
     { 
       label: "Montant total approuvé", 
@@ -482,8 +560,8 @@ export function AccountingDashboard({ user }: AccountingDashboardProps) {
           </CardTitle>
           <CardDescription>
             {user.role === "director" 
-              ? "Liste des dépenses en attente de votre validation" 
-              : "Liste des dépenses en attente de validation par le directeur"
+              ? "Liste des dépenses validées par la comptabilité et en attente de votre validation" 
+              : "Liste des dépenses en attente de validation par la comptabilité"
             }
           </CardDescription>
         </CardHeader>
@@ -547,14 +625,15 @@ export function AccountingDashboard({ user }: AccountingDashboardProps) {
                     </div>
                     
                     <div className="ml-4 flex flex-col gap-2">
-                      {user.role === "director" ? (
+                      {/* Boutons pour comptables - validation comptable */}
+                      {user.role === "accounting" && expense.status === "pending" && (
                         <>
                           <div className="flex gap-2">
                             <Button
                               size="sm"
                               variant="outline"
                               className="text-green-600 border-green-600 hover:bg-green-50 bg-transparent"
-                              onClick={() => approveExpense(expense)}
+                              onClick={() => validateExpense(expense.id, true, "accounting")}
                             >
                               <CheckCircle className="h-4 w-4 mr-1" />
                               Approuver
@@ -563,7 +642,7 @@ export function AccountingDashboard({ user }: AccountingDashboardProps) {
                               size="sm"
                               variant="outline"
                               className="text-red-600 border-red-600 hover:bg-red-50 bg-transparent"
-                              onClick={() => openRejectDialog(expense)}
+                              onClick={() => openRejectDialog(expense.id, "accounting")}
                             >
                               <XCircle className="h-4 w-4 mr-1" />
                               Rejeter
@@ -581,18 +660,81 @@ export function AccountingDashboard({ user }: AccountingDashboardProps) {
                             </a>
                           </Button>
                         </>
-                      ) : (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="text-blue-600 border-blue-300 hover:bg-blue-50"
-                          asChild
-                        >
-                          <a href="/expenses">
-                            <Eye className="h-4 w-4 mr-1" />
-                            Voir détails
-                          </a>
-                        </Button>
+                      )}
+                      
+                      {/* Boutons pour directeurs - validation directeur */}
+                      {user.role === "director" && expense.status === "accounting_approved" && (
+                        <>
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-green-600 border-green-600 hover:bg-green-50 bg-transparent"
+                              onClick={() => validateExpense(expense.id, true, "director")}
+                            >
+                              <CheckCircle className="h-4 w-4 mr-1" />
+                              Valider
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-red-600 border-red-600 hover:bg-red-50 bg-transparent"
+                              onClick={() => openRejectDialog(expense.id, "director")}
+                            >
+                              <XCircle className="h-4 w-4 mr-1" />
+                              Rejeter
+                            </Button>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="text-blue-600 border-blue-300 hover:bg-blue-50"
+                            asChild
+                          >
+                            <a href="/expenses">
+                              <Eye className="h-4 w-4 mr-1" />
+                              Voir détails
+                            </a>
+                          </Button>
+                        </>
+                      )}
+                      
+                      {/* Bouton "Voir détails" pour les autres cas */}
+                      {((user.role === "accounting" && expense.status !== "pending") || 
+                        (user.role === "director" && expense.status !== "accounting_approved") ||
+                        (user.role !== "accounting" && user.role !== "director")) && (
+                        <div className="flex flex-col gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="text-blue-600 border-blue-300 hover:bg-blue-50"
+                            asChild
+                          >
+                            <a href="/expenses">
+                              <Eye className="h-4 w-4 mr-1" />
+                              Voir détails
+                            </a>
+                          </Button>
+                          
+                          {/* PDF Receipt pour les dépenses finalement approuvées */}
+                          {(expense.status === "director_approved" || expense.status === "approved") && (
+                            <PDFReceipt
+                              expense={{
+                                id: String(expense.id),
+                                description: expense.description,
+                                amount: expense.amount,
+                                category: expense.category,
+                                status: expense.status,
+                                date: expense.date,
+                                requested_by: expense.requested_by,
+                                agency: expense.agency,
+                                comment: expense.comment,
+                                rejection_reason: expense.rejection_reason
+                              }}
+                              user={user}
+                            />
+                          )}
+                        </div>
                       )}
                     </div>
                   </div>
@@ -701,6 +843,66 @@ export function AccountingDashboard({ user }: AccountingDashboardProps) {
           </CardContent>
         </Card>
       )}
+
+      {/* Section: Toutes les dépenses avec leurs états */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Receipt className="h-5 w-5 text-blue-600" />
+            Toutes les Dépenses
+          </CardTitle>
+          <CardDescription>
+            Vue d'ensemble de toutes les dépenses avec leurs états actuels
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {/* Statistiques globales */}
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+              <div className="text-center p-3 bg-gray-50 rounded-lg">
+                <div className="text-2xl font-bold text-gray-600">
+                  {stats.pendingExpenses + stats.approvedExpenses + stats.rejectedExpenses}
+                </div>
+                <div className="text-sm text-gray-500">Total</div>
+              </div>
+              <div className="text-center p-3 bg-yellow-50 rounded-lg">
+                <div className="text-2xl font-bold text-yellow-600">
+                  {stats.pendingExpenses}
+                </div>
+                <div className="text-sm text-gray-500">En attente</div>
+              </div>
+              <div className="text-center p-3 bg-green-50 rounded-lg">
+                <div className="text-2xl font-bold text-green-600">
+                  {stats.approvedExpenses}
+                </div>
+                <div className="text-sm text-gray-500">Approuvées</div>
+              </div>
+              <div className="text-center p-3 bg-red-50 rounded-lg">
+                <div className="text-2xl font-bold text-red-600">
+                  {stats.rejectedExpenses}
+                </div>
+                <div className="text-sm text-gray-500">Rejetées</div>
+              </div>
+              <div className="text-center p-3 bg-purple-50 rounded-lg">
+                <div className="text-lg font-bold text-purple-600">
+                  {formatAmount(stats.totalApprovedAmount)}
+                </div>
+                <div className="text-sm text-gray-500">Montant total</div>
+              </div>
+            </div>
+
+            {/* Lien vers la page complète des dépenses */}
+            <div className="text-center">
+              <Button variant="outline" asChild>
+                <a href="/expenses">
+                  <Eye className="h-4 w-4 mr-2" />
+                  Voir toutes les dépenses en détail
+                </a>
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Dialogue pour rejeter une dépense avec motif */}
       <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>

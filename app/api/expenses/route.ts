@@ -16,16 +16,10 @@ export async function GET() {
   const canViewAll = user.role === "director" || user.role === "accounting"
   
   try {
-    // Si c'est un comptable, retourner les dépenses en attente de validation comptable
-    if (user.role === "accounting") {
-      const pendingAccounting = await getExpensesPendingAccounting()
-      return NextResponse.json({ ok: true, data: pendingAccounting, type: "pending_accounting" })
-    }
-    
-    // Si c'est un directeur, retourner les dépenses en attente de validation directeur
-    if (user.role === "director") {
-      const pendingDirector = await getExpensesPendingDirector()
-      return NextResponse.json({ ok: true, data: pendingDirector, type: "pending_director" })
+    // Pour les comptables et directeurs, retourner toutes les dépenses avec leurs états
+    if (canViewAll) {
+      const allExpenses = await listExpensesForUser(user.name, true)
+      return NextResponse.json({ ok: true, data: allExpenses, type: "all_expenses" })
     }
     
     // Pour les autres rôles, retourner les dépenses selon les permissions

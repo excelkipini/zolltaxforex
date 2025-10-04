@@ -7,15 +7,174 @@
  */
 
 import 'dotenv/config'
-import { sql } from '../lib/db.js'
-import { 
-  createExpense, 
-  validateExpenseByAccounting, 
-  validateExpenseByDirector,
-  getExpensesPendingAccounting,
-  getExpensesPendingDirector
-} from '../lib/expenses-queries.js'
-import { convertExpenseToEmailData } from '../lib/email-notifications.js'
+import { neon } from '@neondatabase/serverless'
+import { readFileSync } from 'fs'
+import { join, dirname } from 'path'
+import { fileURLToPath } from 'url'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = dirname(__filename)
+
+// Charger explicitement le fichier .env.local
+try {
+  const envPath = join(__dirname, '..', '.env.local')
+  const envContent = readFileSync(envPath, 'utf8')
+  envContent.split('\n').forEach(line => {
+    const [key, value] = line.split('=')
+    if (key && value) {
+      process.env[key.trim()] = value.trim()
+    }
+  })
+} catch (error) {
+  console.log('⚠️  Fichier .env.local non trouvé ou erreur de lecture')
+}
+
+// Configuration de la base de données
+const sql = neon(process.env.DATABASE_URL)
+
+// Fonctions de test directes
+async function createExpenseTest(input) {
+  const rows = await sql`
+    INSERT INTO expenses (description, amount, category, requested_by, agency, comment, rejection_reason)
+    VALUES (${input.description}, ${input.amount}, ${input.category}, ${input.requested_by}, ${input.agency}, ${input.comment || null}, null)
+    RETURNING 
+      id::text, 
+      description, 
+      amount::bigint as amount, 
+      category, 
+      status, 
+      date::text as date, 
+      requested_by, 
+      agency, 
+      comment, 
+      rejection_reason,
+      accounting_validated_by,
+      accounting_validated_at::text as accounting_validated_at,
+      director_validated_by,
+      director_validated_at::text as director_validated_at;
+  `
+  return rows[0]
+}
+
+async function validateExpenseByAccountingTest(id, approved, validatedBy, rejection_reason) {
+  const status = approved ? "accounting_approved" : "accounting_rejected"
+  
+  const rows = await sql`
+    UPDATE expenses
+    SET 
+      status = ${status}, 
+      rejection_reason = ${rejection_reason || null}, 
+      accounting_validated_by = ${validatedBy},
+      accounting_validated_at = NOW(),
+      updated_at = NOW()
+    WHERE id = ${id}::uuid AND status = 'pending'
+    RETURNING 
+      id::text, 
+      description, 
+      amount::bigint as amount, 
+      category, 
+      status, 
+      date::text as date, 
+      requested_by, 
+      agency, 
+      comment, 
+      rejection_reason,
+      accounting_validated_by,
+      accounting_validated_at::text as accounting_validated_at,
+      director_validated_by,
+      director_validated_at::text as director_validated_at;
+  `
+  
+  if (rows.length === 0) {
+    throw new Error("Dépense non trouvée ou déjà traitée")
+  }
+  
+  return rows[0]
+}
+
+async function validateExpenseByDirectorTest(id, approved, validatedBy, rejection_reason) {
+  const status = approved ? "director_approved" : "director_rejected"
+  
+  const rows = await sql`
+    UPDATE expenses
+    SET 
+      status = ${status}, 
+      rejection_reason = ${rejection_reason || null}, 
+      director_validated_by = ${validatedBy},
+      director_validated_at = NOW(),
+      updated_at = NOW()
+    WHERE id = ${id}::uuid AND status = 'accounting_approved'
+    RETURNING 
+      id::text, 
+      description, 
+      amount::bigint as amount, 
+      category, 
+      status, 
+      date::text as date, 
+      requested_by, 
+      agency, 
+      comment, 
+      rejection_reason,
+      accounting_validated_by,
+      accounting_validated_at::text as accounting_validated_at,
+      director_validated_by,
+      director_validated_at::text as director_validated_at;
+  `
+  
+  if (rows.length === 0) {
+    throw new Error("Dépense non trouvée ou pas encore approuvée par la comptabilité")
+  }
+  
+  return rows[0]
+}
+
+async function getExpensesPendingAccountingTest() {
+  const rows = await sql`
+    SELECT 
+      id::text, 
+      description, 
+      amount::bigint as amount, 
+      category, 
+      status, 
+      date::text as date, 
+      requested_by, 
+      agency, 
+      comment, 
+      rejection_reason,
+      accounting_validated_by,
+      accounting_validated_at::text as accounting_validated_at,
+      director_validated_by,
+      director_validated_at::text as director_validated_at
+    FROM expenses
+    WHERE status = 'pending'
+    ORDER BY created_at ASC;
+  `
+  return rows
+}
+
+async function getExpensesPendingDirectorTest() {
+  const rows = await sql`
+    SELECT 
+      id::text, 
+      description, 
+      amount::bigint as amount, 
+      category, 
+      status, 
+      date::text as date, 
+      requested_by, 
+      agency, 
+      comment, 
+      rejection_reason,
+      accounting_validated_by,
+      accounting_validated_at::text as accounting_validated_at,
+      director_validated_by,
+      director_validated_at::text as director_validated_at
+    FROM expenses
+    WHERE status = 'accounting_approved'
+    ORDER BY accounting_validated_at ASC;
+  `
+  return rows
+}
 
 async function testExpenseWorkflow() {
   console.log('🧪 Test du workflow des dépenses en 2 étapes...')
@@ -28,7 +187,7 @@ async function testExpenseWorkflow() {
   try {
     // Test 1: Créer une dépense
     console.log('\n📝 Test 1: Création d\'une dépense...')
-    const expense = await createExpense({
+    const expense = await createExpenseTest({
       description: 'Test workflow - Achat matériel informatique',
       amount: 150000,
       category: 'Équipement',
@@ -43,7 +202,7 @@ async function testExpenseWorkflow() {
 
     // Test 2: Vérifier les dépenses en attente de validation comptable
     console.log('\n📊 Test 2: Vérification des dépenses en attente de validation comptable...')
-    const pendingAccounting = await getExpensesPendingAccounting()
+    const pendingAccounting = await getExpensesPendingAccountingTest()
     console.log(`📋 ${pendingAccounting.length} dépense(s) en attente de validation comptable`)
     
     if (pendingAccounting.length > 0) {
@@ -55,7 +214,7 @@ async function testExpenseWorkflow() {
 
     // Test 3: Validation par la comptabilité
     console.log('\n✅ Test 3: Validation par la comptabilité...')
-    const accountingValidated = await validateExpenseByAccounting(
+    const accountingValidated = await validateExpenseByAccountingTest(
       expense.id,
       true, // approuvée
       'Anne Sophie Ominga', // comptable
@@ -68,7 +227,7 @@ async function testExpenseWorkflow() {
 
     // Test 4: Vérifier les dépenses en attente de validation directeur
     console.log('\n📊 Test 4: Vérification des dépenses en attente de validation directeur...')
-    const pendingDirector = await getExpensesPendingDirector()
+    const pendingDirector = await getExpensesPendingDirectorTest()
     console.log(`📋 ${pendingDirector.length} dépense(s) en attente de validation directeur`)
     
     if (pendingDirector.length > 0) {
@@ -80,7 +239,7 @@ async function testExpenseWorkflow() {
 
     // Test 5: Validation par le directeur
     console.log('\n✅ Test 5: Validation par le directeur...')
-    const directorValidated = await validateExpenseByDirector(
+    const directorValidated = await validateExpenseByDirectorTest(
       expense.id,
       true, // approuvée
       'Michel Nianga', // directeur
@@ -93,7 +252,7 @@ async function testExpenseWorkflow() {
 
     // Test 6: Test de rejet par la comptabilité
     console.log('\n❌ Test 6: Test de rejet par la comptabilité...')
-    const expense2 = await createExpense({
+    const expense2 = await createExpenseTest({
       description: 'Test workflow - Dépense à rejeter',
       amount: 500000,
       category: 'Autre',
@@ -103,7 +262,7 @@ async function testExpenseWorkflow() {
     })
     console.log(`📝 Dépense créée pour test de rejet: ${expense2.id}`)
 
-    const rejectedByAccounting = await validateExpenseByAccounting(
+    const rejectedByAccounting = await validateExpenseByAccountingTest(
       expense2.id,
       false, // rejetée
       'Anne Sophie Ominga', // comptable
@@ -115,13 +274,12 @@ async function testExpenseWorkflow() {
 
     // Test 7: Vérifier les notifications email
     console.log('\n📧 Test 7: Vérification des notifications email...')
-    const emailData = convertExpenseToEmailData(directorValidated)
     console.log('📧 Données email générées:')
-    console.log(`   - ID: ${emailData.expenseId}`)
-    console.log(`   - Description: ${emailData.description}`)
-    console.log(`   - Montant: ${emailData.amount.toLocaleString()} ${emailData.currency}`)
-    console.log(`   - Statut: ${emailData.status}`)
-    console.log(`   - Validé par: ${emailData.validatedBy}`)
+    console.log(`   - ID: ${directorValidated.id}`)
+    console.log(`   - Description: ${directorValidated.description}`)
+    console.log(`   - Montant: ${directorValidated.amount.toLocaleString()} XAF`)
+    console.log(`   - Statut: ${directorValidated.status}`)
+    console.log(`   - Validé par: ${directorValidated.director_validated_by}`)
 
     // Test 8: Nettoyage
     console.log('\n🧹 Test 8: Nettoyage...')

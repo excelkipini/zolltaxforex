@@ -159,7 +159,7 @@ export function PDFReceipt({ expense, user }: PDFReceiptProps) {
     }
   }
 
-  if (!canDownloadPDF || expense.status !== "approved") {
+  if (!canDownloadPDF || (expense.status !== "approved" && expense.status !== "director_approved")) {
     return null
   }
 
