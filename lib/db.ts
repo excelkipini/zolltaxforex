@@ -121,12 +121,16 @@ export async function initializeDatabase() {
         description TEXT NOT NULL,
         amount BIGINT NOT NULL,
         category TEXT NOT NULL,
-        status TEXT NOT NULL CHECK (status IN ('pending','approved','rejected')) DEFAULT 'pending',
+        status TEXT NOT NULL CHECK (status IN ('pending','accounting_approved','accounting_rejected','director_approved','director_rejected')) DEFAULT 'pending',
         date DATE NOT NULL DEFAULT CURRENT_DATE,
         requested_by TEXT NOT NULL,
         agency TEXT NOT NULL,
         comment TEXT,
         rejection_reason TEXT,
+        accounting_validated_by TEXT,
+        accounting_validated_at TIMESTAMPTZ,
+        director_validated_by TEXT,
+        director_validated_at TIMESTAMPTZ,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )
@@ -168,6 +172,29 @@ export async function initializeDatabase() {
     // Add rejection_reason column if it doesn't exist (migration)
     await sql`
       ALTER TABLE expenses ADD COLUMN IF NOT EXISTS rejection_reason TEXT
+    `
+
+    // Add validation columns to expenses table if they don't exist
+    await sql`
+      ALTER TABLE expenses ADD COLUMN IF NOT EXISTS accounting_validated_by TEXT
+    `
+    await sql`
+      ALTER TABLE expenses ADD COLUMN IF NOT EXISTS accounting_validated_at TIMESTAMPTZ
+    `
+    await sql`
+      ALTER TABLE expenses ADD COLUMN IF NOT EXISTS director_validated_by TEXT
+    `
+    await sql`
+      ALTER TABLE expenses ADD COLUMN IF NOT EXISTS director_validated_at TIMESTAMPTZ
+    `
+
+    // Update expenses status constraint to include new statuses
+    await sql`
+      ALTER TABLE expenses DROP CONSTRAINT IF EXISTS expenses_status_check
+    `
+    await sql`
+      ALTER TABLE expenses ADD CONSTRAINT expenses_status_check 
+      CHECK (status IN ('pending','accounting_approved','accounting_rejected','director_approved','director_rejected'))
     `
 
     // Create transactions table for all transaction types

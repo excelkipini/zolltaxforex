@@ -18,6 +18,22 @@ export interface EmailConfig {
   }
 }
 
+// Types pour les notifications email des dépenses
+export interface ExpenseEmailData {
+  expenseId: string
+  description: string
+  amount: number
+  currency: string
+  category: string
+  requestedBy: string
+  agency: string
+  status: string
+  createdAt: string
+  validatedBy?: string
+  validatedAt?: string
+  rejectionReason?: string
+}
+
 // Types pour les notifications email
 export interface TransactionEmailData {
   transactionId: string
@@ -86,7 +102,7 @@ export function isEmailConfigured(): boolean {
 }
 
 // Fonction pour récupérer les destinataires selon le type de notification
-export async function getEmailRecipients(type: 'transaction_created' | 'transaction_validated' | 'transaction_completed' | 'deletion_requested' | 'deletion_validated'): Promise<{
+export async function getEmailRecipients(type: 'transaction_created' | 'transaction_validated' | 'transaction_completed' | 'deletion_requested' | 'deletion_validated' | 'expense_submitted' | 'expense_accounting_validated' | 'expense_director_validated'): Promise<{
   to: User[]
   cc: User[]
 }> {
@@ -124,6 +140,27 @@ export async function getEmailRecipients(type: 'transaction_created' | 'transact
       return {
         to: [], // Le caissier sera ajouté dynamiquement
         cc: await getUsersByRole('director'),
+      }
+    
+    case 'expense_submitted':
+      // Dépense soumise : comptables en TO, directeur en CC
+      return {
+        to: await getUsersByRole('accounting'),
+        cc: await getUsersByRole('director'),
+      }
+    
+    case 'expense_accounting_validated':
+      // Dépense validée par comptable : demandeur en TO, directeur en CC
+      return {
+        to: [], // Le demandeur sera ajouté dynamiquement
+        cc: await getUsersByRole('director'),
+      }
+    
+    case 'expense_director_validated':
+      // Dépense validée par directeur : demandeur et comptables en TO
+      return {
+        to: [], // Le demandeur sera ajouté dynamiquement
+        cc: await getUsersByRole('accounting'),
       }
     
     default:

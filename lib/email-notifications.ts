@@ -1,13 +1,16 @@
 import "server-only"
-import { getEmailConfig, isEmailConfigured, getEmailRecipients, formatEmailAddresses, createEmailHeaders, type TransactionEmailData, type DeletionRequestEmailData } from "./email-service"
+import { getEmailConfig, isEmailConfigured, getEmailRecipients, formatEmailAddresses, createEmailHeaders, type TransactionEmailData, type DeletionRequestEmailData, type ExpenseEmailData } from "./email-service"
 import { 
   generateTransactionCreatedEmail, 
   generateTransactionValidatedEmail, 
   generateTransactionCompletedEmail,
   generateDeletionRequestedEmail,
-  generateDeletionValidatedEmail
+  generateDeletionValidatedEmail,
+  generateExpenseSubmittedEmail,
+  generateExpenseAccountingValidatedEmail,
+  generateExpenseDirectorValidatedEmail
 } from "./email-templates"
-import { getUserByEmail } from "./users-queries"
+import { getUserByEmail, getUserByName } from "./users-queries"
 
 // Interface pour les options d'envoi
 export interface EmailSendOptions {
@@ -216,5 +219,102 @@ export function convertDeletionRequestToEmailData(transaction: any, requestedBy:
     agency: transaction.agency,
     reason: reason,
     requestedAt: new Date().toISOString()
+  }
+}
+
+// Fonction utilitaire pour convertir les données de dépense en format email
+export function convertExpenseToEmailData(expense: any): ExpenseEmailData {
+  return {
+    expenseId: expense.id,
+    description: expense.description,
+    amount: expense.amount,
+    currency: 'XAF', // Par défaut
+    category: expense.category,
+    requestedBy: expense.requested_by,
+    agency: expense.agency,
+    status: expense.status,
+    createdAt: expense.created_at,
+    validatedBy: expense.accounting_validated_by || expense.director_validated_by,
+    validatedAt: expense.accounting_validated_at || expense.director_validated_at,
+    rejectionReason: expense.rejection_reason
+  }
+}
+
+// Fonctions de notification pour les dépenses
+
+// 1. Notification pour dépense soumise
+export async function sendExpenseSubmittedNotification(expenseData: ExpenseEmailData): Promise<{ success: boolean; error?: string }> {
+  try {
+    const recipients = await getEmailRecipients('expense_submitted')
+    const toEmails = formatEmailAddresses(recipients.to)
+    const ccEmails = formatEmailAddresses(recipients.cc)
+
+    const emailTemplate = generateExpenseSubmittedEmail(expenseData)
+
+    return await sendEmail({
+      to: toEmails,
+      cc: ccEmails,
+      subject: emailTemplate.subject,
+      html: emailTemplate.html
+    })
+  } catch (error: any) {
+    console.error('Erreur lors de l\'envoi de la notification de dépense soumise:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+// 2. Notification pour dépense validée par la comptabilité
+export async function sendExpenseAccountingValidatedNotification(expenseData: ExpenseEmailData): Promise<{ success: boolean; error?: string }> {
+  try {
+    const recipients = await getEmailRecipients('expense_accounting_validated')
+    const ccEmails = formatEmailAddresses(recipients.cc)
+
+    // Trouver l'email du demandeur
+    const requester = await getUserByName(expenseData.requestedBy)
+    if (!requester) {
+      throw new Error(`Demandeur non trouvé: ${expenseData.requestedBy}`)
+    }
+
+    const toEmails = [`${requester.name} <${requester.email}>`]
+
+    const emailTemplate = generateExpenseAccountingValidatedEmail(expenseData, requester.email)
+
+    return await sendEmail({
+      to: toEmails,
+      cc: ccEmails,
+      subject: emailTemplate.subject,
+      html: emailTemplate.html
+    })
+  } catch (error: any) {
+    console.error('Erreur lors de l\'envoi de la notification de dépense validée par comptabilité:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+// 3. Notification pour dépense validée par le directeur
+export async function sendExpenseDirectorValidatedNotification(expenseData: ExpenseEmailData): Promise<{ success: boolean; error?: string }> {
+  try {
+    const recipients = await getEmailRecipients('expense_director_validated')
+    const ccEmails = formatEmailAddresses(recipients.cc)
+
+    // Trouver l'email du demandeur
+    const requester = await getUserByName(expenseData.requestedBy)
+    if (!requester) {
+      throw new Error(`Demandeur non trouvé: ${expenseData.requestedBy}`)
+    }
+
+    const toEmails = [`${requester.name} <${requester.email}>`]
+
+    const emailTemplate = generateExpenseDirectorValidatedEmail(expenseData, requester.email)
+
+    return await sendEmail({
+      to: toEmails,
+      cc: ccEmails,
+      subject: emailTemplate.subject,
+      html: emailTemplate.html
+    })
+  } catch (error: any) {
+    console.error('Erreur lors de l\'envoi de la notification de dépense validée par directeur:', error)
+    return { success: false, error: error.message }
   }
 }

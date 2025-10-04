@@ -1,5 +1,5 @@
 import "server-only"
-import { TransactionEmailData, DeletionRequestEmailData } from "./email-service"
+import { TransactionEmailData, DeletionRequestEmailData, ExpenseEmailData } from "./email-service"
 
 // Fonctions de traduction
 const translateTransactionType = (type: string): string => {
@@ -20,6 +20,17 @@ const translateTransactionStatus = (status: string): string => {
     'rejected': 'Rejetée',
     'completed': 'Terminée',
     'pending_delete': 'En attente de suppression'
+  }
+  return translations[status] || status
+}
+
+const translateExpenseStatus = (status: string): string => {
+  const translations: Record<string, string> = {
+    'pending': 'En attente',
+    'accounting_approved': 'Approuvée par la comptabilité',
+    'accounting_rejected': 'Rejetée par la comptabilité',
+    'director_approved': 'Approuvée par le directeur',
+    'director_rejected': 'Rejetée par le directeur'
   }
   return translations[status] || status
 }
@@ -307,6 +318,141 @@ export function generateDeletionRequestedEmail(data: DeletionRequestEmailData): 
   return {
     subject,
     html: BASE_TEMPLATE(content, "Demande de Suppression de Reçu")
+  }
+}
+
+// Template pour les détails de dépense
+const EXPENSE_DETAILS_TEMPLATE = (data: ExpenseEmailData) => `
+<div class="transaction-details">
+    <h3>Détails de la Dépense</h3>
+    <div class="detail-row">
+        <span class="detail-label">ID Dépense:</span>
+        <span class="detail-value">${data.expenseId}</span>
+    </div>
+    <div class="detail-row">
+        <span class="detail-label">Description:</span>
+        <span class="detail-value">${data.description}</span>
+    </div>
+    <div class="detail-row">
+        <span class="detail-label">Montant:</span>
+        <span class="detail-value amount">${data.amount.toLocaleString()} ${data.currency}</span>
+    </div>
+    <div class="detail-row">
+        <span class="detail-label">Catégorie:</span>
+        <span class="detail-value">${data.category}</span>
+    </div>
+    <div class="detail-row">
+        <span class="detail-label">Demandé par:</span>
+        <span class="detail-value">${data.requestedBy}</span>
+    </div>
+    <div class="detail-row">
+        <span class="detail-label">Agence:</span>
+        <span class="detail-value">${data.agency}</span>
+    </div>
+    <div class="detail-row">
+        <span class="detail-label">Statut:</span>
+        <span class="detail-value">${translateExpenseStatus(data.status)}</span>
+    </div>
+    <div class="detail-row">
+        <span class="detail-label">Date:</span>
+        <span class="detail-value">${new Date(data.createdAt).toLocaleString('fr-FR')}</span>
+    </div>
+    ${data.validatedBy ? `
+    <div class="detail-row">
+        <span class="detail-label">Validé par:</span>
+        <span class="detail-value">${data.validatedBy}</span>
+    </div>
+    ` : ''}
+    ${data.validatedAt ? `
+    <div class="detail-row">
+        <span class="detail-label">Date de validation:</span>
+        <span class="detail-value">${new Date(data.validatedAt).toLocaleString('fr-FR')}</span>
+    </div>
+    ` : ''}
+    ${data.rejectionReason ? `
+    <div class="detail-row">
+        <span class="detail-label">Motif de rejet:</span>
+        <span class="detail-value">${data.rejectionReason}</span>
+    </div>
+    ` : ''}
+</div>
+`
+
+// 6. Template pour dépense soumise
+export function generateExpenseSubmittedEmail(data: ExpenseEmailData): { subject: string; html: string } {
+  const subject = `[ZOLL TAX FOREX] Nouvelle dépense soumise - ${data.expenseId}`
+  
+  const content = `
+    <h2>💰 Nouvelle Dépense Soumise</h2>
+    <p>Une nouvelle dépense a été soumise et nécessite votre validation.</p>
+    
+    <div class="alert warning">
+        <strong>Action requise:</strong> Cette dépense est en attente de validation par la comptabilité.
+    </div>
+    
+    ${EXPENSE_DETAILS_TEMPLATE(data)}
+    
+    <p><strong>Prochaines étapes:</strong></p>
+    <ul>
+        <li>Connectez-vous au système ZOLL TAX FOREX</li>
+        <li>Accédez à la section "Dépenses"</li>
+        <li>Validez ou rejetez cette dépense</li>
+    </ul>
+  `
+  
+  return {
+    subject,
+    html: BASE_TEMPLATE(content, "Nouvelle Dépense Soumise")
+  }
+}
+
+// 7. Template pour dépense validée par la comptabilité
+export function generateExpenseAccountingValidatedEmail(data: ExpenseEmailData, requesterEmail: string): { subject: string; html: string } {
+  const subject = `[ZOLL TAX FOREX] Dépense validée par la comptabilité - ${data.expenseId}`
+  
+  const content = `
+    <h2>✅ Dépense Validée par la Comptabilité</h2>
+    <p>Votre demande de dépense a été validée par la comptabilité.</p>
+    
+    <div class="alert success">
+        <strong>Statut:</strong> Dépense approuvée par la comptabilité, en attente de validation du directeur.
+    </div>
+    
+    ${EXPENSE_DETAILS_TEMPLATE(data)}
+    
+    <p><strong>Prochaines étapes:</strong></p>
+    <ul>
+        <li>La dépense sera transmise au directeur pour validation finale</li>
+        <li>Vous recevrez une notification une fois la validation finale effectuée</li>
+    </ul>
+  `
+  
+  return {
+    subject,
+    html: BASE_TEMPLATE(content, "Dépense Validée par la Comptabilité")
+  }
+}
+
+// 8. Template pour dépense validée par le directeur
+export function generateExpenseDirectorValidatedEmail(data: ExpenseEmailData, requesterEmail: string): { subject: string; html: string } {
+  const subject = `[ZOLL TAX FOREX] Dépense validée par le directeur - ${data.expenseId}`
+  
+  const content = `
+    <h2>🎉 Dépense Validée par le Directeur</h2>
+    <p>Votre demande de dépense a été validée par le directeur.</p>
+    
+    <div class="alert success">
+        <strong>Statut:</strong> Dépense approuvée et autorisée.
+    </div>
+    
+    ${EXPENSE_DETAILS_TEMPLATE(data)}
+    
+    <p><strong>Information:</strong> Votre dépense est maintenant autorisée et peut être traitée.</p>
+  `
+  
+  return {
+    subject,
+    html: BASE_TEMPLATE(content, "Dépense Validée par le Directeur")
   }
 }
 
