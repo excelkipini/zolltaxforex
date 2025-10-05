@@ -1,4 +1,4 @@
-export type Role = "super_admin" | "director" | "delegate" | "accounting" | "cashier" | "auditor"
+export type Role = "super_admin" | "director" | "delegate" | "accounting" | "cashier" | "auditor" | "executor"
 
 export type Permission =
   | "view_dashboard"
@@ -14,6 +14,7 @@ export type Permission =
   | "create_transactions"
   | "edit_transactions"
   | "delete_transactions"
+  | "execute_transactions"
   | "view_reception"
   | "create_reception"
   | "edit_reception"
@@ -150,6 +151,12 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "view_expenses",
     "view_reports",
   ],
+  executor: [
+    "view_dashboard",
+    "view_transactions",
+    "execute_transactions", // Pour exécuter les transactions validées
+    "view_expenses",
+  ],
 }
 
 export function hasPermission(user: { role: Role } | Role, permission: Permission): boolean {
@@ -174,6 +181,7 @@ export function getAccessibleMenus(role: Role): string[] {
   if (permissions.includes("view_expenses")) menus.push("expenses")
   if (permissions.includes("view_reports")) menus.push("reports")
   if (permissions.includes("view_settings")) menus.push("settings")
+  if (permissions.includes("view_transactions")) menus.push("transactions")
 
   return menus
 }
@@ -191,6 +199,7 @@ export function getRoleDisplayName(role: Role): string {
     accounting: "Comptable",
     cashier: "Caissier",
     auditor: "Auditeur",
+    executor: "Exécuteur",
   }
   return names[role] || role
 }
@@ -226,6 +235,10 @@ export function getRolePrimaryActions(role: Role): Array<{ label: string; href: 
       { label: "Configuration", href: "/rates" },
       { label: "Supervision globale", href: "/agencies" },
     ],
+    executor: [
+      { label: "Exécuter transferts", href: "/transactions" },
+      { label: "Voir opérations", href: "/transactions" },
+    ],
   }
   return actions[role] || []
 }
@@ -237,4 +250,5 @@ export const ROLE_DESCRIPTIONS: Record<Role, string> = {
   accounting: "Gestion financière, validation des dépenses et génération de rapports comptables",
   cashier: "Interface opérationnelle pour transferts d'argent, cartes et opérations de change",
   auditor: "Contrôle et audit en mode lecture seule, génération de rapports de conformité",
+  executor: "Exécution des transferts d'argent validés par les auditeurs",
 }

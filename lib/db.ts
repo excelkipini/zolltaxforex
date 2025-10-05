@@ -41,7 +41,7 @@ export async function initializeDatabase() {
         id UUID PRIMARY KEY,
         name TEXT NOT NULL,
         email TEXT NOT NULL UNIQUE,
-        role TEXT NOT NULL CHECK (role IN ('super_admin','director','accounting','cashier','auditor','delegate')),
+        role TEXT NOT NULL CHECK (role IN ('super_admin','director','accounting','cashier','auditor','delegate','executor')),
         agency TEXT NOT NULL DEFAULT 'Non assigné',
         password_hash TEXT,
         last_login TIMESTAMPTZ,

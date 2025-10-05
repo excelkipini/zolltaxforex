@@ -11,7 +11,7 @@ import {
 export type Transaction = {
   id: string
   type: "reception" | "exchange" | "transfer" | "card" | "receipt"
-  status: "pending" | "validated" | "rejected" | "completed" | "pending_delete"
+  status: "pending" | "validated" | "rejected" | "completed" | "executed" | "pending_delete"
   description: string
   amount: number
   currency: string
@@ -21,6 +21,12 @@ export type Transaction = {
   rejection_reason?: string
   delete_validated_by?: string
   delete_validated_at?: string
+  real_amount_eur?: number
+  commission_amount?: number
+  executor_id?: string
+  executed_at?: string
+  receipt_url?: string
+  executor_comment?: string
   created_at: string
   updated_at: string
 }
@@ -294,4 +300,310 @@ export async function validateTransactionDeletion(
   }
   
   return transaction
+}
+
+/**
+ * Calcule la commission pour une transaction de transfert
+ * Commission = montant reçu par la caissière converti en XAF - montant réel renseigné par l'auditeur converti en XAF
+ */
+export async function calculateCommission(
+  receivedAmountXAF: number,
+  realAmountEUR: number,
+  eurToXAFRate: number
+): Promise<number> {
+  const realAmountXAF = realAmountEUR * eurToXAFRate
+  const commission = receivedAmountXAF - realAmountXAF
+  return Math.max(0, commission) // La commission ne peut pas être négative
+}
+
+/**
+ * Met à jour le montant réel et calcule automatiquement la commission pour une transaction
+ */
+export async function updateTransactionRealAmount(
+  transactionId: string,
+  realAmountEUR: number,
+  validatedBy: string
+): Promise<Transaction> {
+  // Récupérer le taux de change EUR vers XAF
+  const settings = await sql`
+    SELECT eur FROM settings ORDER BY updated_at DESC LIMIT 1
+  `
+  const eurToXAFRate = settings[0]?.eur || 650 // Taux par défaut si non trouvé
+
+  // Récupérer la transaction
+  const transactionRows = await sql`
+    SELECT 
+      id::text,
+      type,
+      status,
+      description,
+      amount::bigint as amount,
+      currency,
+      created_by,
+      agency,
+      details,
+      rejection_reason,
+      delete_validated_by,
+      delete_validated_at,
+      real_amount_eur,
+      commission_amount,
+      executor_id,
+      executed_at,
+      receipt_url,
+      executor_comment,
+      created_at::text as created_at,
+      updated_at::text as updated_at
+    FROM transactions 
+    WHERE id = ${transactionId}
+  `
+
+  if (transactionRows.length === 0) {
+    throw new Error('Transaction non trouvée')
+  }
+
+  const transaction = transactionRows[0]
+
+  // Calculer la commission
+  const commissionAmount = await calculateCommission(
+    transaction.amount,
+    realAmountEUR,
+    eurToXAFRate
+  )
+
+  // Déterminer le nouveau statut basé sur la commission
+  let newStatus: Transaction["status"]
+  let executorId: string | null = null
+
+  if (commissionAmount >= 5000) {
+    // Commission >= 5000 XAF : validation automatique et assignation à un exécuteur
+    newStatus = "validated"
+    
+    // Assigner un exécuteur disponible
+    const executorRows = await sql`
+      SELECT id::text FROM users 
+      WHERE role = 'executor' 
+      ORDER BY created_at ASC 
+      LIMIT 1
+    `
+    executorId = executorRows[0]?.id || null
+  } else {
+    // Commission < 5000 XAF : rejet automatique
+    newStatus = "rejected"
+  }
+
+  // Mettre à jour la transaction
+  const updatedRows = await sql`
+    UPDATE transactions 
+    SET 
+      real_amount_eur = ${realAmountEUR},
+      commission_amount = ${commissionAmount},
+      status = ${newStatus},
+      executor_id = ${executorId},
+      updated_at = NOW()
+    WHERE id = ${transactionId}
+    RETURNING 
+      id::text,
+      type,
+      status,
+      description,
+      amount::bigint as amount,
+      currency,
+      created_by,
+      agency,
+      details,
+      rejection_reason,
+      delete_validated_by,
+      delete_validated_at,
+      real_amount_eur,
+      commission_amount,
+      executor_id,
+      executed_at,
+      receipt_url,
+      executor_comment,
+      created_at::text as created_at,
+      updated_at::text as updated_at
+  `
+
+  const updatedTransaction = updatedRows[0]
+
+  // Envoyer une notification email selon le résultat
+  try {
+    if (newStatus === "validated") {
+      await sendTransactionValidatedNotification(convertTransactionToEmailData(updatedTransaction))
+    } else if (newStatus === "rejected") {
+      // Notification de rejet automatique
+      const { sendEmail, getEmailRecipients } = await import('./email-notifications')
+      const recipients = await getEmailRecipients('transaction_validated')
+      
+      await sendEmail({
+        to: recipients.to.map(u => u.email).join(', '),
+        cc: recipients.cc.map(u => u.email).join(', '),
+        subject: `Transaction rejetée automatiquement - Commission insuffisante`,
+        html: `
+          <h2>Transaction Rejetée Automatiquement</h2>
+          <p>La transaction <strong>${updatedTransaction.id}</strong> a été rejetée automatiquement car la commission est insuffisante.</p>
+          <h3>Détails de la Transaction</h3>
+          <ul>
+            <li><strong>ID:</strong> ${updatedTransaction.id}</li>
+            <li><strong>Type:</strong> ${updatedTransaction.type}</li>
+            <li><strong>Description:</strong> ${updatedTransaction.description}</li>
+            <li><strong>Montant reçu:</strong> ${updatedTransaction.amount} ${updatedTransaction.currency}</li>
+            <li><strong>Montant réel:</strong> ${realAmountEUR} EUR</li>
+            <li><strong>Commission calculée:</strong> ${commissionAmount} XAF</li>
+            <li><strong>Raison du rejet:</strong> Commission insuffisante (< 5000 XAF)</li>
+          </ul>
+        `
+      })
+    }
+  } catch (error) {
+    console.error('Erreur lors de l\'envoi de la notification:', error)
+  }
+
+  return updatedTransaction
+}
+
+/**
+ * Exécute une transaction (assignée à un exécuteur)
+ */
+export async function executeTransaction(
+  transactionId: string,
+  executorId: string,
+  receiptUrl: string,
+  executorComment?: string
+): Promise<Transaction> {
+  const updatedRows = await sql`
+    UPDATE transactions 
+    SET 
+      status = 'executed',
+      executed_at = NOW(),
+      receipt_url = ${receiptUrl},
+      executor_comment = ${executorComment || null},
+      updated_at = NOW()
+    WHERE id = ${transactionId} AND executor_id = ${executorId}
+    RETURNING 
+      id::text,
+      type,
+      status,
+      description,
+      amount::bigint as amount,
+      currency,
+      created_by,
+      agency,
+      details,
+      rejection_reason,
+      delete_validated_by,
+      delete_validated_at,
+      real_amount_eur,
+      commission_amount,
+      executor_id,
+      executed_at,
+      receipt_url,
+      executor_comment,
+      created_at::text as created_at,
+      updated_at::text as updated_at
+  `
+
+  if (updatedRows.length === 0) {
+    throw new Error('Transaction non trouvée ou non assignée à cet exécuteur')
+  }
+
+  const executedTransaction = updatedRows[0]
+
+  // Envoyer une notification email pour l'exécution
+  try {
+    const { sendEmail, getEmailRecipients } = await import('./email-notifications')
+    const recipients = await getEmailRecipients('transaction_validated')
+    
+    await sendEmail({
+      to: recipients.to.map(u => u.email).join(', '),
+      cc: recipients.cc.map(u => u.email).join(', '),
+      subject: `Transaction exécutée - ${executedTransaction.id}`,
+      html: `
+        <h2>Transaction Exécutée</h2>
+        <p>La transaction <strong>${executedTransaction.id}</strong> a été exécutée avec succès.</p>
+        <h3>Détails de la Transaction</h3>
+        <ul>
+          <li><strong>ID:</strong> ${executedTransaction.id}</li>
+          <li><strong>Type:</strong> ${executedTransaction.type}</li>
+          <li><strong>Description:</strong> ${executedTransaction.description}</li>
+          <li><strong>Montant:</strong> ${executedTransaction.amount} ${executedTransaction.currency}</li>
+          <li><strong>Commission:</strong> ${executedTransaction.commission_amount} XAF</li>
+          <li><strong>Exécuté par:</strong> ${executorId}</li>
+          <li><strong>Date d'exécution:</strong> ${executedTransaction.executed_at}</li>
+          ${executorComment ? `<li><strong>Commentaire:</strong> ${executorComment}</li>` : ''}
+        </ul>
+        <p><strong>Reçu:</strong> <a href="${receiptUrl}">Télécharger le reçu</a></p>
+      `
+    })
+  } catch (error) {
+    console.error('Erreur lors de l\'envoi de la notification d\'exécution:', error)
+  }
+
+  return executedTransaction
+}
+
+/**
+ * Récupère les transactions assignées à un exécuteur
+ */
+export async function getTransactionsForExecutor(executorId: string): Promise<Transaction[]> {
+  const rows = await sql<Transaction[]>`
+    SELECT 
+      id::text,
+      type,
+      status,
+      description,
+      amount::bigint as amount,
+      currency,
+      created_by,
+      agency,
+      details,
+      rejection_reason,
+      delete_validated_by,
+      delete_validated_at,
+      real_amount_eur,
+      commission_amount,
+      executor_id,
+      executed_at,
+      receipt_url,
+      executor_comment,
+      created_at::text as created_at,
+      updated_at::text as updated_at
+    FROM transactions 
+    WHERE executor_id = ${executorId}
+    ORDER BY created_at DESC
+  `
+  return rows
+}
+
+/**
+ * Récupère les transactions en attente d'exécution
+ */
+export async function getTransactionsPendingExecution(): Promise<Transaction[]> {
+  const rows = await sql<Transaction[]>`
+    SELECT 
+      id::text,
+      type,
+      status,
+      description,
+      amount::bigint as amount,
+      currency,
+      created_by,
+      agency,
+      details,
+      rejection_reason,
+      delete_validated_by,
+      delete_validated_at,
+      real_amount_eur,
+      commission_amount,
+      executor_id,
+      executed_at,
+      receipt_url,
+      executor_comment,
+      created_at::text as created_at,
+      updated_at::text as updated_at
+    FROM transactions 
+    WHERE status = 'validated' AND executor_id IS NOT NULL
+    ORDER BY created_at ASC
+  `
+  return rows
 }
