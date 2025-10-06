@@ -1,338 +1,381 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { FileText, Download, TrendingUp, DollarSign, Users, BarChart3, PieChart } from "lucide-react"
-import { ActionGuard } from "@/components/permission-guard"
-import type { SessionUser } from "@/lib/auth"
+import { Calendar, Download, TrendingUp, TrendingDown, DollarSign, Activity, Loader2 } from "lucide-react"
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from "recharts"
+
+interface SessionUser {
+  id: string
+  name: string
+  role: string
+  email: string
+}
 
 interface ReportsViewProps {
   user: SessionUser
 }
 
+// Types pour les données
+interface ExpenseData {
+  date: string
+  amount: number
+  category: string
+  status: string
+}
+
+interface OperationData {
+  date: string
+  transactions: number
+  total_amount: number
+  type: string
+}
+
+interface ReportsStats {
+  totalExpenses: number
+  totalOperations: number
+  totalTransactions: number
+  expensesVariation: number
+  operationsVariation: number
+}
+
 export function ReportsView({ user }: ReportsViewProps) {
-  const [selectedPeriod, setSelectedPeriod] = useState("month")
-  const [selectedReport, setSelectedReport] = useState("financial")
+  const [selectedPeriod, setSelectedPeriod] = useState("year")
+  const [expensesData, setExpensesData] = useState<ExpenseData[]>([])
+  const [operationsData, setOperationsData] = useState<OperationData[]>([])
+  const [stats, setStats] = useState<ReportsStats>({
+    totalExpenses: 0,
+    totalOperations: 0,
+    totalTransactions: 0,
+    expensesVariation: 0,
+    operationsVariation: 0
+  })
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  // Mock data - replace with real data
-  const financialSummary = {
-    revenue: 15420000,
-    expenses: 2340000,
-    netProfit: 13080000,
-    margin: 84.8,
+  // Charger les données
+  const loadData = async (period: string) => {
+    try {
+      setLoading(true)
+      setError(null)
+
+      const response = await fetch(`/api/reports/data?period=${period}&type=all`)
+      const result = await response.json()
+
+      if (!result.ok) {
+        throw new Error(result.error || "Erreur lors du chargement des données")
+      }
+
+      setExpensesData(result.data.expenses || [])
+      setOperationsData(result.data.transactions || [])
+      setStats(result.data.stats || {
+        totalExpenses: 0,
+        totalOperations: 0,
+        totalTransactions: 0,
+        expensesVariation: 0,
+        operationsVariation: 0
+      })
+    } catch (err: any) {
+      console.error("Erreur lors du chargement des données:", err)
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
   }
 
-  const kpis = {
-    transactions: 1247,
-    avgTransaction: 12365,
-    growth: 15.3,
-    activeUsers: 89,
+  // Charger les données au montage du composant
+  useEffect(() => {
+    loadData(selectedPeriod)
+  }, [selectedPeriod])
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('fr-FR', {
+      style: 'currency',
+      currency: 'XOF',
+      minimumFractionDigits: 0,
+    }).format(amount)
   }
 
-  const reportTypes = [
-    {
-      id: "financial",
-      title: "Rapport Financier",
-      description: "Revenus, dépenses et bénéfices",
-      icon: DollarSign,
-      color: "text-green-600",
-    },
-    {
-      id: "operational",
-      title: "Rapport Opérationnel",
-      description: "Transactions et activités",
-      icon: BarChart3,
-      color: "text-blue-600",
-    },
-    {
-      id: "audit",
-      title: "Rapport d'Audit",
-      description: "Contrôles et conformité",
-      icon: FileText,
-      color: "text-purple-600",
-    },
-    {
-      id: "performance",
-      title: "Rapport Performance",
-      description: "KPIs et indicateurs",
-      icon: TrendingUp,
-      color: "text-orange-600",
-    },
-  ]
+  const formatNumber = (num: number) => {
+    return new Intl.NumberFormat('fr-FR').format(num)
+  }
 
-  const quickReports =
-    user.role === "accounting"
-      ? [
-          { title: "Rapport Financier Mensuel", description: "Synthèse comptable complète", action: "Générer" },
-          { title: "Analyse des Dépenses", description: "Détail par catégorie", action: "Analyser" },
-          { title: "Évolution du CA", description: "Tendances et projections", action: "Consulter" },
+  const handlePeriodChange = (period: string) => {
+    setSelectedPeriod(period)
+  }
+
+  const handleExport = async () => {
+    try {
+      const response = await fetch(`/api/reports/data?period=${selectedPeriod}&type=all`)
+      const result = await response.json()
+      
+      if (result.ok) {
+        // Créer un fichier CSV avec les données
+        const csvData = [
+          ['Période', 'Type', 'Date', 'Montant', 'Transactions'],
+          ...expensesData.map(item => [selectedPeriod, 'Dépenses', item.date, item.amount, '']),
+          ...operationsData.map(item => [selectedPeriod, 'Opérations', item.date, item.total_amount, item.transactions])
         ]
-      : user.role === "director" || user.role === "delegate"
-        ? [
-            { title: "Tableau de Bord Exécutif", description: "Vue d'ensemble stratégique", action: "Générer" },
-            { title: "Performance par Agence", description: "Comparatif des agences", action: "Analyser" },
-            { title: "Rapport Mensuel DG", description: "Synthèse pour direction", action: "Consulter" },
-          ]
-        : [
-            { title: "Rapport Standard", description: "Vue d'ensemble des activités", action: "Consulter" },
-            { title: "Historique Transactions", description: "Détail des opérations", action: "Exporter" },
-          ]
+        
+        const csvContent = csvData.map(row => row.join(',')).join('\n')
+        const blob = new Blob([csvContent], { type: 'text/csv' })
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `rapports-${selectedPeriod}-${new Date().toISOString().split('T')[0]}.csv`
+        a.click()
+        window.URL.revokeObjectURL(url)
+      }
+    } catch (error) {
+      console.error("Erreur lors de l'export:", error)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin" />
+        <span className="ml-2">Chargement des données...</span>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <div className="text-red-500 mb-2">Erreur lors du chargement</div>
+          <div className="text-sm text-gray-600">{error}</div>
+          <Button onClick={() => loadData(selectedPeriod)} className="mt-4">
+            Réessayer
+          </Button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Rapports et Analyses</h1>
+          <h1 className="text-3xl font-bold text-gray-900">Rapports</h1>
           <p className="text-gray-600 mt-1">
-            {user.role === "accounting"
-              ? "Rapports financiers et comptables"
-              : user.role === "director" || user.role === "delegate"
-                ? "Rapports de direction et supervision"
-                : "Consultation des rapports"}
+            Analyse des dépenses et opérations financières
           </p>
         </div>
-        <ActionGuard user={user} permission="reports:export">
-          <Button>
-            <FileText className="h-4 w-4 mr-2" />
-            Nouveau rapport
+        <div className="flex items-center space-x-2">
+          <Select value={selectedPeriod} onValueChange={handlePeriodChange}>
+            <SelectTrigger className="w-40">
+              <SelectValue placeholder="Période" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="week">Cette semaine</SelectItem>
+              <SelectItem value="month">Ce mois</SelectItem>
+              <SelectItem value="quarter">Ce trimestre</SelectItem>
+              <SelectItem value="year">Cette année</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button variant="outline" onClick={handleExport}>
+            <Download className="h-4 w-4 mr-2" />
+            Exporter
           </Button>
-        </ActionGuard>
+        </div>
       </div>
 
-      {/* Quick Actions for Accounting */}
-      {user.role === "accounting" && (
-        <Card className="border-l-4 border-l-green-500">
-          <CardHeader>
-            <CardTitle className="text-green-700">Actions Rapides Comptables</CardTitle>
+      {/* Statistiques générales */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Dépenses</CardTitle>
+            <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {quickReports.map((report, index) => (
-                <Button key={index} variant="outline" className="h-auto p-4 justify-start bg-transparent">
-                  <div className="text-left">
-                    <div className="font-medium">{report.title}</div>
-                    <div className="text-sm text-muted-foreground mt-1">{report.description}</div>
-                  </div>
-                </Button>
-              ))}
+            <div className="text-2xl font-bold">{formatCurrency(stats.totalExpenses)}</div>
+            <div className="flex items-center text-xs text-muted-foreground">
+              {stats.expensesVariation >= 0 ? (
+                <TrendingUp className="h-3 w-3 text-green-500 mr-1" />
+              ) : (
+                <TrendingDown className="h-3 w-3 text-red-500 mr-1" />
+              )}
+              <span className={stats.expensesVariation >= 0 ? "text-green-500" : "text-red-500"}>
+                {Math.abs(stats.expensesVariation).toFixed(1)}%
+              </span>
+              <span className="ml-1">vs période précédente</span>
             </div>
           </CardContent>
         </Card>
-      )}
 
-      {/* Financial Summary */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="border-l-4 border-l-green-500">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <TrendingUp className="h-4 w-4 text-green-600" />
-              Revenus
-            </CardTitle>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Opérations</CardTitle>
+            <Activity className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">{financialSummary.revenue.toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground">XAF ce mois</p>
+            <div className="text-2xl font-bold">{formatCurrency(stats.totalOperations)}</div>
+            <div className="flex items-center text-xs text-muted-foreground">
+              {stats.operationsVariation >= 0 ? (
+                <TrendingUp className="h-3 w-3 text-green-500 mr-1" />
+              ) : (
+                <TrendingDown className="h-3 w-3 text-red-500 mr-1" />
+              )}
+              <span className={stats.operationsVariation >= 0 ? "text-green-500" : "text-red-500"}>
+                {Math.abs(stats.operationsVariation).toFixed(1)}%
+              </span>
+              <span className="ml-1">vs période précédente</span>
+            </div>
           </CardContent>
         </Card>
 
-        <Card className="border-l-4 border-l-red-500">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <DollarSign className="h-4 w-4 text-red-600" />
-              Dépenses
-            </CardTitle>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Nombre de Transactions</CardTitle>
+            <Activity className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-red-600">{financialSummary.expenses.toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground">XAF ce mois</p>
-          </CardContent>
-        </Card>
-
-        <Card className="border-l-4 border-l-blue-500">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <BarChart3 className="h-4 w-4 text-blue-600" />
-              Bénéfice Net
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-blue-600">{financialSummary.netProfit.toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground">XAF ce mois</p>
-          </CardContent>
-        </Card>
-
-        <Card className="border-l-4 border-l-purple-500">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <PieChart className="h-4 w-4 text-purple-600" />
-              Marge
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-purple-600">{financialSummary.margin}%</div>
-            <p className="text-xs text-muted-foreground">Marge bénéficiaire</p>
+            <div className="text-2xl font-bold">{formatNumber(stats.totalTransactions)}</div>
+            <p className="text-xs text-muted-foreground">
+              Moyenne: {formatNumber(Math.round(stats.totalTransactions / Math.max(operationsData.length, 1)))} / mois
+            </p>
           </CardContent>
         </Card>
       </div>
 
-      {/* KPIs */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Graphiques */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Graphique de variation des dépenses */}
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <BarChart3 className="h-4 w-4" />
-              Transactions
+          <CardHeader>
+            <CardTitle className="flex items-center">
+              <TrendingUp className="h-5 w-5 mr-2 text-blue-600" />
+              Variation des Dépenses
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{kpis.transactions}</div>
-            <p className="text-xs text-muted-foreground">Ce mois</p>
+            <div className="h-80">
+              {expensesData.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={expensesData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis 
+                      dataKey="date" 
+                      tick={{ fontSize: 12 }}
+                      tickFormatter={(value) => value.split('-')[1]}
+                    />
+                    <YAxis 
+                      tick={{ fontSize: 12 }}
+                      tickFormatter={(value) => `${(value / 1000000).toFixed(1)}M`}
+                    />
+                    <Tooltip 
+                      formatter={(value: number) => [formatCurrency(value), 'Montant']}
+                      labelFormatter={(label) => `Mois: ${label}`}
+                    />
+                    <Line 
+                      type="monotone" 
+                      dataKey="amount" 
+                      stroke="#3b82f6" 
+                      strokeWidth={2}
+                      dot={{ fill: '#3b82f6', strokeWidth: 2, r: 4 }}
+                      activeDot={{ r: 6 }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex items-center justify-center h-full text-gray-500">
+                  Aucune donnée de dépenses disponible
+                </div>
+              )}
+            </div>
           </CardContent>
         </Card>
 
+        {/* Graphique de variation des opérations */}
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <DollarSign className="h-4 w-4" />
-              Montant Moyen
+          <CardHeader>
+            <CardTitle className="flex items-center">
+              <Activity className="h-5 w-5 mr-2 text-green-600" />
+              Variation des Opérations
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{kpis.avgTransaction.toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground">XAF par transaction</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <TrendingUp className="h-4 w-4" />
-              Croissance
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">+{kpis.growth}%</div>
-            <p className="text-xs text-muted-foreground">vs mois précédent</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <Users className="h-4 w-4" />
-              Utilisateurs Actifs
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{kpis.activeUsers}</div>
-            <p className="text-xs text-muted-foreground">Cette semaine</p>
+            <div className="h-80">
+              {operationsData.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={operationsData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis 
+                      dataKey="date" 
+                      tick={{ fontSize: 12 }}
+                      tickFormatter={(value) => value.split('-')[1]}
+                    />
+                    <YAxis 
+                      tick={{ fontSize: 12 }}
+                      tickFormatter={(value) => `${(value / 1000000).toFixed(1)}M`}
+                    />
+                    <Tooltip 
+                      formatter={(value: number) => [formatCurrency(value), 'Montant']}
+                      labelFormatter={(label) => `Mois: ${label}`}
+                    />
+                    <Bar 
+                      dataKey="total_amount" 
+                      fill="#10b981" 
+                      radius={[4, 4, 0, 0]}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex items-center justify-center h-full text-gray-500">
+                  Aucune donnée d'opérations disponible
+                </div>
+              )}
+            </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Report Generation */}
+      {/* Graphique combiné des transactions */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FileText className="h-5 w-5" />
-            Génération de Rapports
+          <CardTitle className="flex items-center">
+            <Activity className="h-5 w-5 mr-2 text-purple-600" />
+            Nombre de Transactions par Mois
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            <div className="flex flex-col sm:flex-row gap-4">
-              <Select value={selectedReport} onValueChange={setSelectedReport}>
-                <SelectTrigger className="w-full sm:w-64">
-                  <SelectValue placeholder="Type de rapport" />
-                </SelectTrigger>
-                <SelectContent>
-                  {reportTypes.map((type) => (
-                    <SelectItem key={type.id} value={type.id}>
-                      {type.title}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
-                <SelectTrigger className="w-full sm:w-48">
-                  <SelectValue placeholder="Période" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="week">Cette semaine</SelectItem>
-                  <SelectItem value="month">Ce mois</SelectItem>
-                  <SelectItem value="quarter">Ce trimestre</SelectItem>
-                  <SelectItem value="year">Cette année</SelectItem>
-                </SelectContent>
-              </Select>
-
-              <ActionGuard user={user} permission="reports:export">
-                <Button>
-                  <Download className="h-4 w-4 mr-2" />
-                  Générer
-                </Button>
-              </ActionGuard>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {reportTypes.map((type) => {
-                const Icon = type.icon
-                return (
-                  <Card
-                    key={type.id}
-                    className={`cursor-pointer transition-all hover:shadow-md ${selectedReport === type.id ? "ring-2 ring-blue-500" : ""}`}
-                  >
-                    <CardContent className="p-4">
-                      <div className="flex items-center gap-3">
-                        <Icon className={`h-8 w-8 ${type.color}`} />
-                        <div>
-                          <h3 className="font-medium">{type.title}</h3>
-                          <p className="text-sm text-muted-foreground">{type.description}</p>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                )
-              })}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Recent Reports */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Rapports Récents</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            {[
-              { name: "Rapport Financier - Janvier 2025", date: "2025-01-14", size: "2.4 MB", type: "PDF" },
-              { name: "Analyse Opérationnelle - Semaine 2", date: "2025-01-13", size: "1.8 MB", type: "Excel" },
-              { name: "Audit Mensuel - Décembre 2024", date: "2025-01-10", size: "3.1 MB", type: "PDF" },
-            ].map((report, index) => (
-              <div key={index} className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50">
-                <div className="flex items-center gap-3">
-                  <FileText className="h-5 w-5 text-gray-400" />
-                  <div>
-                    <div className="font-medium">{report.name}</div>
-                    <div className="text-sm text-gray-500">
-                      {report.date} • {report.size}
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Badge variant="outline">{report.type}</Badge>
-                  <Button size="sm" variant="ghost">
-                    <Download className="h-4 w-4" />
-                  </Button>
-                </div>
+          <div className="h-80">
+            {operationsData.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={operationsData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis 
+                    dataKey="date" 
+                    tick={{ fontSize: 12 }}
+                    tickFormatter={(value) => value.split('-')[1]}
+                  />
+                  <YAxis 
+                    tick={{ fontSize: 12 }}
+                  />
+                  <Tooltip 
+                    formatter={(value: number) => [formatNumber(value), 'Transactions']}
+                    labelFormatter={(label) => `Mois: ${label}`}
+                  />
+                  <Line 
+                    type="monotone" 
+                    dataKey="transactions" 
+                    stroke="#8b5cf6" 
+                    strokeWidth={2}
+                    dot={{ fill: '#8b5cf6', strokeWidth: 2, r: 4 }}
+                    activeDot={{ r: 6 }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex items-center justify-center h-full text-gray-500">
+                Aucune donnée de transactions disponible
               </div>
-            ))}
+            )}
           </div>
         </CardContent>
       </Card>

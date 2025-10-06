@@ -85,7 +85,7 @@ export function RoleBasedSidebar({ user }: RoleBasedSidebarProps) {
       primary: user.role === "accounting",
     },
     {
-      title: "Comptabilité/Rapports",
+      title: "Rapports",
       href: "/reports",
       icon: FileText,
       permission: "view_reports" as const,

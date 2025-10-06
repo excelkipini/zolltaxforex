@@ -29,7 +29,7 @@ export function AppSidebar() {
     { title: "Gestion Cartes", icon: CreditCard, href: "/cards" },
     { title: "Bureau de change", icon: BadgeDollarSign, href: "/exchange" },
     { title: "Dépenses", icon: Receipt, href: "/expenses" },
-    { title: "Comptabilité/Rapports", icon: FileText, href: "/reports" },
+    { title: "Rapports", icon: FileText, href: "/reports" },
   ] as const
 
   const adminNav = [
