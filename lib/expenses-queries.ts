@@ -1,6 +1,7 @@
 import "server-only"
 import { sql } from "./db"
 import { convertExpenseToEmailData, sendExpenseSubmittedNotification, sendExpenseAccountingValidatedNotification, sendExpenseDirectorValidatedNotification } from "./email-notifications"
+import { deductExpenseFromCoffre } from "./cash-queries"
 
 export type ExpenseStatus = "pending" | "accounting_approved" | "accounting_rejected" | "director_approved" | "director_rejected"
 
@@ -203,6 +204,21 @@ export async function validateExpenseByDirector(
   }
   
   const expense = rows[0]
+
+  // Si la dépense est approuvée par le directeur, déduire du coffre
+  if (approved) {
+    try {
+      await deductExpenseFromCoffre(
+        expense.id,
+        expense.amount,
+        `Dépense approuvée: ${expense.description}`,
+        validatedBy
+      )
+    } catch (error) {
+      console.error('Erreur lors de la déduction de la dépense du coffre:', error)
+      // Ne pas faire échouer la validation si la déduction échoue
+    }
+  }
 
   // Envoyer une notification email pour la validation directeur
   try {

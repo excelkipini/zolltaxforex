@@ -12,6 +12,7 @@ import {
   sendTransferCompletedNotification,
   convertTransferToEmailData
 } from "./email-notifications"
+import { addCommissionToAccount } from "./cash-queries"
 
 export type Transaction = {
   id: string
@@ -455,6 +456,21 @@ export async function updateTransactionRealAmount(
   `
 
   const updatedTransaction = updatedRows[0]
+
+  // Ajouter la commission au compte commissions si la transaction est validée
+  if (newStatus === "validated" && commissionAmount > 0) {
+    try {
+      await addCommissionToAccount(
+        updatedTransaction.id,
+        commissionAmount,
+        `Commission transfert: ${updatedTransaction.description}`,
+        validatedBy
+      )
+    } catch (error) {
+      console.error('Erreur lors de l\'ajout de la commission au compte:', error)
+      // Ne pas faire échouer la validation si l'ajout de commission échoue
+    }
+  }
 
   // Envoyer une notification email selon le résultat
   try {

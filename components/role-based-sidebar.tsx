@@ -16,6 +16,7 @@ import {
   Banknote,
   Receipt,
   Activity,
+  Wallet,
   FileText,
   Users,
   Building2,
@@ -75,6 +76,13 @@ export function RoleBasedSidebar({ user }: RoleBasedSidebarProps) {
       icon: Activity,
       permission: "view_transactions" as const,
       primary: user.role === "director" || user.role === "accounting",
+    },
+    {
+      title: "Caisse",
+      href: "/cash",
+      icon: Wallet,
+      permission: "view_cash" as const,
+      primary: user.role === "accounting",
     },
     {
       title: "Comptabilité/Rapports",

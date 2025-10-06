@@ -11,6 +11,7 @@ export type Permission =
   | "edit_agencies"
   | "delete_agencies"
   | "view_transactions"
+  | "view_cash"
   | "create_transactions"
   | "edit_transactions"
   | "delete_transactions"
@@ -118,6 +119,7 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   accounting: [
     "view_dashboard",
     "view_transactions",
+    "view_cash",
     "view_rates",
     "edit_rates",
     "view_expenses",

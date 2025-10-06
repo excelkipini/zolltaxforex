@@ -242,6 +242,33 @@ export async function initializeDatabase() {
       )
     `
 
+    // Create cash_accounts table for managing cash balances
+    await sql`
+      CREATE TABLE IF NOT EXISTS cash_accounts (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        account_type TEXT NOT NULL CHECK (account_type IN ('uba', 'ecobank', 'coffre', 'commissions')),
+        account_name TEXT NOT NULL,
+        current_balance BIGINT NOT NULL DEFAULT 0,
+        last_updated TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_by TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `
+
+    // Create cash_transactions table for tracking cash movements
+    await sql`
+      CREATE TABLE IF NOT EXISTS cash_transactions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        account_type TEXT NOT NULL CHECK (account_type IN ('uba', 'ecobank', 'coffre', 'commissions')),
+        transaction_type TEXT NOT NULL CHECK (transaction_type IN ('deposit', 'withdrawal', 'transfer', 'expense', 'commission')),
+        amount BIGINT NOT NULL,
+        description TEXT NOT NULL,
+        reference_id TEXT, -- Reference to expense or transaction
+        created_by TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `
+
     return true
   } catch (error) {
     return false
