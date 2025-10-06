@@ -697,7 +697,7 @@ export default function CardsClient({
             Nouvelle carte
           </Button>
           
-          {/* Bouton Plafonds par pays */}
+          {/* Bouton Plafonds */}
           <Button 
             onClick={() => {
               setCountryLimitsOpen(true)
@@ -708,7 +708,7 @@ export default function CardsClient({
             className="bg-purple-50 hover:bg-purple-100 border-purple-200 text-purple-700"
           >
             <Zap className="h-4 w-4 mr-2" />
-            Plafonds par pays
+            Plafonds
           </Button>
           
           {/* Bouton Historique des actions */}
