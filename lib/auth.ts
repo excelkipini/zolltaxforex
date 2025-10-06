@@ -236,7 +236,7 @@ const mockUsers = [
     email: "directeur@test.com",
     role: "director",
     agency: "Direction Générale",
-    password_hash: "password123",
+    password_hash: process.env.TEST_PASSWORD || "password123",
   },
   {
     id: "00000000-0000-4000-8000-000000000002",
@@ -244,7 +244,7 @@ const mockUsers = [
     email: "caissier@test.com",
     role: "cashier",
     agency: "Agence Centrale",
-    password_hash: "password123",
+    password_hash: process.env.TEST_PASSWORD || "password123",
   },
   {
     id: "00000000-0000-4000-8000-000000000003",
@@ -252,7 +252,7 @@ const mockUsers = [
     email: "comptable@test.com",
     role: "accounting",
     agency: "Service Comptabilité",
-    password_hash: "password123",
+    password_hash: process.env.TEST_PASSWORD || "password123",
   },
   {
     id: "00000000-0000-4000-8000-000000000004",
@@ -260,7 +260,7 @@ const mockUsers = [
     email: "auditeur@test.com",
     role: "auditor",
     agency: "Service Audit",
-    password_hash: "password123",
+    password_hash: process.env.TEST_PASSWORD || "password123",
   },
   {
     id: "00000000-0000-4000-8000-000000000005",
@@ -268,7 +268,7 @@ const mockUsers = [
     email: "delegue@test.com",
     role: "delegate",
     agency: "Agence Régionale",
-    password_hash: "password123",
+    password_hash: process.env.TEST_PASSWORD || "password123",
   },
   {
     id: "00000000-0000-4000-8000-000000000006",
@@ -276,7 +276,7 @@ const mockUsers = [
     email: "admin@test.com",
     role: "super_admin",
     agency: "Administration",
-    password_hash: "password123",
+    password_hash: process.env.TEST_PASSWORD || "password123",
   },
   {
     id: "00000000-0000-4000-8000-000000000007",
@@ -284,7 +284,7 @@ const mockUsers = [
     email: "executeur@test.com",
     role: "executor",
     agency: "Noura",
-    password_hash: "password123",
+    password_hash: process.env.TEST_PASSWORD || "password123",
   },
 ]
 
@@ -313,7 +313,7 @@ export async function verifyPasswordByUser(userId: string, password: string): Pr
   try {
     // En mode développement sans base de données, utiliser le mot de passe mock
     if (!process.env.DATABASE_URL) {
-      return password === "password123"
+      return password === (process.env.TEST_PASSWORD || "password123")
     }
     
     // Récupérer le mot de passe haché de l'utilisateur

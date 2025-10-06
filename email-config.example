@@ -15,5 +15,8 @@ FROM_EMAIL=noreply@zolltaxforex.com
 # Configuration de la base de données (déjà existante)
 DATABASE_URL=postgresql://username:password@hostname/database?sslmode=require
 
+# Mot de passe pour les comptes de test (développement uniquement)
+TEST_PASSWORD=mot-de-passe-test-securise
+
 # Mode de développement (pour désactiver l'envoi réel d'emails)
 NODE_ENV=development

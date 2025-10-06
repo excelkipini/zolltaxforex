@@ -43,8 +43,8 @@ Pour utiliser Gmail comme service SMTP :
 SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
 SMTP_SECURE=false
-SMTP_USER=mbamaexcel@gmail.com
-SMTP_PASS=cfxvilwkafdjmrjj
+SMTP_USER=votre-email@gmail.com
+SMTP_PASS=votre-mot-de-passe-app
 ```
 
 ### 3. Autres services SMTP

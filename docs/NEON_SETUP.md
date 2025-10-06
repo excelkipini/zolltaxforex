@@ -123,12 +123,12 @@ Le script d'initialisation crée automatiquement 6 comptes de test :
 
 | Rôle | Email | Mot de passe | Agence |
 |------|-------|--------------|---------|
-| **Super Admin** | admin@test.com | password123 | Administration |
-| **Directeur** | directeur@test.com | password123 | Direction Générale |
-| **Comptable** | comptable@test.com | password123 | Service Comptabilité |
-| **Caissier** | caissier@test.com | password123 | Agence Centrale |
-| **Auditeur** | auditeur@test.com | password123 | Service Audit |
-| **Délégué** | delegue@test.com | password123 | Agence Régionale |
+| **Super Admin** | admin@test.com | [mot-de-passe-test] | Administration |
+| **Directeur** | directeur@test.com | [mot-de-passe-test] | Direction Générale |
+| **Comptable** | comptable@test.com | [mot-de-passe-test] | Service Comptabilité |
+| **Caissier** | caissier@test.com | [mot-de-passe-test] | Agence Centrale |
+| **Auditeur** | auditeur@test.com | [mot-de-passe-test] | Service Audit |
+| **Délégué** | delegue@test.com | [mot-de-passe-test] | Agence Régionale |
 
 ## 🏢 Agences par Défaut
 
