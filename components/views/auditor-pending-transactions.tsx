@@ -7,7 +7,8 @@ import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { CheckCircle, Eye, X, AlertTriangle, Info, CheckCircle2 } from "lucide-react"
+import { Input } from "@/components/ui/input"
+import { CheckCircle, Eye, X, AlertTriangle, Info } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
 type Transaction = {
@@ -37,8 +38,9 @@ export function AuditorPendingTransactions({ user }: AuditorPendingTransactionsP
   const [transactionToReject, setTransactionToReject] = React.useState<string | null>(null)
   const [detailsDialogOpen, setDetailsDialogOpen] = React.useState(false)
   const [selectedTransaction, setSelectedTransaction] = React.useState<Transaction | null>(null)
-  const [bulkValidateDialogOpen, setBulkValidateDialogOpen] = React.useState(false)
-  const [isBulkValidating, setIsBulkValidating] = React.useState(false)
+  const [validateDialogOpen, setValidateDialogOpen] = React.useState(false)
+  const [transactionToValidate, setTransactionToValidate] = React.useState<string | null>(null)
+  const [realAmountEUR, setRealAmountEUR] = React.useState("")
   const { toast } = useToast()
 
   // Charger les transactions depuis localStorage
@@ -85,39 +87,67 @@ export function AuditorPendingTransactions({ user }: AuditorPendingTransactionsP
     }
   }, [])
 
-  const handleValidateTransaction = async (transactionId: string) => {
+  const handleValidateTransaction = (transactionId: string) => {
+    setTransactionToValidate(transactionId)
+    setRealAmountEUR("")
+    setValidateDialogOpen(true)
+  }
+
+  const confirmValidateTransaction = async () => {
+    if (!transactionToValidate || !realAmountEUR) {
+      toast({
+        title: "Erreur",
+        description: "Veuillez saisir le montant réel en EUR",
+        variant: "destructive"
+      })
+      return
+    }
+
+    const realAmount = parseFloat(realAmountEUR)
+    if (isNaN(realAmount) || realAmount <= 0) {
+      toast({
+        title: "Erreur",
+        description: "Le montant réel doit être un nombre positif",
+        variant: "destructive"
+      })
+      return
+    }
+
     try {
-      const response = await fetch('/api/transactions', {
-        method: 'PUT',
+      const response = await fetch('/api/transactions/update-real-amount', {
+        method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          id: transactionId,
-          status: 'validated'
+          transactionId: transactionToValidate,
+          realAmountEUR: realAmount,
+          validatedBy: user.name
         })
       })
 
+      const result = await response.json()
+
       if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Erreur lors de la validation')
+        throw new Error(result.error || 'Erreur lors de la validation')
       }
 
-      const result = await response.json()
-      const updatedTransaction = result.data
-      
       // Mettre à jour l'état local
-      setTransactions(prev => prev.filter(t => t.id !== transactionId))
+      setTransactions(prev => prev.filter(t => t.id !== transactionToValidate))
       
       toast({
-        title: "Transaction validée",
-        description: `La transaction ${transactionId} a été validée et peut maintenant être clôturée par le caissier`,
+        title: result.message.includes('validée') ? "Transaction validée" : "Transaction rejetée",
+        description: result.message,
       })
       
       // Déclencher un événement personnalisé pour notifier les autres composants
       window.dispatchEvent(new CustomEvent('transactionStatusChanged', { 
-        detail: { transactionId, status: 'validated' } 
+        detail: { transactionId: transactionToValidate, status: result.transaction.status } 
       }))
+      
+      setValidateDialogOpen(false)
+      setTransactionToValidate(null)
+      setRealAmountEUR("")
       
     } catch (error) {
       toast({
@@ -139,69 +169,6 @@ export function AuditorPendingTransactions({ user }: AuditorPendingTransactionsP
     setDetailsDialogOpen(true)
   }
 
-  const handleBulkValidate = () => {
-    setBulkValidateDialogOpen(true)
-  }
-
-  const confirmBulkValidate = async () => {
-    if (transactions.length === 0) {
-      toast({
-        title: "Erreur",
-        description: "Aucune transaction à valider",
-        variant: "destructive"
-      })
-      return
-    }
-
-    setIsBulkValidating(true)
-    
-    try {
-      const validationPromises = transactions.map(transaction => 
-        fetch('/api/transactions', {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            id: transaction.id,
-            status: 'validated'
-          })
-        })
-      )
-
-      const responses = await Promise.all(validationPromises)
-      
-      // Vérifier que toutes les réponses sont OK
-      const failedValidations = responses.filter(response => !response.ok)
-      
-      if (failedValidations.length > 0) {
-        throw new Error(`${failedValidations.length} transaction(s) n'ont pas pu être validées`)
-      }
-
-      // Vider la liste des transactions en attente
-      setTransactions([])
-      
-      toast({
-        title: "Validation en masse réussie",
-        description: `${transactions.length} transaction(s) ont été validées avec succès`,
-      })
-      
-      // Déclencher un événement personnalisé pour notifier les autres composants
-      window.dispatchEvent(new CustomEvent('transactionStatusChanged', { 
-        detail: { transactionIds: transactions.map(t => t.id), status: 'validated' } 
-      }))
-      
-    } catch (error) {
-      toast({
-        title: "Erreur lors de la validation en masse",
-        description: `Erreur: ${error.message}`,
-        variant: "destructive"
-      })
-    } finally {
-      setIsBulkValidating(false)
-      setBulkValidateDialogOpen(false)
-    }
-  }
 
   const confirmRejectTransaction = async () => {
     if (!transactionToReject || !rejectionReason.trim()) {
@@ -341,6 +308,19 @@ export function AuditorPendingTransactions({ user }: AuditorPendingTransactionsP
                 </p>
               </div>
             </div>
+            {/* Montant réel et commission si disponibles */}
+            {(transaction.real_amount_eur && transaction.commission_amount) && (
+              <div className="grid grid-cols-2 gap-4 bg-blue-50 p-3 rounded-lg border border-blue-200">
+                <div>
+                  <span className="text-xs font-medium text-blue-700 uppercase tracking-wide">Montant réel envoyé</span>
+                  <p className="text-sm font-semibold text-blue-900">{transaction.real_amount_eur.toLocaleString("fr-FR")} EUR</p>
+                </div>
+                <div>
+                  <span className="text-xs font-medium text-green-700 uppercase tracking-wide">Commission</span>
+                  <p className="text-sm font-semibold text-green-900">{transaction.commission_amount.toLocaleString("fr-FR")} XAF</p>
+                </div>
+              </div>
+            )}
             {(details.iban_file || details.ibanFile) && (
               <div>
                 <span className="text-xs font-medium text-gray-600 uppercase tracking-wide">Fichier IBAN</span>
@@ -537,16 +517,6 @@ export function AuditorPendingTransactions({ user }: AuditorPendingTransactionsP
           <CardTitle className="text-lg font-semibold text-gray-800">
             Transactions en Attente de Validation ({transactions.length})
           </CardTitle>
-          {transactions.length > 0 && (
-            <Button
-              onClick={handleBulkValidate}
-              className="bg-green-600 hover:bg-green-700 text-white"
-              disabled={isBulkValidating}
-            >
-              <CheckCircle2 className="h-4 w-4 mr-2" />
-              {isBulkValidating ? "Validation..." : "Valider toutes"}
-            </Button>
-          )}
         </div>
       </CardHeader>
       <CardContent>
@@ -727,42 +697,52 @@ export function AuditorPendingTransactions({ user }: AuditorPendingTransactionsP
         </DialogContent>
       </Dialog>
 
-      {/* Dialogue de validation en masse */}
-      <Dialog open={bulkValidateDialogOpen} onOpenChange={setBulkValidateDialogOpen}>
+
+      {/* Dialogue de validation avec montant réel */}
+      <Dialog open={validateDialogOpen} onOpenChange={setValidateDialogOpen}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <CheckCircle2 className="h-5 w-5 text-green-600" />
-              Valider toutes les transactions
+              <CheckCircle className="h-5 w-5 text-green-600" />
+              Valider la transaction
             </DialogTitle>
             <DialogDescription>
-              Êtes-vous sûr de vouloir valider toutes les {transactions.length} transaction(s) en attente ? 
-              Cette action permettra aux caissiers de clôturer ces transactions.
+              Veuillez saisir le montant réel envoyé en EUR pour calculer la commission et valider automatiquement la transaction.
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-              <h4 className="font-medium text-yellow-800 mb-2">Transactions qui seront validées :</h4>
-              <div className="space-y-2 max-h-32 overflow-y-auto">
-                {transactions.map((transaction) => (
-                  <div key={transaction.id} className="text-sm text-yellow-700">
-                    <span className="font-medium">{transaction.id}</span> - {getTypeLabel(transaction.type)} - {formatAmount(transaction.amount, transaction.currency)}
-                  </div>
-                ))}
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="real-amount" className="text-sm font-medium text-gray-700">
+                  Montant réel envoyé (EUR) *
+                </Label>
+                <Input
+                  id="real-amount"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="Ex: 100.50"
+                  value={realAmountEUR}
+                  onChange={(e) => setRealAmountEUR(e.target.value)}
+                  className="mt-1"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Le système calculera automatiquement la commission et validera/rejettera selon le seuil de 5000 XAF
+                </p>
               </div>
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setBulkValidateDialogOpen(false)}>
+            <Button variant="outline" onClick={() => setValidateDialogOpen(false)}>
               Annuler
             </Button>
             <Button 
               className="bg-green-600 hover:bg-green-700 text-white"
-              onClick={confirmBulkValidate}
-              disabled={isBulkValidating}
+              onClick={confirmValidateTransaction}
+              disabled={!realAmountEUR || isNaN(parseFloat(realAmountEUR)) || parseFloat(realAmountEUR) <= 0}
             >
-              <CheckCircle2 className="h-4 w-4 mr-2" />
-              {isBulkValidating ? "Validation..." : `Valider ${transactions.length} transaction(s)`}
+              <CheckCircle className="h-4 w-4 mr-2" />
+              Valider avec montant réel
             </Button>
           </DialogFooter>
         </DialogContent>

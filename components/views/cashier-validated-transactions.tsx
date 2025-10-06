@@ -15,7 +15,7 @@ type Transaction = {
   description: string
   amount: number
   currency: string
-  status: "completed" | "pending" | "validated" | "rejected" | "cancelled"
+  status: "completed" | "pending" | "validated" | "rejected" | "cancelled" | "executed"
   created_by: string
   agency: string
   created_at: string
@@ -46,12 +46,12 @@ export function CashierPendingTransactions({ user }: CashierValidatedTransaction
             details: typeof item.details === 'string' ? JSON.parse(item.details) : item.details
           }))
 
-          // Filtrer les transactions validées créées par ce caissier (à clôturer)
-          const validatedTransactions = apiTransactions.filter(t => 
-            t.status === "validated" && t.created_by === user.name
+          // Filtrer seulement les transactions exécutées créées par ce caissier (à clôturer)
+          const transactionsToComplete = apiTransactions.filter(t => 
+            t.status === "executed" && t.created_by === user.name
           )
           
-          setTransactions(validatedTransactions)
+          setTransactions(transactionsToComplete)
         } else {
           setTransactions([])
         }
@@ -190,6 +190,25 @@ export function CashierPendingTransactions({ user }: CashierValidatedTransaction
     return new Date(dateString).toLocaleString("fr-FR")
   }
 
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case "validated":
+        return <Badge className="bg-blue-100 text-blue-800">Validé</Badge>
+      case "executed":
+        return <Badge className="bg-purple-100 text-purple-800">Exécuté</Badge>
+      case "completed":
+        return <Badge className="bg-green-100 text-green-800">Terminé</Badge>
+      case "pending":
+        return <Badge className="bg-yellow-100 text-yellow-800">En attente</Badge>
+      case "rejected":
+        return <Badge className="bg-red-100 text-red-800">Rejeté</Badge>
+      case "cancelled":
+        return <Badge className="bg-red-100 text-red-800">Annulé</Badge>
+      default:
+        return <Badge variant="secondary">{status}</Badge>
+    }
+  }
+
   const getTypeLabel = (type: string) => {
     switch (type) {
       case "reception":
@@ -229,7 +248,7 @@ export function CashierPendingTransactions({ user }: CashierValidatedTransaction
           <div className="text-center py-6 text-gray-500">
             <Check className="h-8 w-8 mx-auto mb-2 text-green-500" />
             <p>Aucune transaction à clôturer</p>
-            <p className="text-sm">Toutes vos transactions validées ont été clôturées</p>
+            <p className="text-sm">Toutes vos transactions exécutées ont été clôturées</p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -240,6 +259,7 @@ export function CashierPendingTransactions({ user }: CashierValidatedTransaction
                     <Badge variant="outline" className="text-xs">
                       {getTypeLabel(transaction.type)}
                     </Badge>
+                    {getStatusBadge(transaction.status)}
                     <span className="font-medium text-sm">{transaction.id}</span>
                     <span className="text-sm text-gray-600">{transaction.description}</span>
                   </div>
@@ -266,8 +286,8 @@ export function CashierPendingTransactions({ user }: CashierValidatedTransaction
         
         <div className="mt-4 p-3 bg-green-50 rounded-lg">
           <p className="text-sm text-green-800">
-            <strong>Note :</strong> Ces transactions ont été validées par un auditeur et sont prêtes à être clôturées. 
-            Cliquez sur "Clôturer" pour finaliser chaque transaction.
+            <strong>Note :</strong> Ces transactions ont été validées par un auditeur et exécutées par un exécuteur. 
+            Elles sont maintenant prêtes à être clôturées. Cliquez sur "Clôturer" pour finaliser chaque transaction.
           </p>
         </div>
       </CardContent>
@@ -278,10 +298,10 @@ export function CashierPendingTransactions({ user }: CashierValidatedTransaction
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <CheckCircle2 className="h-5 w-5 text-green-600" />
-              Clôturer toutes les transactions validées
+              Clôturer toutes les transactions exécutées
             </DialogTitle>
             <DialogDescription>
-              Êtes-vous sûr de vouloir clôturer toutes les transactions validées ? 
+              Êtes-vous sûr de vouloir clôturer toutes les transactions exécutées ? 
               Cette action marquera ces transactions comme terminées.
             </DialogDescription>
           </DialogHeader>

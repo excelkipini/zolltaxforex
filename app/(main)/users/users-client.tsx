@@ -150,6 +150,7 @@ export function UsersClient({ user }: UsersClientProps) {
                         <SelectItem value="cashier">Caissier</SelectItem>
                         <SelectItem value="accounting">Comptable</SelectItem>
                         <SelectItem value="delegate">Délégué DG</SelectItem>
+                        <SelectItem value="executor">Exécuteur</SelectItem>
                         {user.role === "super_admin" && (
                           <>
                             <SelectItem value="director">Directeur</SelectItem>

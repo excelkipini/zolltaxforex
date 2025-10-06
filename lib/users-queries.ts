@@ -6,7 +6,7 @@ export type User = {
   id: string
   name: string
   email: string
-  role: "super_admin" | "director" | "accounting" | "cashier" | "auditor" | "delegate"
+  role: "super_admin" | "director" | "accounting" | "cashier" | "auditor" | "delegate" | "executor"
   agency: string
   password_hash?: string
   last_login?: string
@@ -155,6 +155,7 @@ export const AVAILABLE_ROLES = [
   "Auditeur",
   "Caissier",
   "Délégué",
+  "Exécuteur",
   "Admin"
 ] as const
 
@@ -167,6 +168,7 @@ export const ROLE_MAPPING: Record<RoleLabel, User["role"]> = {
   "Auditeur": "auditor", 
   "Caissier": "cashier",
   "Délégué": "delegate",
+  "Exécuteur": "executor",
   "Admin": "super_admin"
 }
 

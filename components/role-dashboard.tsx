@@ -23,6 +23,7 @@ import { AuditorPendingTransactions } from "./views/auditor-pending-transactions
 import { CashierDashboard } from "./views/cashier-dashboard"
 import { AccountingDashboard } from "./views/accounting-dashboard"
 import { AuditorDashboard } from "./views/auditor-dashboard"
+import ExecutorDashboard from "./views/executor-dashboard"
 import { useExchangeRates } from "@/hooks/use-exchange-rates"
 import { useDocumentTitle } from "@/hooks/use-document-title"
 
@@ -50,6 +51,11 @@ export function RoleDashboard({ user }: RoleDashboardProps) {
   // Si c'est un auditeur, utiliser le composant spécialisé
   if (user.role === "auditor") {
     return <AuditorDashboard user={user} />
+  }
+
+  // Si c'est un exécuteur, utiliser le composant spécialisé
+  if (user.role === "executor") {
+    return <ExecutorDashboard user={user} />
   }
 
   const getDashboardContent = () => {

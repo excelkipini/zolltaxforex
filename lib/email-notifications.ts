@@ -1,5 +1,5 @@
 import "server-only"
-import { getEmailConfig, isEmailConfigured, getEmailRecipients, formatEmailAddresses, createEmailHeaders, type TransactionEmailData, type DeletionRequestEmailData, type ExpenseEmailData } from "./email-service"
+import { getEmailConfig, isEmailConfigured, getEmailRecipients, formatEmailAddresses, createEmailHeaders, type TransactionEmailData, type DeletionRequestEmailData, type ExpenseEmailData, type TransferEmailData } from "./email-service"
 import { 
   generateTransactionCreatedEmail, 
   generateTransactionValidatedEmail, 
@@ -8,7 +8,11 @@ import {
   generateDeletionValidatedEmail,
   generateExpenseSubmittedEmail,
   generateExpenseAccountingValidatedEmail,
-  generateExpenseDirectorValidatedEmail
+  generateExpenseDirectorValidatedEmail,
+  generateTransferCreatedEmail,
+  generateTransferValidatedEmail,
+  generateTransferExecutedEmail,
+  generateTransferCompletedEmail
 } from "./email-templates"
 import { getUserByEmail, getUserByName } from "./users-queries"
 
@@ -315,6 +319,124 @@ export async function sendExpenseDirectorValidatedNotification(expenseData: Expe
     })
   } catch (error: any) {
     console.error('Erreur lors de l\'envoi de la notification de dépense validée par directeur:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+// NOUVELLES FONCTIONS DE NOTIFICATION POUR LES TRANSFERTS D'ARGENT
+
+// Fonction utilitaire pour convertir les données de transfert en format email
+export function convertTransferToEmailData(transaction: any): TransferEmailData {
+  return {
+    transactionId: transaction.id,
+    transactionType: transaction.type,
+    amount: transaction.amount,
+    currency: transaction.currency,
+    description: transaction.description,
+    createdBy: transaction.created_by,
+    agency: transaction.agency,
+    status: transaction.status,
+    createdAt: transaction.created_at,
+    realAmountEUR: transaction.real_amount_eur,
+    commissionAmount: transaction.commission_amount,
+    executorId: transaction.executor_id,
+    executedAt: transaction.executed_at,
+    receiptUrl: transaction.receipt_url,
+    executorComment: transaction.executor_comment,
+    beneficiaryName: transaction.details?.beneficiary_name,
+    destinationCountry: transaction.details?.destination_country,
+    transferMethod: transaction.details?.transfer_method,
+    withdrawalMode: transaction.details?.withdrawal_mode
+  }
+}
+
+// 1. Notification pour transfert créé par un caissier
+export async function sendTransferCreatedNotification(transferData: TransferEmailData): Promise<{ success: boolean; error?: string }> {
+  try {
+    const recipients = await getEmailRecipients('transfer_created')
+    const toEmails = formatEmailAddresses(recipients.to)
+    const ccEmails = formatEmailAddresses(recipients.cc)
+    
+    const emailTemplate = generateTransferCreatedEmail(transferData)
+    
+    return await sendEmail({
+      to: toEmails,
+      cc: ccEmails,
+      subject: emailTemplate.subject,
+      html: emailTemplate.html
+    })
+  } catch (error: any) {
+    console.error('Erreur lors de l\'envoi de la notification de transfert créé:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+// 2. Notification pour transfert validé par un auditeur
+export async function sendTransferValidatedNotification(transferData: TransferEmailData): Promise<{ success: boolean; error?: string }> {
+  try {
+    const recipients = await getEmailRecipients('transfer_validated')
+    const toEmails = formatEmailAddresses(recipients.to)
+    const ccEmails = formatEmailAddresses(recipients.cc)
+    
+    const emailTemplate = generateTransferValidatedEmail(transferData)
+    
+    return await sendEmail({
+      to: toEmails,
+      cc: ccEmails,
+      subject: emailTemplate.subject,
+      html: emailTemplate.html
+    })
+  } catch (error: any) {
+    console.error('Erreur lors de l\'envoi de la notification de transfert validé:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+// 3. Notification pour transfert exécuté par un exécuteur
+export async function sendTransferExecutedNotification(transferData: TransferEmailData): Promise<{ success: boolean; error?: string }> {
+  try {
+    const recipients = await getEmailRecipients('transfer_executed')
+    const ccEmails = formatEmailAddresses(recipients.cc)
+    
+    // Trouver l'email du caissier qui a créé le transfert
+    const cashier = await getUserByName(transferData.createdBy)
+    if (!cashier) {
+      throw new Error(`Caissier non trouvé: ${transferData.createdBy}`)
+    }
+    
+    const toEmails = [`${cashier.name} <${cashier.email}>`]
+    
+    const emailTemplate = generateTransferExecutedEmail(transferData, cashier.email)
+    
+    return await sendEmail({
+      to: toEmails,
+      cc: ccEmails,
+      subject: emailTemplate.subject,
+      html: emailTemplate.html
+    })
+  } catch (error: any) {
+    console.error('Erreur lors de l\'envoi de la notification de transfert exécuté:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+// 4. Notification pour transfert clôturé par un caissier
+export async function sendTransferCompletedNotification(transferData: TransferEmailData): Promise<{ success: boolean; error?: string }> {
+  try {
+    const recipients = await getEmailRecipients('transfer_completed')
+    const toEmails = formatEmailAddresses(recipients.to)
+    const ccEmails = formatEmailAddresses(recipients.cc)
+    
+    const emailTemplate = generateTransferCompletedEmail(transferData)
+    
+    return await sendEmail({
+      to: toEmails,
+      cc: ccEmails,
+      subject: emailTemplate.subject,
+      html: emailTemplate.html
+    })
+  } catch (error: any) {
+    console.error('Erreur lors de l\'envoi de la notification de transfert clôturé:', error)
     return { success: false, error: error.message }
   }
 }

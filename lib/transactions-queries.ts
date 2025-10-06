@@ -5,7 +5,12 @@ import {
   sendTransactionCreatedNotification, 
   sendTransactionValidatedNotification, 
   sendTransactionCompletedNotification,
-  convertTransactionToEmailData
+  convertTransactionToEmailData,
+  sendTransferCreatedNotification,
+  sendTransferValidatedNotification,
+  sendTransferExecutedNotification,
+  sendTransferCompletedNotification,
+  convertTransferToEmailData
 } from "./email-notifications"
 
 export type Transaction = {
@@ -56,6 +61,12 @@ export async function listTransactions(): Promise<Transaction[]> {
       rejection_reason,
       delete_validated_by,
       delete_validated_at::text as delete_validated_at,
+      real_amount_eur,
+      commission_amount,
+      executor_id::text as executor_id,
+      executed_at::text as executed_at,
+      receipt_url,
+      executor_comment,
       created_at::text as created_at,
       updated_at::text as updated_at
     FROM transactions
@@ -90,11 +101,18 @@ export async function createTransaction(input: CreateTransactionInput): Promise<
   
   const transaction = rows[0]
   
-  // Envoyer une notification email si la transaction est créée par un caissier
+  // Envoyer une notification email selon le type de transaction
   if (input.type !== "receipt" && defaultStatus === "pending") {
     try {
-      const emailData = convertTransactionToEmailData(transaction)
-      await sendTransactionCreatedNotification(emailData)
+      if (input.type === "transfer") {
+        // Pour les transferts d'argent, utiliser les nouvelles notifications
+        const transferData = convertTransferToEmailData(transaction)
+        await sendTransferCreatedNotification(transferData)
+      } else {
+        // Pour les autres transactions, utiliser les anciennes notifications
+        const emailData = convertTransactionToEmailData(transaction)
+        await sendTransactionCreatedNotification(emailData)
+      }
     } catch (error) {
       console.error('Erreur lors de l\'envoi de la notification de création:', error)
     }
@@ -132,14 +150,26 @@ export async function updateTransactionStatus(
   
   const transaction = rows[0]
   
-  // Envoyer des notifications email selon le statut
+  // Envoyer des notifications email selon le statut et le type
   try {
-    const emailData = convertTransactionToEmailData(transaction)
-    
-    if (status === "validated") {
-      await sendTransactionValidatedNotification(emailData)
-    } else if (status === "completed") {
-      await sendTransactionCompletedNotification(emailData)
+    if (transaction.type === "transfer") {
+      // Utiliser les nouvelles notifications pour les transferts
+      const transferData = convertTransferToEmailData(transaction)
+      
+      if (status === "validated") {
+        await sendTransferValidatedNotification(transferData)
+      } else if (status === "completed") {
+        await sendTransferCompletedNotification(transferData)
+      }
+    } else {
+      // Pour les autres transactions, utiliser les anciennes notifications
+      const emailData = convertTransactionToEmailData(transaction)
+      
+      if (status === "validated") {
+        await sendTransactionValidatedNotification(emailData)
+      } else if (status === "completed") {
+        await sendTransactionCompletedNotification(emailData)
+      }
     }
   } catch (error) {
     console.error('Erreur lors de l\'envoi de la notification de mise à jour:', error)
@@ -429,7 +459,13 @@ export async function updateTransactionRealAmount(
   // Envoyer une notification email selon le résultat
   try {
     if (newStatus === "validated") {
-      await sendTransactionValidatedNotification(convertTransactionToEmailData(updatedTransaction))
+      // Utiliser les nouvelles notifications pour les transferts
+      if (updatedTransaction.type === "transfer") {
+        const transferData = convertTransferToEmailData(updatedTransaction)
+        await sendTransferValidatedNotification(transferData)
+      } else {
+        await sendTransactionValidatedNotification(convertTransactionToEmailData(updatedTransaction))
+      }
     } else if (newStatus === "rejected") {
       // Notification de rejet automatique
       const { sendEmail, getEmailRecipients } = await import('./email-notifications')
@@ -511,10 +547,16 @@ export async function executeTransaction(
 
   // Envoyer une notification email pour l'exécution
   try {
-    const { sendEmail, getEmailRecipients } = await import('./email-notifications')
-    const recipients = await getEmailRecipients('transaction_validated')
-    
-    await sendEmail({
+    if (executedTransaction.type === "transfer") {
+      // Utiliser les nouvelles notifications pour les transferts
+      const transferData = convertTransferToEmailData(executedTransaction)
+      await sendTransferExecutedNotification(transferData)
+    } else {
+      // Pour les autres transactions, utiliser l'ancienne logique
+      const { sendEmail, getEmailRecipients } = await import('./email-notifications')
+      const recipients = await getEmailRecipients('transaction_validated')
+      
+      await sendEmail({
       to: recipients.to.map(u => u.email).join(', '),
       cc: recipients.cc.map(u => u.email).join(', '),
       subject: `Transaction exécutée - ${executedTransaction.id}`,
@@ -535,6 +577,7 @@ export async function executeTransaction(
         <p><strong>Reçu:</strong> <a href="${receiptUrl}">Télécharger le reçu</a></p>
       `
     })
+    }
   } catch (error) {
     console.error('Erreur lors de l\'envoi de la notification d\'exécution:', error)
   }

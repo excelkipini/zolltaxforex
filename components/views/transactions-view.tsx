@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Search, Filter, Eye, Download, FileDown, CheckCircle, Check, X, AlertTriangle, ArrowUpDown, ArrowUp, ArrowDown, ChevronLeft, ChevronRight, Printer, Trash2, Clock } from "lucide-react"
+import { Search, Filter, Eye, Download, FileDown, CheckCircle, Check, X, AlertTriangle, ArrowUpDown, ArrowUp, ArrowDown, ChevronLeft, ChevronRight, Printer, Trash2, Clock, Play, FileUp, Upload } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
 // Types pour les transactions
@@ -56,6 +56,13 @@ export function TransactionsView({ user }: TransactionsViewProps = {}) {
   const [transactionToDelete, setTransactionToDelete] = React.useState<string | null>(null)
   const [validateDeleteDialogOpen, setValidateDeleteDialogOpen] = React.useState(false)
   const [transactionToValidateDelete, setTransactionToValidateDelete] = React.useState<string | null>(null)
+  const [validateDialogOpen, setValidateDialogOpen] = React.useState(false)
+  const [transactionToValidate, setTransactionToValidate] = React.useState<string | null>(null)
+  const [realAmountEUR, setRealAmountEUR] = React.useState("")
+  const [executeDialogOpen, setExecuteDialogOpen] = React.useState(false)
+  const [transactionToExecute, setTransactionToExecute] = React.useState<string | null>(null)
+  const [receiptFile, setReceiptFile] = React.useState<File | null>(null)
+  const [executorComment, setExecutorComment] = React.useState("")
   const { toast } = useToast()
 
   // Fonction helper pour recharger et filtrer les transactions
@@ -96,6 +103,7 @@ export function TransactionsView({ user }: TransactionsViewProps = {}) {
           setFilteredTransactions([])
         }
       } catch (error) {
+        console.error("Erreur lors du chargement:", error)
         setTransactions([])
         setFilteredTransactions([])
       }
@@ -261,6 +269,8 @@ export function TransactionsView({ user }: TransactionsViewProps = {}) {
     switch (status) {
       case "completed":
         return <Badge className="bg-green-100 text-green-800">Terminé</Badge>
+      case "executed":
+        return <Badge className="bg-purple-100 text-purple-800">Exécuté</Badge>
       case "validated":
         return <Badge className="bg-blue-100 text-blue-800">Validé</Badge>
       case "pending":
@@ -426,47 +436,153 @@ export function TransactionsView({ user }: TransactionsViewProps = {}) {
     }
   }
 
-  const handleValidateTransaction = async (transactionId: string) => {
+  const handleValidateTransaction = (transactionId: string) => {
+    setTransactionToValidate(transactionId)
+    setRealAmountEUR("")
+    setValidateDialogOpen(true)
+  }
+
+  const confirmValidateTransaction = async () => {
+    if (!transactionToValidate || !realAmountEUR) {
+      toast({
+        title: "Erreur",
+        description: "Veuillez saisir le montant réel en EUR",
+        variant: "destructive"
+      })
+      return
+    }
+
+    const realAmount = parseFloat(realAmountEUR)
+    if (isNaN(realAmount) || realAmount <= 0) {
+      toast({
+        title: "Erreur",
+        description: "Le montant réel doit être un nombre positif",
+        variant: "destructive"
+      })
+      return
+    }
+
     try {
-      const res = await fetch("/api/transactions", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          id: transactionId, 
-          status: "validated"
+      const response = await fetch('/api/transactions/update-real-amount', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          transactionId: transactionToValidate,
+          realAmountEUR: realAmount,
+          validatedBy: user.name
         })
       })
-      const data = await res.json()
-      
-      if (res.ok && data?.ok) {
-        const updatedTransaction = {
-          ...data.data,
-          details: typeof data.data.details === 'string' ? JSON.parse(data.data.details) : data.data.details
-        }
-        
-        setTransactions(prev => prev.map(t => t.id === transactionId ? updatedTransaction : t))
-        setFilteredTransactions(prev => prev.map(t => t.id === transactionId ? updatedTransaction : t))
-        
-        toast({
-          title: "Transaction validée",
-          description: `La transaction ${transactionId} a été validée`,
-        })
-        
-        // Déclencher un événement personnalisé pour notifier les autres composants
-        window.dispatchEvent(new CustomEvent('transactionStatusChanged', { 
-          detail: { transactionId, status: 'validated' } 
-        }))
-      } else {
-        toast({
-          title: "Erreur",
-          description: data?.error || "Erreur lors de la validation",
-          variant: "destructive"
-        })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Erreur lors de la validation')
       }
+
+      // Mettre à jour l'état local
+      const updatedTransaction = {
+        ...result.transaction,
+        details: typeof result.transaction.details === 'string' ? JSON.parse(result.transaction.details) : result.transaction.details
+      }
+      
+      setTransactions(prev => prev.map(t => t.id === transactionToValidate ? updatedTransaction : t))
+      setFilteredTransactions(prev => prev.map(t => t.id === transactionToValidate ? updatedTransaction : t))
+      
+      toast({
+        title: result.message.includes('validée') ? "Transaction validée" : "Transaction rejetée",
+        description: result.message,
+      })
+      
+      // Déclencher un événement personnalisé pour notifier les autres composants
+      window.dispatchEvent(new CustomEvent('transactionStatusChanged', { 
+        detail: { transactionId: transactionToValidate, status: result.transaction.status } 
+      }))
+      
+      setValidateDialogOpen(false)
+      setTransactionToValidate(null)
+      setRealAmountEUR("")
+      
     } catch (error) {
       toast({
-        title: "Erreur réseau",
-        description: "Impossible de valider la transaction",
+        title: "Erreur",
+        description: `Erreur lors de la validation: ${error.message}`,
+        variant: "destructive"
+      })
+    }
+  }
+
+  const handleExecuteTransaction = (transactionId: string) => {
+    setTransactionToExecute(transactionId)
+    setReceiptFile(null)
+    setExecutorComment("")
+    setExecuteDialogOpen(true)
+  }
+
+  const confirmExecuteTransaction = async () => {
+    if (!transactionToExecute || !receiptFile) {
+      toast({
+        title: "Erreur",
+        description: "Veuillez sélectionner un fichier de reçu",
+        variant: "destructive"
+      })
+      return
+    }
+
+    try {
+      // Créer un FormData pour l'upload du fichier
+      const formData = new FormData()
+      formData.append('transactionId', transactionToExecute)
+      formData.append('executorId', user?.id || '')
+      formData.append('receiptFile', receiptFile)
+      if (executorComment.trim()) {
+        formData.append('executorComment', executorComment.trim())
+      }
+      
+      const response = await fetch('/api/transactions/execute', {
+        method: 'POST',
+        body: formData
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Erreur lors de l\'exécution')
+      }
+
+      // Mettre à jour l'état local
+      setTransactions(prev => prev.map(t =>
+        t.id === transactionToExecute
+          ? { ...t, status: "executed" as const }
+          : t
+      ))
+      setFilteredTransactions(prev => prev.map(t =>
+        t.id === transactionToExecute
+          ? { ...t, status: "executed" as const }
+          : t
+      ))
+
+      toast({
+        title: "Transaction exécutée",
+        description: "La transaction a été marquée comme exécutée avec succès",
+      })
+
+      // Déclencher un événement personnalisé pour notifier les autres composants
+      window.dispatchEvent(new CustomEvent('transactionStatusChanged', {
+        detail: { transactionId: transactionToExecute, status: "executed" }
+      }))
+
+      // Fermer le dialog et réinitialiser
+      setExecuteDialogOpen(false)
+      setTransactionToExecute(null)
+      setReceiptFile(null)
+      setExecutorComment("")
+
+    } catch (error) {
+      toast({
+        title: "Erreur",
+        description: `Erreur lors de l'exécution: ${error.message}`,
         variant: "destructive"
       })
     }
@@ -1950,8 +2066,21 @@ export function TransactionsView({ user }: TransactionsViewProps = {}) {
                           </>
                         )}
                         
+                        {/* Bouton d'exécution pour les exécuteurs uniquement */}
+                        {transaction.status === "validated" && user?.role === "executor" && transaction.executor_id === user.id && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-green-600 border-green-600 hover:bg-green-50"
+                            onClick={() => handleExecuteTransaction(transaction.id)}
+                            title="Exécuter la transaction"
+                          >
+                            <Play className="h-4 w-4" />
+                          </Button>
+                        )}
+
                         {/* Bouton de clôture pour les caissiers uniquement */}
-                        {transaction.status === "validated" && user?.role === "cashier" && (
+                        {transaction.status === "executed" && user?.role === "cashier" && (
                           <Button
                             size="sm"
                             variant="outline"
@@ -2102,7 +2231,17 @@ export function TransactionsView({ user }: TransactionsViewProps = {}) {
       {selectedTransaction && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <Card className="w-full max-w-2xl max-h-[80vh] overflow-y-auto">
-            <CardTitle className="p-4 border-b">Détails de l'opération {selectedTransaction.id}</CardTitle>
+            <CardTitle className="p-4 border-b flex items-center justify-between">
+              <span>Détails de l'opération {selectedTransaction.id}</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setSelectedTransaction(null)}
+                className="h-8 w-8 p-0 hover:bg-gray-100"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </CardTitle>
             <CardContent className="p-4 space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -2240,10 +2379,23 @@ export function TransactionsView({ user }: TransactionsViewProps = {}) {
                                     <p className="text-sm">{(selectedTransaction.details.amount_received || 0).toLocaleString("fr-FR")} {selectedTransaction.details.received_currency || "XAF"}</p>
                                   </div>
                                   <div>
-                                    <span className="text-sm font-medium text-gray-600">Montant envoyé:</span>
+                                    <span className="text-sm font-medium text-gray-600">Montant à envoyer:</span>
                                     <p className="text-sm">{(selectedTransaction.details.amount_sent || 0).toLocaleString("fr-FR")} {selectedTransaction.details.sent_currency || "XAF"}</p>
                                   </div>
                                 </div>
+                                {/* Montant réel et commission pour les transferts validés */}
+                                {(selectedTransaction.status === "validated" || selectedTransaction.status === "executed" || selectedTransaction.status === "completed") && selectedTransaction.real_amount_eur && (
+                                  <div className="grid grid-cols-2 gap-4 bg-blue-50 p-3 rounded-lg border border-blue-200">
+                                    <div>
+                                      <span className="text-sm font-medium text-blue-700">Montant réel envoyé:</span>
+                                      <p className="text-sm font-semibold text-blue-900">{selectedTransaction.real_amount_eur.toLocaleString("fr-FR")} EUR</p>
+                                    </div>
+                                    <div>
+                                      <span className="text-sm font-medium text-green-700">Commission:</span>
+                                      <p className="text-sm font-semibold text-green-900">{(selectedTransaction.commission_amount || 0).toLocaleString("fr-FR")} XAF</p>
+                                    </div>
+                                  </div>
+                                )}
                                 <div className="grid grid-cols-2 gap-4">
                                   <div>
                                     <span className="text-sm font-medium text-gray-600">Mode de retrait:</span>
@@ -2264,6 +2416,31 @@ export function TransactionsView({ user }: TransactionsViewProps = {}) {
                                           Télécharger
                                         </Button>
                                       </div>
+                                    </div>
+                                  )}
+                                  {/* Fichier de reçu d'exécution */}
+                                  {selectedTransaction.receipt_url && (
+                                    <div>
+                                      <span className="text-sm font-medium text-gray-600">Reçu d'exécution:</span>
+                                      <div className="flex items-center gap-2">
+                                        <p className="text-sm">{selectedTransaction.receipt_url.split('/').pop()}</p>
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          onClick={() => window.open(selectedTransaction.receipt_url, '_blank')}
+                                          className="text-green-600 border-green-600 hover:bg-green-50"
+                                        >
+                                          <FileDown className="h-4 w-4 mr-1" />
+                                          Télécharger
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  )}
+                                  {/* Commentaire de l'exécuteur */}
+                                  {selectedTransaction.executor_comment && (
+                                    <div>
+                                      <span className="text-sm font-medium text-gray-600">Commentaire exécuteur:</span>
+                                      <p className="text-sm bg-green-50 p-2 rounded border border-green-200">{selectedTransaction.executor_comment}</p>
                                     </div>
                                   )}
                                 </div>
@@ -2458,6 +2635,113 @@ export function TransactionsView({ user }: TransactionsViewProps = {}) {
               Valider et supprimer
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialogue de validation avec montant réel */}
+      <Dialog open={validateDialogOpen} onOpenChange={setValidateDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CheckCircle className="h-5 w-5 text-green-600" />
+              Valider la transaction
+            </DialogTitle>
+            <DialogDescription>
+              Veuillez saisir le montant réel envoyé en EUR pour calculer la commission et valider automatiquement la transaction.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="real-amount" className="text-sm font-medium text-gray-700">
+                  Montant réel envoyé (EUR) *
+                </Label>
+                <Input
+                  id="real-amount"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="Ex: 100.50"
+                  value={realAmountEUR}
+                  onChange={(e) => setRealAmountEUR(e.target.value)}
+                  className="mt-1"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Le système calculera automatiquement la commission et validera/rejettera selon le seuil de 5000 XAF
+                </p>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setValidateDialogOpen(false)}>
+              Annuler
+            </Button>
+            <Button 
+              className="bg-green-600 hover:bg-green-700 text-white"
+              onClick={confirmValidateTransaction}
+              disabled={!realAmountEUR || isNaN(parseFloat(realAmountEUR)) || parseFloat(realAmountEUR) <= 0}
+            >
+              <CheckCircle className="h-4 w-4 mr-2" />
+              Valider avec montant réel
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialogue d'exécution avec upload de fichier */}
+      <Dialog open={executeDialogOpen} onOpenChange={setExecuteDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Play className="h-5 w-5 text-green-600" />
+              Exécuter la transaction
+            </DialogTitle>
+            <DialogDescription>
+              Veuillez uploader le fichier de reçu pour confirmer l'exécution de la transaction.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm font-medium">Fichier du reçu *</label>
+              <div className="mt-1">
+                <input
+                  type="file"
+                  accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                  onChange={(e) => setReceiptFile(e.target.files?.[0] || null)}
+                  className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                />
+                {receiptFile && (
+                  <div className="mt-2 flex items-center gap-2 text-sm text-green-600">
+                    <FileUp className="h-4 w-4" />
+                    <span>{receiptFile.name}</span>
+                    <span className="text-gray-500">({(receiptFile.size / 1024).toFixed(1)} KB)</span>
+                  </div>
+                )}
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                Formats acceptés: PDF, JPG, PNG, DOC, DOCX (max 10MB)
+              </p>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Commentaire (optionnel)</label>
+              <Textarea
+                placeholder="Commentaire sur l'exécution..."
+                value={executorComment}
+                onChange={(e) => setExecutorComment(e.target.value)}
+                rows={3}
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                onClick={confirmExecuteTransaction}
+                disabled={!receiptFile}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                <Upload className="h-4 w-4 mr-2" />
+                Confirmer l'exécution
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

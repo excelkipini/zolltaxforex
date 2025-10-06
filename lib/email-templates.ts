@@ -1,5 +1,5 @@
 import "server-only"
-import { TransactionEmailData, DeletionRequestEmailData, ExpenseEmailData } from "./email-service"
+import { TransactionEmailData, DeletionRequestEmailData, ExpenseEmailData, TransferEmailData } from "./email-service"
 
 // Fonctions de traduction
 const translateTransactionType = (type: string): string => {
@@ -19,6 +19,7 @@ const translateTransactionStatus = (status: string): string => {
     'validated': 'Validée',
     'rejected': 'Rejetée',
     'completed': 'Terminée',
+    'executed': 'Exécutée',
     'pending_delete': 'En attente de suppression'
   }
   return translations[status] || status
@@ -170,6 +171,93 @@ const TRANSACTION_DETAILS_TEMPLATE = (data: TransactionEmailData) => `
         <span class="detail-label">Date:</span>
         <span class="detail-value">${new Date(data.createdAt).toLocaleString('fr-FR')}</span>
     </div>
+</div>
+`
+
+// Template pour les détails de transfert d'argent
+const TRANSFER_DETAILS_TEMPLATE = (data: TransferEmailData) => `
+<div class="transaction-details">
+    <h3>Détails du Transfert d'Argent</h3>
+    <div class="detail-row">
+        <span class="detail-label">ID Transaction:</span>
+        <span class="detail-value">${data.transactionId}</span>
+    </div>
+    <div class="detail-row">
+        <span class="detail-label">Type:</span>
+        <span class="detail-value">${translateTransactionType(data.transactionType)}</span>
+    </div>
+    <div class="detail-row">
+        <span class="detail-label">Montant:</span>
+        <span class="detail-value amount">${data.amount.toLocaleString()} ${data.currency}</span>
+    </div>
+    <div class="detail-row">
+        <span class="detail-label">Description:</span>
+        <span class="detail-value">${data.description}</span>
+    </div>
+    <div class="detail-row">
+        <span class="detail-label">Créé par:</span>
+        <span class="detail-value">${data.createdBy}</span>
+    </div>
+    <div class="detail-row">
+        <span class="detail-label">Agence:</span>
+        <span class="detail-value">${data.agency}</span>
+    </div>
+    <div class="detail-row">
+        <span class="detail-label">Statut:</span>
+        <span class="detail-value">${translateTransactionStatus(data.status)}</span>
+    </div>
+    <div class="detail-row">
+        <span class="detail-label">Date:</span>
+        <span class="detail-value">${new Date(data.createdAt).toLocaleString('fr-FR')}</span>
+    </div>
+    ${data.beneficiaryName ? `
+    <div class="detail-row">
+        <span class="detail-label">Bénéficiaire:</span>
+        <span class="detail-value">${data.beneficiaryName}</span>
+    </div>
+    ` : ''}
+    ${data.destinationCountry ? `
+    <div class="detail-row">
+        <span class="detail-label">Destination:</span>
+        <span class="detail-value">${data.destinationCountry}</span>
+    </div>
+    ` : ''}
+    ${data.transferMethod ? `
+    <div class="detail-row">
+        <span class="detail-label">Moyen de transfert:</span>
+        <span class="detail-value">${data.transferMethod}</span>
+    </div>
+    ` : ''}
+    ${data.withdrawalMode ? `
+    <div class="detail-row">
+        <span class="detail-label">Mode de retrait:</span>
+        <span class="detail-value">${data.withdrawalMode === 'cash' ? 'Espèces' : 'Virement bancaire'}</span>
+    </div>
+    ` : ''}
+    ${data.realAmountEUR ? `
+    <div class="detail-row">
+        <span class="detail-label">Montant réel envoyé:</span>
+        <span class="detail-value amount">${data.realAmountEUR.toLocaleString()} EUR</span>
+    </div>
+    ` : ''}
+    ${data.commissionAmount ? `
+    <div class="detail-row">
+        <span class="detail-label">Commission:</span>
+        <span class="detail-value amount">${data.commissionAmount.toLocaleString()} XAF</span>
+    </div>
+    ` : ''}
+    ${data.executedAt ? `
+    <div class="detail-row">
+        <span class="detail-label">Exécuté le:</span>
+        <span class="detail-value">${new Date(data.executedAt).toLocaleString('fr-FR')}</span>
+    </div>
+    ` : ''}
+    ${data.executorComment ? `
+    <div class="detail-row">
+        <span class="detail-label">Commentaire exécuteur:</span>
+        <span class="detail-value">${data.executorComment}</span>
+    </div>
+    ` : ''}
 </div>
 `
 
@@ -476,5 +564,116 @@ export function generateDeletionValidatedEmail(data: DeletionRequestEmailData, c
   return {
     subject,
     html: BASE_TEMPLATE(content, "Demande de Suppression Validée")
+  }
+}
+
+// NOUVEAUX TEMPLATES POUR LES TRANSFERTS D'ARGENT
+
+// 1. Template pour transfert créé par un caissier
+export function generateTransferCreatedEmail(data: TransferEmailData): { subject: string; html: string } {
+  const subject = `[ZOLL TAX FOREX] Nouveau transfert d'argent créé - ${data.transactionId}`
+  
+  const content = `
+    <h2>💸 Nouveau Transfert d'Argent Créé</h2>
+    <p>Un nouveau transfert d'argent a été créé par un caissier et nécessite votre validation.</p>
+    
+    <div class="alert warning">
+        <strong>Action requise:</strong> Ce transfert est en attente de validation par un auditeur.
+    </div>
+    
+    ${TRANSFER_DETAILS_TEMPLATE(data)}
+    
+    <p><strong>Prochaines étapes:</strong></p>
+    <ul>
+        <li>Connectez-vous au système ZOLL TAX FOREX</li>
+        <li>Accédez à la section "Opérations"</li>
+        <li>Saisissez le montant réel envoyé en EUR</li>
+        <li>Le système calculera automatiquement la commission</li>
+        <li>Validez ou rejetez selon le seuil de 5000 XAF</li>
+    </ul>
+  `
+  
+  return {
+    subject,
+    html: BASE_TEMPLATE(content, "Nouveau Transfert d'Argent Créé")
+  }
+}
+
+// 2. Template pour transfert validé par un auditeur
+export function generateTransferValidatedEmail(data: TransferEmailData): { subject: string; html: string } {
+  const subject = `[ZOLL TAX FOREX] Transfert validé - ${data.transactionId}`
+  
+  const content = `
+    <h2>✅ Transfert Validé par l'Auditeur</h2>
+    <p>Un transfert d'argent a été validé par un auditeur et est prêt pour exécution.</p>
+    
+    <div class="alert success">
+        <strong>Statut:</strong> Transfert validé et prêt pour exécution.
+    </div>
+    
+    ${TRANSFER_DETAILS_TEMPLATE(data)}
+    
+    <p><strong>Prochaines étapes:</strong></p>
+    <ul>
+        <li>Connectez-vous au système ZOLL TAX FOREX</li>
+        <li>Accédez à la section "Opérations" ou votre tableau de bord</li>
+        <li>Exécutez ce transfert en uploadant le reçu</li>
+    </ul>
+  `
+  
+  return {
+    subject,
+    html: BASE_TEMPLATE(content, "Transfert Validé par l'Auditeur")
+  }
+}
+
+// 3. Template pour transfert exécuté par un exécuteur
+export function generateTransferExecutedEmail(data: TransferEmailData, cashierEmail: string): { subject: string; html: string } {
+  const subject = `[ZOLL TAX FOREX] Transfert exécuté - ${data.transactionId}`
+  
+  const content = `
+    <h2>🚀 Transfert Exécuté</h2>
+    <p>Le transfert d'argent que vous avez créé a été exécuté par un exécuteur.</p>
+    
+    <div class="alert success">
+        <strong>Statut:</strong> Transfert exécuté et prêt pour clôture.
+    </div>
+    
+    ${TRANSFER_DETAILS_TEMPLATE(data)}
+    
+    <p><strong>Prochaines étapes:</strong></p>
+    <ul>
+        <li>Connectez-vous au système ZOLL TAX FOREX</li>
+        <li>Accédez à la section "Opérations"</li>
+        <li>Clôturez ce transfert</li>
+    </ul>
+  `
+  
+  return {
+    subject,
+    html: BASE_TEMPLATE(content, "Transfert Exécuté")
+  }
+}
+
+// 4. Template pour transfert clôturé par un caissier
+export function generateTransferCompletedEmail(data: TransferEmailData): { subject: string; html: string } {
+  const subject = `[ZOLL TAX FOREX] Transfert clôturé - ${data.transactionId}`
+  
+  const content = `
+    <h2>🏁 Transfert Clôturé</h2>
+    <p>Un transfert d'argent a été clôturé par un caissier.</p>
+    
+    <div class="alert success">
+        <strong>Statut:</strong> Transfert terminé avec succès.
+    </div>
+    
+    ${TRANSFER_DETAILS_TEMPLATE(data)}
+    
+    <p><strong>Information:</strong> Ce transfert est maintenant terminé et archivé dans le système.</p>
+  `
+  
+  return {
+    subject,
+    html: BASE_TEMPLATE(content, "Transfert Clôturé")
   }
 }

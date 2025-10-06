@@ -238,11 +238,49 @@ export function ExchangeView({
     setQrCodeError(true)
   }
 
-  const previewReceipt = () => {
+  const previewReceipt = async () => {
     const qrData = createQRData()
     const exchangeId = generateExchangeId()
     
-    const receiptHTML = `
+    // Générer le QR code côté serveur AVANT de créer le HTML
+    let qrCodeDataURL = ''
+    try {
+      const response = await fetch('/api/qr-code', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          text: qrData,
+          options: {
+            width: 120,
+            height: 120,
+            colorDark: '#000000',
+            colorLight: '#ffffff',
+            errorCorrectionLevel: 'M'
+          }
+        }),
+      })
+      
+      if (response.ok) {
+        const data = await response.json()
+        qrCodeDataURL = data.qrCodeDataURL
+      }
+    } catch (error) {
+      console.error('Erreur lors de la génération du QR code:', error)
+    }
+    
+    const receiptHTML = generateReceiptHTML(qrCodeDataURL, exchangeId)
+    
+    const printWindow = window.open('', '_blank', 'width=600,height=800')
+    if (printWindow) {
+      printWindow.document.write(receiptHTML)
+      printWindow.document.close()
+    }
+  }
+
+  const generateReceiptHTML = (qrCodeDataURL: string, exchangeId: string) => {
+    return `
       <!DOCTYPE html>
       <html lang="fr">
         <head>
@@ -352,7 +390,10 @@ export function ExchangeView({
             
             <div class="qrcode-section">
               <div class="qrcode-container">
-                <div id="qrcode"></div>
+                ${qrCodeDataURL 
+                  ? `<img src="${qrCodeDataURL}" alt="QR Code" style="width: 120px; height: 120px;" />`
+                  : `<div style="width: 120px; height: 120px; border: 2px solid #000; display: flex; align-items: center; justify-content: center; font-size: 10px; text-align: center; background: #f9f9f9;">QR Code<br/>Non disponible</div>`
+                }
               </div>
               <div style="font-size: 11px; margin-top: 8px; font-style: italic;">
                 Scannez ce QR code pour vérifier<br/>
@@ -370,34 +411,13 @@ export function ExchangeView({
             </div>
           </div>
           
-          <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
           <script>
-            document.addEventListener('DOMContentLoaded', function() {
-              try {
-                if (typeof QRCode !== 'undefined') {
-                  new QRCode(document.getElementById("qrcode"), {
-                    text: '${qrData}',
-                    width: 120, height: 120,
-                    colorDark: "#000000", colorLight: "#ffffff",
-                    correctLevel: QRCode.CorrectLevel.M
-                  });
-                } else {
-                  document.getElementById("qrcode").innerHTML = '<div style="width: 120px; height: 120px; border: 2px solid #000; display: flex; align-items: center; justify-content: center; font-size: 10px; text-align: center; background: #f9f9f9;">QR Code<br/>Non disponible</div>';
-                }
-              } catch (error) {
-                document.getElementById("qrcode").innerHTML = '<div style="width: 120px; height: 120px; border: 2px solid #000; display: flex; align-items: center; justify-content: center; font-size: 10px; text-align: center; background: #f9f9f9;">QR Code<br/>Non disponible</div>';
-              }
-            });
+            // QR Code généré côté serveur - pas besoin de bibliothèque externe
+            console.log('QR Code généré côté serveur');
           </script>
         </body>
       </html>
     `
-
-    const printWindow = window.open('', '_blank', 'width=600,height=800')
-    if (printWindow) {
-      printWindow.document.write(receiptHTML)
-      printWindow.document.close()
-    }
   }
 
   const printReceipt = async () => {
@@ -412,7 +432,7 @@ export function ExchangeView({
 
     setIsPrinting(true)
     try {
-      previewReceipt()
+      await previewReceipt()
       // Attendre un peu pour que la fenêtre se charge
       setTimeout(() => {
         setIsPrinting(false)

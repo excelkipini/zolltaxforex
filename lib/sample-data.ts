@@ -20,6 +20,7 @@ export const sampleUsers = [
   { id: 6, name: "Auditeur", email: "audit@example.com", role: "auditor", agency: "Agence Centrale", last_login: "2023-06-08 11:30" },
   { id: 7, name: "Caissier 3", email: "cashier3@example.com", role: "cashier", agency: "Agence Sud", last_login: "2023-06-10 09:05" },
   { id: 8, name: "Délégué DG", email: "delegate@example.com", role: "delegate", agency: "Agence Centrale", last_login: "2023-06-09 15:20" },
+  { id: 9, name: "Exécuteur", email: "executor@example.com", role: "executor", agency: "Agence Centrale", last_login: "2023-06-10 11:00" },
 ] as const
 
 export const sampleAgencies = [

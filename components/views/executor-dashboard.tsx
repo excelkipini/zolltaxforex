@@ -15,7 +15,8 @@ import {
   Upload,
   Play,
   FileText,
-  User
+  User,
+  FileUp
 } from "lucide-react"
 import { useDocumentTitle } from "@/hooks/use-document-title"
 
@@ -54,7 +55,7 @@ export default function ExecutorDashboard({ user }: ExecutorDashboardProps) {
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [loading, setLoading] = useState(true)
   const [executingTransaction, setExecutingTransaction] = useState<string | null>(null)
-  const [receiptUrl, setReceiptUrl] = useState("")
+  const [receiptFile, setReceiptFile] = useState<File | null>(null)
   const [executorComment, setExecutorComment] = useState("")
 
   const loadTransactions = async () => {
@@ -74,32 +75,33 @@ export default function ExecutorDashboard({ user }: ExecutorDashboardProps) {
   }, [user.id])
 
   const handleExecuteTransaction = async (transactionId: string) => {
-    if (!receiptUrl.trim()) {
-      alert('Veuillez fournir l\'URL du reçu')
+    if (!receiptFile) {
+      alert('Veuillez sélectionner un fichier de reçu')
       return
     }
 
     try {
       setExecutingTransaction(transactionId)
       
+      // Créer un FormData pour l'upload du fichier
+      const formData = new FormData()
+      formData.append('transactionId', transactionId)
+      formData.append('executorId', user.id)
+      formData.append('receiptFile', receiptFile)
+      if (executorComment.trim()) {
+        formData.append('executorComment', executorComment.trim())
+      }
+      
       const response = await fetch('/api/transactions/execute', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          transactionId,
-          executorId: user.id,
-          receiptUrl: receiptUrl.trim(),
-          executorComment: executorComment.trim() || undefined
-        })
+        body: formData
       })
 
       const data = await response.json()
 
       if (data.success) {
         alert('Transaction exécutée avec succès !')
-        setReceiptUrl("")
+        setReceiptFile(null)
         setExecutorComment("")
         await loadTransactions() // Recharger les transactions
       } else {
@@ -311,12 +313,25 @@ export default function ExecutorDashboard({ user }: ExecutorDashboardProps) {
                           </DialogHeader>
                           <div className="space-y-4">
                             <div>
-                              <label className="text-sm font-medium">URL du reçu *</label>
-                              <Input
-                                placeholder="https://example.com/receipt.pdf"
-                                value={receiptUrl}
-                                onChange={(e) => setReceiptUrl(e.target.value)}
-                              />
+                              <label className="text-sm font-medium">Fichier du reçu *</label>
+                              <div className="mt-1">
+                                <input
+                                  type="file"
+                                  accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                                  onChange={(e) => setReceiptFile(e.target.files?.[0] || null)}
+                                  className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                                />
+                                {receiptFile && (
+                                  <div className="mt-2 flex items-center gap-2 text-sm text-green-600">
+                                    <FileUp className="h-4 w-4" />
+                                    <span>{receiptFile.name}</span>
+                                    <span className="text-gray-500">({(receiptFile.size / 1024).toFixed(1)} KB)</span>
+                                  </div>
+                                )}
+                              </div>
+                              <p className="text-xs text-gray-500 mt-1">
+                                Formats acceptés: PDF, JPG, PNG, DOC, DOCX (max 10MB)
+                              </p>
                             </div>
                             <div>
                               <label className="text-sm font-medium">Commentaire (optionnel)</label>
@@ -330,7 +345,7 @@ export default function ExecutorDashboard({ user }: ExecutorDashboardProps) {
                             <div className="flex justify-end gap-2">
                               <Button
                                 onClick={() => handleExecuteTransaction(transaction.id)}
-                                disabled={!receiptUrl.trim() || executingTransaction === transaction.id}
+                                disabled={!receiptFile || executingTransaction === transaction.id}
                                 className="bg-green-600 hover:bg-green-700"
                               >
                                 <Upload className="h-4 w-4 mr-2" />

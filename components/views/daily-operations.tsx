@@ -40,6 +40,9 @@ export function DailyOperations({ operationType, user, title }: DailyOperationsP
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false)
   const [deleteConfirmDialogOpen, setDeleteConfirmDialogOpen] = React.useState(false)
   const [receiptToDelete, setReceiptToDelete] = React.useState<Transaction | null>(null)
+  const [validateDialogOpen, setValidateDialogOpen] = React.useState(false)
+  const [transactionToValidate, setTransactionToValidate] = React.useState<string | null>(null)
+  const [realAmountEUR, setRealAmountEUR] = React.useState("")
   const { toast } = useToast()
 
   // Charger les transactions du jour depuis l'API
@@ -111,6 +114,8 @@ export function DailyOperations({ operationType, user, title }: DailyOperationsP
     switch (status) {
       case "completed":
         return <Badge className="bg-green-100 text-green-800">Terminé</Badge>
+      case "executed":
+        return <Badge className="bg-purple-100 text-purple-800">Exécuté</Badge>
       case "validated":
         return <Badge className="bg-blue-100 text-blue-800">Validé</Badge>
       case "pending":
@@ -340,39 +345,71 @@ export function DailyOperations({ operationType, user, title }: DailyOperationsP
     }
   }
 
-  const handleValidateTransaction = async (transactionId: string) => {
+  const handleValidateTransaction = (transactionId: string) => {
+    setTransactionToValidate(transactionId)
+    setRealAmountEUR("")
+    setValidateDialogOpen(true)
+  }
+
+  const confirmValidateTransaction = async () => {
+    if (!transactionToValidate || !realAmountEUR) {
+      toast({
+        title: "Erreur",
+        description: "Veuillez saisir le montant réel en EUR",
+        variant: "destructive"
+      })
+      return
+    }
+
+    const realAmount = parseFloat(realAmountEUR)
+    if (isNaN(realAmount) || realAmount <= 0) {
+      toast({
+        title: "Erreur",
+        description: "Le montant réel doit être un nombre positif",
+        variant: "destructive"
+      })
+      return
+    }
+
     try {
-      const response = await fetch('/api/transactions', {
-        method: 'PUT',
+      const response = await fetch('/api/transactions/update-real-amount', {
+        method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          id: transactionId,
-          status: 'validated'
+          transactionId: transactionToValidate,
+          realAmountEUR: realAmount,
+          validatedBy: user.name
         })
       })
 
+      const result = await response.json()
+
       if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Erreur lors de la validation')
+        throw new Error(result.error || 'Erreur lors de la validation')
       }
 
-      const result = await response.json()
-      const updatedTransaction = result.data
-      
       // Mettre à jour l'état local
-      setTransactions(prev => prev.filter(t => t.id !== transactionId))
+      setTransactions(prev => prev.map(t => 
+        t.id === transactionToValidate 
+          ? { ...t, status: result.transaction.status as const }
+          : t
+      ))
       
       toast({
-        title: "Transaction validée",
-        description: `La transaction ${transactionId} a été validée`,
+        title: result.message.includes('validée') ? "Transaction validée" : "Transaction rejetée",
+        description: result.message,
       })
       
       // Déclencher un événement personnalisé pour notifier les autres composants
       window.dispatchEvent(new CustomEvent('transactionStatusChanged', { 
-        detail: { transactionId, status: 'validated' } 
+        detail: { transactionId: transactionToValidate, status: result.transaction.status } 
       }))
+      
+      setValidateDialogOpen(false)
+      setTransactionToValidate(null)
+      setRealAmountEUR("")
       
     } catch (error) {
       toast({
@@ -778,6 +815,19 @@ export function DailyOperations({ operationType, user, title }: DailyOperationsP
                             <p className="text-sm">{(selectedTransaction.details.amount_sent || 0).toLocaleString("fr-FR")} {selectedTransaction.details.sent_currency || "XAF"}</p>
                           </div>
                         </div>
+                        {/* Montant réel et commission pour les transferts validés */}
+                        {(selectedTransaction.status === "validated" || selectedTransaction.status === "executed" || selectedTransaction.status === "completed") && selectedTransaction.real_amount_eur && (
+                          <div className="grid grid-cols-2 gap-4 bg-blue-50 p-3 rounded-lg border border-blue-200">
+                            <div>
+                              <span className="text-sm font-medium text-blue-700">Montant réel envoyé:</span>
+                              <p className="text-sm font-semibold text-blue-900">{selectedTransaction.real_amount_eur.toLocaleString("fr-FR")} EUR</p>
+                            </div>
+                            <div>
+                              <span className="text-sm font-medium text-green-700">Commission:</span>
+                              <p className="text-sm font-semibold text-green-900">{(selectedTransaction.commission_amount || 0).toLocaleString("fr-FR")} XAF</p>
+                            </div>
+                          </div>
+                        )}
                         <div className="grid grid-cols-2 gap-4">
                           <div>
                             <span className="text-sm font-medium text-gray-600">Mode de retrait:</span>
@@ -1038,6 +1088,56 @@ export function DailyOperations({ operationType, user, title }: DailyOperationsP
             >
               <X className="h-4 w-4 mr-2" />
               Supprimer définitivement
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialogue de validation avec montant réel */}
+      <Dialog open={validateDialogOpen} onOpenChange={setValidateDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CheckCircle className="h-5 w-5 text-green-600" />
+              Valider la transaction
+            </DialogTitle>
+            <DialogDescription>
+              Veuillez saisir le montant réel envoyé en EUR pour calculer la commission et valider automatiquement la transaction.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="real-amount" className="text-sm font-medium text-gray-700">
+                  Montant réel envoyé (EUR) *
+                </Label>
+                <Input
+                  id="real-amount"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="Ex: 100.50"
+                  value={realAmountEUR}
+                  onChange={(e) => setRealAmountEUR(e.target.value)}
+                  className="mt-1"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Le système calculera automatiquement la commission et validera/rejettera selon le seuil de 5000 XAF
+                </p>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setValidateDialogOpen(false)}>
+              Annuler
+            </Button>
+            <Button 
+              className="bg-green-600 hover:bg-green-700 text-white"
+              onClick={confirmValidateTransaction}
+              disabled={!realAmountEUR || isNaN(parseFloat(realAmountEUR)) || parseFloat(realAmountEUR) <= 0}
+            >
+              <CheckCircle className="h-4 w-4 mr-2" />
+              Valider avec montant réel
             </Button>
           </DialogFooter>
         </DialogContent>

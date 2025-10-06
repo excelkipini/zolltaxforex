@@ -376,14 +376,43 @@ export function ReceptionView({
   }
 
 
-  const previewReceipt = () => {
+  const previewReceipt = async () => {
     if (!receiptDate) {
       alert("Veuillez d'abord calculer la transaction")
       return
     }
 
     const qrData = createQRData()
-    const content = generateReceiptHTML(qrData, false) // false = preview mode
+    
+    // Générer le QR code côté serveur AVANT de créer le HTML
+    let qrCodeDataURL = ''
+    try {
+      const response = await fetch('/api/qr-code', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          text: qrData,
+          options: {
+            width: 120,
+            height: 120,
+            colorDark: '#000000',
+            colorLight: '#ffffff',
+            errorCorrectionLevel: 'M'
+          }
+        }),
+      })
+      
+      if (response.ok) {
+        const data = await response.json()
+        qrCodeDataURL = data.qrCodeDataURL
+      }
+    } catch (error) {
+      console.error('Erreur lors de la génération du QR code:', error)
+    }
+    
+    const content = generateReceiptHTML(qrCodeDataURL, false) // false = preview mode
 
     const w = window.open("", "", "width=600,height=800,scrollbars=yes")
     if (!w) {
@@ -404,7 +433,36 @@ export function ReceptionView({
 
     try {
       const qrData = createQRData()
-      const content = generateReceiptHTML(qrData, true) // true = print mode
+      
+      // Générer le QR code côté serveur AVANT de créer le HTML
+      let qrCodeDataURL = ''
+      try {
+        const response = await fetch('/api/qr-code', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ 
+            text: qrData,
+            options: {
+              width: 120,
+              height: 120,
+              colorDark: '#000000',
+              colorLight: '#ffffff',
+              errorCorrectionLevel: 'M'
+            }
+          }),
+        })
+        
+        if (response.ok) {
+          const data = await response.json()
+          qrCodeDataURL = data.qrCodeDataURL
+        }
+      } catch (error) {
+        console.error('Erreur lors de la génération du QR code:', error)
+      }
+      
+      const content = generateReceiptHTML(qrCodeDataURL, true) // true = print mode
 
       const w = window.open("", "", "width=600,height=800")
       if (!w) {
@@ -476,7 +534,7 @@ export function ReceptionView({
     }
   }
 
-  const generateReceiptHTML = (qrData: string, isPrintMode: boolean) => {
+  const generateReceiptHTML = (qrCodeDataURL: string, isPrintMode: boolean) => {
     return `
       <!DOCTYPE html>
       <html lang="fr">
@@ -562,6 +620,19 @@ export function ReceptionView({
               border: 1px solid #000;
               padding: 10px;
               background: white;
+            }
+            
+            .qr-fallback {
+              width: 120px;
+              height: 120px;
+              border: 2px solid #000;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              font-size: 10px;
+              text-align: center;
+              background: #f9f9f9;
+              flex-direction: column;
             }
             
             .qr-fallback {
@@ -695,7 +766,10 @@ export function ReceptionView({
             
             <div class="qrcode-section">
               <div class="qrcode-container">
-                <div id="qrcode"></div>
+                ${qrCodeDataURL 
+                  ? `<img src="${qrCodeDataURL}" alt="QR Code" style="width: 120px; height: 120px;" />`
+                  : `<div class="qr-fallback">QR Code<br/>non disponible<br/><br/>Numéro:<br/>${receiptNumber}</div>`
+                }
               </div>
               <div class="qr-instructions">
                 Scannez ce QR code pour vérifier<br/>
@@ -713,30 +787,9 @@ export function ReceptionView({
             </div>
           </div>
           
-          <!-- QR Code Library -->
-          <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
           <script>
-            document.addEventListener('DOMContentLoaded', function() {
-              try {
-                const qrContainer = document.getElementById("qrcode");
-                
-                if (typeof QRCode !== 'undefined') {
-                  new QRCode(qrContainer, { 
-                    text: ${JSON.stringify(qrData)}, 
-                    width: 120, 
-                    height: 120,
-                    colorDark: "#000000",
-                    colorLight: "#ffffff",
-                    correctLevel: QRCode.CorrectLevel.M
-                  });
-                } else {
-                  throw new Error('QRCode library not loaded');
-                }
-              } catch (error) {
-                document.getElementById("qrcode").innerHTML = 
-                  '<div class="qr-fallback">QR Code<br/>non disponible<br/><br/>Numéro:<br/>${receiptNumber}</div>';
-              }
-            });
+            // QR Code généré côté serveur - pas besoin de bibliothèque externe
+            console.log('QR Code généré côté serveur');
             
             ${
               isPrintMode

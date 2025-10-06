@@ -18,6 +18,29 @@ export interface EmailConfig {
   }
 }
 
+// Types pour les notifications email des transferts d'argent
+export interface TransferEmailData {
+  transactionId: string
+  transactionType: string
+  amount: number
+  currency: string
+  description: string
+  createdBy: string
+  agency: string
+  status: string
+  createdAt: string
+  realAmountEUR?: number
+  commissionAmount?: number
+  executorId?: string
+  executedAt?: string
+  receiptUrl?: string
+  executorComment?: string
+  beneficiaryName?: string
+  destinationCountry?: string
+  transferMethod?: string
+  withdrawalMode?: string
+}
+
 // Types pour les notifications email des dépenses
 export interface ExpenseEmailData {
   expenseId: string
@@ -102,7 +125,7 @@ export function isEmailConfigured(): boolean {
 }
 
 // Fonction pour récupérer les destinataires selon le type de notification
-export async function getEmailRecipients(type: 'transaction_created' | 'transaction_validated' | 'transaction_completed' | 'deletion_requested' | 'deletion_validated' | 'expense_submitted' | 'expense_accounting_validated' | 'expense_director_validated'): Promise<{
+export async function getEmailRecipients(type: 'transaction_created' | 'transaction_validated' | 'transaction_completed' | 'deletion_requested' | 'deletion_validated' | 'expense_submitted' | 'expense_accounting_validated' | 'expense_director_validated' | 'transfer_created' | 'transfer_validated' | 'transfer_executed' | 'transfer_completed'): Promise<{
   to: User[]
   cc: User[]
 }> {
@@ -161,6 +184,34 @@ export async function getEmailRecipients(type: 'transaction_created' | 'transact
       return {
         to: [], // Le demandeur sera ajouté dynamiquement
         cc: await getUsersByRole('accounting'),
+      }
+    
+    case 'transfer_created':
+      // Transfert créé par un caissier : auditeurs en TO, directeur et comptables en CC
+      return {
+        to: await getUsersByRole('auditor'),
+        cc: await getUsersByRoles(['director', 'accounting']),
+      }
+    
+    case 'transfer_validated':
+      // Transfert validé par un auditeur : exécuteurs en TO, caissier et directeur en CC
+      return {
+        to: await getUsersByRole('executor'),
+        cc: await getUsersByRoles(['director', 'accounting']),
+      }
+    
+    case 'transfer_executed':
+      // Transfert exécuté par un exécuteur : caissier en TO, directeur et comptables en CC
+      return {
+        to: [], // Le caissier sera ajouté dynamiquement
+        cc: await getUsersByRoles(['director', 'accounting']),
+      }
+    
+    case 'transfer_completed':
+      // Transfert clôturé par un caissier : auditeurs et exécuteurs en TO, directeur et comptables en CC
+      return {
+        to: await getUsersByRoles(['auditor', 'executor']),
+        cc: await getUsersByRoles(['director', 'accounting']),
       }
     
     default:

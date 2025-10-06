@@ -7,7 +7,7 @@ import { createUser, updateUser, deleteUser, type CreateUserInput, type UpdateUs
 const createSchema = z.object({
   name: z.string().min(1, "Nom requis"),
   email: z.string().email("Email invalide"),
-  role: z.enum(["super_admin", "director", "accounting", "cashier", "auditor", "delegate"]),
+  role: z.enum(["super_admin", "director", "accounting", "cashier", "auditor", "delegate", "executor"]),
   agency: z.string().min(1, "Agence requise"),
   password: z.string().min(8, "Le mot de passe doit comporter au moins 8 caractères"),
 })
@@ -16,7 +16,7 @@ const updateSchema = z.object({
   id: z.string().uuid("ID invalide"),
   name: z.string().min(1, "Nom requis"),
   email: z.string().email("Email invalide"),
-  role: z.enum(["super_admin", "director", "accounting", "cashier", "auditor", "delegate"]),
+  role: z.enum(["super_admin", "director", "accounting", "cashier", "auditor", "delegate", "executor"]),
   agency: z.string().min(1, "Agence requise"),
   password: z.string().min(8).optional(),
 })

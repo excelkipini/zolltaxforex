@@ -15,7 +15,7 @@ type User = {
   id: string
   name: string
   email: string
-  role: "super_admin" | "director" | "accounting" | "cashier" | "auditor" | "delegate"
+  role: "super_admin" | "director" | "accounting" | "cashier" | "auditor" | "delegate" | "executor"
   agency: string
   password_hash?: string
   last_login?: string

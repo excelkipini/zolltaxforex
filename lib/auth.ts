@@ -7,7 +7,7 @@ export type SessionUser = {
   id: string
   name: string
   email: string
-  role: "super_admin" | "director" | "accounting" | "cashier" | "auditor" | "delegate"
+  role: "super_admin" | "director" | "accounting" | "cashier" | "auditor" | "delegate" | "executor"
   agency?: string
 }
 
@@ -153,6 +153,7 @@ export async function loginAsRole(role: string): Promise<SessionUser | null> {
       director: "directeur@test.com",
       delegate: "delegue@test.com",
       auditor: "auditeur@test.com",
+      executor: "executeur@test.com",
       super_admin: "admin@test.com",
     }
 
@@ -275,6 +276,14 @@ const mockUsers = [
     email: "admin@test.com",
     role: "super_admin",
     agency: "Administration",
+    password_hash: "password123",
+  },
+  {
+    id: "00000000-0000-4000-8000-000000000007",
+    name: "Stevie Exécuteur",
+    email: "executeur@test.com",
+    role: "executor",
+    agency: "Noura",
     password_hash: "password123",
   },
 ]
