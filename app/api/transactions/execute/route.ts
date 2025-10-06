@@ -1,16 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
 import { executeTransaction } from "@/lib/transactions-queries"
-import fs from "fs"
+import { sql } from "@/lib/db"
 import path from "path"
 
-// Fonction pour sauvegarder le fichier uploadé
+// Fonction pour sauvegarder le fichier uploadé en base de données
 async function saveUploadedFile(file: File): Promise<string> {
-  const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'receipts')
-  
-  // Créer le dossier s'il n'existe pas
-  if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir, { recursive: true })
-  }
+  // Convertir le fichier en buffer
+  const bytes = await file.arrayBuffer()
+  const buffer = Buffer.from(bytes)
   
   // Générer un nom de fichier unique
   const timestamp = Date.now()
@@ -18,15 +15,19 @@ async function saveUploadedFile(file: File): Promise<string> {
   const extension = path.extname(file.name)
   const filename = `receipt_${timestamp}_${randomString}${extension}`
   
-  const filepath = path.join(uploadDir, filename)
+  // Stocker le fichier en base de données
+  const result = await sql`
+    INSERT INTO uploaded_files (filename, content_type, file_data, created_at)
+    VALUES (${filename}, ${file.type}, ${buffer}, NOW())
+    RETURNING id
+  `
   
-  // Convertir le fichier en buffer et l'écrire
-  const bytes = await file.arrayBuffer()
-  const buffer = Buffer.from(bytes)
-  fs.writeFileSync(filepath, buffer)
+  if (result.length === 0) {
+    throw new Error('Erreur lors de la sauvegarde du fichier')
+  }
   
-  // Retourner l'URL publique du fichier
-  return `/uploads/receipts/${filename}`
+  // Retourner l'URL pour récupérer le fichier
+  return `/api/files/${result[0].id}`
 }
 
 // API route pour exécuter une transaction (par l'exécuteur)

@@ -231,6 +231,17 @@ export async function initializeDatabase() {
       )
     `
 
+    // Create uploaded_files table for storing file uploads
+    await sql`
+      CREATE TABLE IF NOT EXISTS uploaded_files (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        filename TEXT NOT NULL,
+        content_type TEXT NOT NULL,
+        file_data BYTEA NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `
+
     return true
   } catch (error) {
     return false
