@@ -1931,10 +1931,13 @@ export function TransactionsView({ user }: TransactionsViewProps = {}) {
         </Card>
         <Card>
           <CardContent className="p-4">
-            <div className="text-2xl font-bold text-blue-600">
-              {filteredTransactions.filter(t => t.status === "validated").length}
+            <div className="text-2xl font-bold text-green-600">
+              {filteredTransactions
+                .filter(t => t.status === "validated" || t.status === "executed" || t.status === "completed")
+                .reduce((sum, t) => sum + (t.commission_amount || 0), 0)
+                .toLocaleString("fr-FR")} XAF
             </div>
-            <div className="text-sm text-gray-600">Validées</div>
+            <div className="text-sm text-gray-600">Commissions cumulées</div>
           </CardContent>
         </Card>
         <Card>
