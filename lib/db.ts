@@ -4,12 +4,105 @@ import { neon } from "@neondatabase/serverless"
 const isDevelopment = process.env.NODE_ENV === "development"
 const hasDatabaseUrl = !!process.env.DATABASE_URL
 
-if (!hasDatabaseUrl && !isDevelopment) {
-  throw new Error("DATABASE_URL environment variable is required")
+console.log('🔍 Debug DATABASE_URL:', {
+  NODE_ENV: process.env.NODE_ENV,
+  hasDatabaseUrl: hasDatabaseUrl,
+  DATABASE_URL_length: process.env.DATABASE_URL?.length || 0
+})
+
+if (hasDatabaseUrl) {
+  console.log('✅ UTILISATION DE LA VRAIE BASE DE DONNÉES')
+} else {
+  console.log('❌ UTILISATION DES DONNÉES MOCKÉES')
+}
+
+// En production, exiger DATABASE_URL
+if (!hasDatabaseUrl && process.env.NODE_ENV === "production") {
+  throw new Error("DATABASE_URL environment variable is required in production")
+}
+
+// En développement, utiliser mock si pas de DATABASE_URL
+if (!hasDatabaseUrl && isDevelopment) {
+  console.log("🔧 Mode développement: utilisation des données mockées")
+  console.log("💡 Pour utiliser une vraie base de données, définissez DATABASE_URL dans .env.local")
 }
 
 // Mock SQL pour le développement
 const mockSql = (strings: TemplateStringsArray, ...values: any[]) => {
+  // Simuler des données de cartes pour le développement
+  if (strings[0]?.includes('SELECT') && strings[0]?.includes('cards')) {
+    return Promise.resolve([
+      {
+        id: "card-1",
+        cid: "21174132",
+        country: "Mali",
+        last_recharge_date: "2024-01-15",
+        expiration_date: "2025-12-31",
+        status: "active",
+        monthly_limit: 2400000,
+        monthly_used: 500000,
+        recharge_limit: 810000,
+        created_at: "2024-01-01T00:00:00Z",
+        updated_at: "2024-01-15T00:00:00Z"
+      },
+      {
+        id: "card-2",
+        cid: "21174133",
+        country: "RDC",
+        last_recharge_date: "2024-01-10",
+        expiration_date: "2025-11-30",
+        status: "active",
+        monthly_limit: 2500000,
+        monthly_used: 1200000,
+        recharge_limit: 550000,
+        created_at: "2024-01-01T00:00:00Z",
+        updated_at: "2024-01-10T00:00:00Z"
+      },
+      {
+        id: "card-3",
+        cid: "21174134",
+        country: "France",
+        last_recharge_date: null,
+        expiration_date: "2025-10-31",
+        status: "inactive",
+        monthly_limit: 2500000,
+        monthly_used: 0,
+        recharge_limit: 650000,
+        created_at: "2024-01-01T00:00:00Z",
+        updated_at: "2024-01-01T00:00:00Z"
+      }
+    ])
+  }
+  
+  // Simuler des données d'historique de recharge
+  if (strings[0]?.includes('SELECT') && strings[0]?.includes('card_recharges')) {
+    return Promise.resolve([
+      {
+        id: "recharge-1",
+        card_id: "card-1",
+        amount: 100000,
+        recharged_by: "Admin User",
+        recharge_date: "2024-01-15T10:00:00Z",
+        notes: "Recharge initiale",
+        created_at: "2024-01-15T10:00:00Z",
+        card_cid: "21174132",
+        card_country: "Mali"
+      },
+      {
+        id: "recharge-2",
+        card_id: "card-2",
+        amount: 200000,
+        recharged_by: "Admin User",
+        recharge_date: "2024-01-10T14:30:00Z",
+        notes: "Recharge mensuelle",
+        created_at: "2024-01-10T14:30:00Z",
+        card_cid: "21174133",
+        card_country: "RDC"
+      }
+    ])
+  }
+  
+  // Pour les autres requêtes, retourner un tableau vide
   return Promise.resolve([])
 }
 
@@ -141,14 +234,24 @@ export async function initializeDatabase() {
       CREATE TABLE IF NOT EXISTS cards (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         cid TEXT NOT NULL UNIQUE,
+        country TEXT NOT NULL CHECK (country IN ('Mali','RDC','France','Congo')) DEFAULT 'Mali',
         last_recharge_date DATE,
         expiration_date DATE,
         status TEXT NOT NULL CHECK (status IN ('active','inactive')) DEFAULT 'active',
         monthly_limit BIGINT NOT NULL DEFAULT 2000000,
         monthly_used BIGINT NOT NULL DEFAULT 0,
+        recharge_limit BIGINT NOT NULL DEFAULT 500000,
         created_at TIMESTAMPTZ DEFAULT NOW(),
         updated_at TIMESTAMPTZ DEFAULT NOW()
       )
+    `
+
+    // Migration: Ajouter les nouveaux champs si ils n'existent pas
+    await sql`
+      ALTER TABLE cards ADD COLUMN IF NOT EXISTS country TEXT CHECK (country IN ('Mali','RDC','France','Congo')) DEFAULT 'Mali'
+    `
+    await sql`
+      ALTER TABLE cards ADD COLUMN IF NOT EXISTS recharge_limit BIGINT DEFAULT 500000
     `
 
     // Add comment column if it doesn't exist (migration)
@@ -219,15 +322,61 @@ export async function initializeDatabase() {
     await sql`
       CREATE TABLE IF NOT EXISTS cards (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        card_number TEXT NOT NULL UNIQUE,
-        card_type TEXT NOT NULL CHECK (card_type IN ('debit','credit','prepaid')),
-        holder_name TEXT NOT NULL,
-        expiry_date DATE NOT NULL,
-        status TEXT NOT NULL CHECK (status IN ('active','inactive','blocked','expired')) DEFAULT 'active',
-        agency TEXT NOT NULL,
-        created_by TEXT NOT NULL,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        cid TEXT NOT NULL UNIQUE,
+        country TEXT NOT NULL CHECK (country IN ('Mali','RDC','France','Congo')) DEFAULT 'Mali',
+        last_recharge_date DATE,
+        expiration_date DATE,
+        status TEXT NOT NULL CHECK (status IN ('active','inactive')) DEFAULT 'active',
+        monthly_limit BIGINT NOT NULL DEFAULT 2000000,
+        monthly_used BIGINT NOT NULL DEFAULT 0,
+        recharge_limit BIGINT NOT NULL DEFAULT 500000,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `
+
+    // Migration: Add new columns to existing cards table if they don't exist
+    await sql`
+      ALTER TABLE cards ADD COLUMN IF NOT EXISTS cid TEXT
+    `
+    await sql`
+      ALTER TABLE cards ADD COLUMN IF NOT EXISTS country TEXT DEFAULT 'Mali'
+    `
+    await sql`
+      ALTER TABLE cards ADD COLUMN IF NOT EXISTS last_recharge_date DATE
+    `
+    await sql`
+      ALTER TABLE cards ADD COLUMN IF NOT EXISTS expiration_date DATE
+    `
+    await sql`
+      ALTER TABLE cards ADD COLUMN IF NOT EXISTS monthly_limit BIGINT DEFAULT 2000000
+    `
+    await sql`
+      ALTER TABLE cards ADD COLUMN IF NOT EXISTS monthly_used BIGINT DEFAULT 0
+    `
+    await sql`
+      ALTER TABLE cards ADD COLUMN IF NOT EXISTS recharge_limit BIGINT DEFAULT 500000
+    `
+
+    // Update constraints for cards table
+    await sql`
+      ALTER TABLE cards DROP CONSTRAINT IF EXISTS cards_status_check
+    `
+    await sql`
+      ALTER TABLE cards ADD CONSTRAINT cards_status_check 
+      CHECK (status IN ('active','inactive'))
+    `
+
+    // Create card_recharges table for recharge history
+    await sql`
+      CREATE TABLE IF NOT EXISTS card_recharges (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        card_id UUID NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+        amount BIGINT NOT NULL,
+        recharged_by TEXT NOT NULL,
+        recharge_date TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        notes TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )
     `
 
@@ -265,6 +414,19 @@ export async function initializeDatabase() {
         description TEXT NOT NULL,
         reference_id TEXT, -- Reference to expense or transaction
         created_by TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `
+
+    // Create card_recharges table for recharge history
+    await sql`
+      CREATE TABLE IF NOT EXISTS card_recharges (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        card_id UUID NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+        amount BIGINT NOT NULL,
+        recharged_by TEXT NOT NULL,
+        recharge_date TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        notes TEXT,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )
     `

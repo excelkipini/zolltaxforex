@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
 import { requireAuth } from "@/lib/auth"
-import { distributeAmount } from "@/lib/cards-queries"
+import { distributeAmountToSpecificCards } from "@/lib/cards-queries"
 
 export async function POST(request: NextRequest) {
   const { user } = await requireAuth()
   
-  // Seuls les directeurs, admins et comptables peuvent distribuer des montants
-  const canDistribute = user.role === "director" || user.role === "super_admin" || user.role === "accounting"
+  // Les directeurs, admins, comptables et caissiers peuvent distribuer
+  const canDistribute = user.role === "director" || user.role === "super_admin" || user.role === "accounting" || user.role === "cashier"
   
   if (!canDistribute) {
     return NextResponse.json({ ok: false, error: "Non autorisé" }, { status: 403 })
@@ -14,27 +14,38 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const { amount, maxCards = 10 } = body
+    const { amount, country, cardIds } = body
 
-    if (!amount || amount <= 0) {
-      return NextResponse.json({ ok: false, error: "Montant requis et doit être positif" }, { status: 400 })
+    if (!amount || !country || !cardIds || !Array.isArray(cardIds) || cardIds.length === 0) {
+      return NextResponse.json({ 
+        ok: false, 
+        error: "Montant, pays et cartes sélectionnées requis" 
+      }, { status: 400 })
     }
 
-    if (maxCards < 1 || maxCards > 50) {
-      return NextResponse.json({ ok: false, error: "Nombre de cartes doit être entre 1 et 50" }, { status: 400 })
-    }
-
-    const result = await distributeAmount(Number(amount), Number(maxCards))
-    
-    return NextResponse.json({ 
-      ok: true, 
-      data: {
-        ...result,
-        distributed_by: user.name,
-        distributed_at: new Date().toISOString()
+    const result = await distributeAmountToSpecificCards({
+      amount: Number(amount),
+      country: country,
+      cardIds: cardIds,
+      distributedBy: user.name,
+      distributedByUser: {
+        id: user.id,
+        name: user.name,
+        role: user.role
       }
     })
+
+    return NextResponse.json({ 
+      ok: true, 
+      message: "Distribution réussie",
+      data: result
+    })
+    
   } catch (error: any) {
-    return NextResponse.json({ ok: false, error: error.message }, { status: 500 })
+    console.error('❌ Erreur lors de la distribution:', error)
+    return NextResponse.json({ 
+      ok: false, 
+      error: error.message || "Erreur interne du serveur" 
+    }, { status: 500 })
   }
 }

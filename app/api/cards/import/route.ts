@@ -5,8 +5,8 @@ import { bulkCreateCardsFromExcel } from "@/lib/cards-queries"
 export async function POST(request: NextRequest) {
   const { user } = await requireAuth()
   
-  // Seuls les directeurs et admins peuvent importer des cartes
-  const canImport = user.role === "director" || user.role === "super_admin"
+  // Les directeurs, admins, comptables et caissiers peuvent importer des cartes
+  const canImport = user.role === "director" || user.role === "super_admin" || user.role === "accounting" || user.role === "cashier"
   
   if (!canImport) {
     return NextResponse.json({ ok: false, error: "Non autorisé" }, { status: 403 })
@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const { cards } = body
+    const { cards, country = 'Mali' } = body
 
     if (!cards || !Array.isArray(cards) || cards.length === 0) {
       return NextResponse.json({ ok: false, error: "Données de cartes requises" }, { status: 400 })
@@ -27,12 +27,17 @@ export async function POST(request: NextRequest) {
       }
       return {
         cid: String(card.cid),
+        country: card.country || country, // Utiliser le pays spécifié ou celui par défaut
         last_recharge_date: card.last_recharge_date ? String(card.last_recharge_date) : undefined,
         expiration_date: card.expiration_date ? String(card.expiration_date) : undefined,
       }
     })
 
-    const result = await bulkCreateCardsFromExcel(validatedCards)
+    const result = await bulkCreateCardsFromExcel(validatedCards, {
+      id: user.id,
+      name: user.name,
+      role: user.role
+    })
     
     return NextResponse.json({ 
       ok: true, 
