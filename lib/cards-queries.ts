@@ -82,10 +82,13 @@ export type DistributionResult = {
   total_distributed: number
   remaining_amount: number
   cards_used: number
+  country: string
   distributions: Array<{
     card_id: string
     cid: string
+    country: string
     amount: number
+    new_balance: number
     remaining_limit: number
   }>
 }
@@ -149,24 +152,24 @@ export async function listCards(country?: Country): Promise<Card[]> {
       `
       return rows
     } else {
-      const rows = await sql<Card[]>`
-        SELECT 
-          id::text,
-          cid,
+  const rows = await sql<Card[]>`
+    SELECT 
+      id::text,
+      cid,
           country,
-          last_recharge_date::text as last_recharge_date,
-          expiration_date::text as expiration_date,
-          status,
-          monthly_limit,
-          monthly_used,
+      last_recharge_date::text as last_recharge_date,
+      expiration_date::text as expiration_date,
+      status,
+      monthly_limit,
+      monthly_used,
           recharge_limit,
-          created_at::text as created_at,
-          updated_at::text as updated_at
-        FROM cards
-        ORDER BY created_at DESC
-      `
-      return rows
-    }
+      created_at::text as created_at,
+      updated_at::text as updated_at
+    FROM cards
+    ORDER BY created_at DESC
+  `
+  return rows
+}
   }
 
   // En mode développement sans base de données, retourner des données mockées
@@ -638,7 +641,9 @@ export async function distributeAmountToSpecificCards(input: {
       distributions.push({
         card_id: card.id,
         cid: card.cid,
+        country: card.country,
         amount: amountToDistribute,
+        new_balance: Number(card.monthly_used) + amountToDistribute,
         remaining_limit: monthlyAvailable - amountToDistribute
       })
       
@@ -685,6 +690,7 @@ export async function distributeAmountToSpecificCards(input: {
     total_distributed: totalDistributed,
     remaining_amount: remainingAmount,
     cards_used: distributions.length,
+    country: country,
     distributions
   }
 }
@@ -732,10 +738,10 @@ export async function getDistributionStats(): Promise<{
 
 export async function bulkCreateCardsFromExcel(
   cardsData: Array<{
-    cid: string
+  cid: string
     country?: string
-    last_recharge_date?: string
-    expiration_date?: string
+  last_recharge_date?: string
+  expiration_date?: string
   }>,
   importedBy?: {
     id: string

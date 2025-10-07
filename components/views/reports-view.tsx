@@ -151,6 +151,22 @@ export function ReportsView({ user }: ReportsViewProps) {
     return new Intl.NumberFormat('fr-FR').format(num)
   }
 
+  const translateStatus = (status: string) => {
+    const translations: { [key: string]: string } = {
+      'pending': 'En attente',
+      'accounting_approved': 'Approuvée (Compta)',
+      'accounting_rejected': 'Rejetée (Compta)',
+      'director_approved': 'Approuvée par le directeur',
+      'director_rejected': 'Rejetée par le directeur',
+      'validated': 'Validée',
+      'completed': 'Terminée',
+      'executed': 'Exécutée',
+      'pending_delete': 'Suppression en attente',
+      'rejected': 'Rejetée',
+    };
+    return translations[status] || status;
+  }
+
   const handlePeriodChange = (period: string) => {
     setSelectedPeriod(period)
   }
@@ -210,26 +226,26 @@ export function ReportsView({ user }: ReportsViewProps) {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Reports</h1>
+          <h1 className="text-3xl font-bold text-gray-900">Rapports</h1>
           <p className="text-gray-600 mt-1">
-            Financial analysis of expenses and operations
+            Analyse des dépenses et opérations financières
           </p>
         </div>
         <div className="flex items-center space-x-2">
           <Select value={selectedPeriod} onValueChange={handlePeriodChange}>
             <SelectTrigger className="w-40">
-              <SelectValue placeholder="Period" />
+              <SelectValue placeholder="Période" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="week">This week</SelectItem>
-              <SelectItem value="month">This month</SelectItem>
-              <SelectItem value="quarter">This quarter</SelectItem>
-              <SelectItem value="year">This year</SelectItem>
+              <SelectItem value="week">Cette semaine</SelectItem>
+              <SelectItem value="month">Ce mois</SelectItem>
+              <SelectItem value="quarter">Ce trimestre</SelectItem>
+              <SelectItem value="year">Cette année</SelectItem>
             </SelectContent>
           </Select>
           <Button variant="outline" onClick={handleExport}>
             <Download className="h-4 w-4 mr-2" />
-            Export
+            Exporter
           </Button>
         </div>
       </div>
@@ -238,7 +254,7 @@ export function ReportsView({ user }: ReportsViewProps) {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Expenses</CardTitle>
+            <CardTitle className="text-sm font-medium">Total Dépenses</CardTitle>
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -252,14 +268,14 @@ export function ReportsView({ user }: ReportsViewProps) {
               <span className={stats.expensesVariation >= 0 ? "text-green-500" : "text-red-500"}>
                 {Math.abs(stats.expensesVariation).toFixed(1)}%
               </span>
-              <span className="ml-1">vs previous period</span>
+              <span className="ml-1">vs période précédente</span>
             </div>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Operations</CardTitle>
+            <CardTitle className="text-sm font-medium">Total Opérations</CardTitle>
             <Activity className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -273,20 +289,20 @@ export function ReportsView({ user }: ReportsViewProps) {
               <span className={stats.operationsVariation >= 0 ? "text-green-500" : "text-red-500"}>
                 {Math.abs(stats.operationsVariation).toFixed(1)}%
               </span>
-              <span className="ml-1">vs previous period</span>
+              <span className="ml-1">vs période précédente</span>
             </div>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Transactions Count</CardTitle>
+            <CardTitle className="text-sm font-medium">Nombre de Transactions</CardTitle>
             <Activity className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{formatNumber(stats.totalTransactions)}</div>
             <p className="text-xs text-muted-foreground">
-              Average: {formatNumber(Math.round(stats.totalTransactions / Math.max(operationsData.length, 1)))} / month
+              Moyenne: {formatNumber(Math.round(stats.totalTransactions / Math.max(operationsData.length, 1)))} / mois
             </p>
           </CardContent>
         </Card>
@@ -305,7 +321,7 @@ export function ReportsView({ user }: ReportsViewProps) {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {operationIndicators.map(ind => (
                   <div key={ind.status} className="p-3 rounded-lg border">
-                    <div className="text-xs text-gray-500 uppercase">{ind.status}</div>
+                    <div className="text-xs text-gray-500 uppercase">{translateStatus(ind.status)}</div>
                     <div className="text-lg font-semibold">{formatCurrency(ind.total_amount)}</div>
                     <div className="text-xs text-gray-600">{formatNumber(ind.count)} opérations</div>
                   </div>
@@ -326,7 +342,7 @@ export function ReportsView({ user }: ReportsViewProps) {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {expenseIndicators.map(ind => (
                   <div key={ind.status} className="p-3 rounded-lg border">
-                    <div className="text-xs text-gray-500 uppercase">{ind.status}</div>
+                    <div className="text-xs text-gray-500 uppercase">{translateStatus(ind.status)}</div>
                     <div className="text-lg font-semibold">{formatCurrency(ind.total_amount)}</div>
                     <div className="text-xs text-gray-600">{formatNumber(ind.count)} dépenses</div>
                   </div>
@@ -344,7 +360,7 @@ export function ReportsView({ user }: ReportsViewProps) {
           <CardHeader>
             <CardTitle className="flex items-center">
               <TrendingUp className="h-5 w-5 mr-2 text-blue-600" />
-              Expense Variation
+              Variation des Dépenses
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -363,10 +379,10 @@ export function ReportsView({ user }: ReportsViewProps) {
                       tickFormatter={(value) => `${(value / 1000000).toFixed(1)}M`}
                     />
                     <Tooltip 
-                      formatter={(value: number) => [formatCurrency(value), 'Montant']}
+                      formatter={(value: number, name: string) => [formatCurrency(value), translateStatus(name)]}
                       labelFormatter={(label) => `Mois: ${label}`}
                     />
-                    <Legend />
+                    <Legend formatter={(value) => translateStatus(value)} />
                     {expenseStatuses.map((status, idx) => {
                       const colorPalette = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#06b6d4']
                       const color = colorPalette[idx % colorPalette.length]
@@ -386,7 +402,7 @@ export function ReportsView({ user }: ReportsViewProps) {
                 </ResponsiveContainer>
               ) : (
                 <div className="flex items-center justify-center h-full text-gray-500">
-                  No expense data available
+                  Aucune donnée de dépenses disponible
                 </div>
               )}
             </div>
@@ -398,7 +414,7 @@ export function ReportsView({ user }: ReportsViewProps) {
           <CardHeader>
             <CardTitle className="flex items-center">
               <Activity className="h-5 w-5 mr-2 text-green-600" />
-              Operation Variation
+              Variation des Opérations
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -417,10 +433,10 @@ export function ReportsView({ user }: ReportsViewProps) {
                       tickFormatter={(value) => `${(value / 1000000).toFixed(1)}M`}
                     />
                     <Tooltip 
-                      formatter={(value: number) => [formatCurrency(value), 'Montant']}
+                      formatter={(value: number, name: string) => [formatCurrency(value), translateStatus(name)]}
                       labelFormatter={(label) => `Mois: ${label}`}
                     />
-                    <Legend />
+                    <Legend formatter={(value) => translateStatus(value)} />
                     {operationStatuses.map((status, idx) => {
                       const colorPalette = ['#10b981', '#ef4444', '#3b82f6', '#f59e0b', '#8b5cf6', '#06b6d4']
                       const color = colorPalette[idx % colorPalette.length]
@@ -439,7 +455,7 @@ export function ReportsView({ user }: ReportsViewProps) {
                 </ResponsiveContainer>
               ) : (
                 <div className="flex items-center justify-center h-full text-gray-500">
-                  No operation data available
+                  Aucune donnée d'opérations disponible
                 </div>
               )}
             </div>
@@ -452,7 +468,7 @@ export function ReportsView({ user }: ReportsViewProps) {
         <CardHeader>
           <CardTitle className="flex items-center">
             <Activity className="h-5 w-5 mr-2 text-purple-600" />
-            Transactions per Month
+            Nombre de Transactions par Mois
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -486,7 +502,7 @@ export function ReportsView({ user }: ReportsViewProps) {
               </ResponsiveContainer>
             ) : (
               <div className="flex items-center justify-center h-full text-gray-500">
-                No transaction data available
+                Aucune donnée de transactions disponible
               </div>
             )}
           </div>

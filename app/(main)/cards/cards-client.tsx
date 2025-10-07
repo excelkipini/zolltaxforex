@@ -24,6 +24,7 @@ import {
   History
 } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { PDFDistribution } from "@/components/pdf-distribution"
 
 type CardData = {
   id: string
@@ -67,6 +68,8 @@ export default function CardsClient({
   const [dialogOpen, setDialogOpen] = React.useState(false)
   const [editing, setEditing] = React.useState<CardData | null>(null)
   const [distributionOpen, setDistributionOpen] = React.useState(false)
+  const [distributionResult, setDistributionResult] = React.useState<any>(null)
+  const [showPDFDialog, setShowPDFDialog] = React.useState(false)
   const [rechargeOpen, setRechargeOpen] = React.useState(false)
   const [selectedCardForRecharge, setSelectedCardForRecharge] = React.useState<CardData | null>(null)
   
@@ -629,6 +632,26 @@ export default function CardsClient({
         return
       }
 
+      // Récupérer les informations de l'utilisateur connecté
+      let userName = 'Utilisateur'
+      try {
+        const userRes = await fetch('/api/auth/me')
+        const userData = await userRes.json()
+        if (userData.ok && userData.user) {
+          userName = userData.user.name
+        }
+      } catch (error) {
+        console.error('Erreur lors de la récupération de l\'utilisateur:', error)
+      }
+
+      // Stocker les données de distribution pour le PDF
+      const distributionData = {
+        ...data.data,
+        distributedBy: userName,
+        distributedAt: new Date().toISOString()
+      }
+      setDistributionResult(distributionData)
+      
       alert(`Distribution réussie ! ${data.data.cards_used} cartes utilisées, ${data.data.total_distributed.toLocaleString()} XAF distribués`)
       
       // Réinitialiser le formulaire
@@ -636,6 +659,9 @@ export default function CardsClient({
       setSelectedCards(new Set())
       setRemainingAmount(0)
       setDistributionOpen(false)
+      
+      // Afficher le dialog PDF
+      setShowPDFDialog(true)
       
       // Recharger les cartes
       await loadCards()
@@ -1110,6 +1136,21 @@ export default function CardsClient({
         setNotes={setRechargeNotes}
         pending={pending}
       />
+
+      {/* Dialog PDF pour la distribution */}
+      {distributionResult && (
+        <Dialog open={showPDFDialog} onOpenChange={setShowPDFDialog}>
+          <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+            <PDFDistribution
+              distributionData={distributionResult}
+              onClose={() => {
+                setShowPDFDialog(false)
+                setDistributionResult(null)
+              }}
+            />
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   )
 }
