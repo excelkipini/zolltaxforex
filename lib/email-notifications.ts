@@ -9,8 +9,10 @@ import {
   generateExpenseSubmittedEmail,
   generateExpenseAccountingValidatedEmail,
   generateExpenseDirectorValidatedEmail,
+  generateExpenseDirectorRejectedEmail,
   generateTransferCreatedEmail,
   generateTransferValidatedEmail,
+  generateTransferRejectedEmail,
   generateTransferExecutedEmail,
   generateTransferCompletedEmail
 } from "./email-templates"
@@ -237,7 +239,7 @@ export function convertExpenseToEmailData(expense: any): ExpenseEmailData {
     requestedBy: expense.requested_by,
     agency: expense.agency,
     status: expense.status,
-    createdAt: expense.created_at,
+    createdAt: expense.created_at || expense.date,
     validatedBy: expense.accounting_validated_by || expense.director_validated_by,
     validatedAt: expense.accounting_validated_at || expense.director_validated_at,
     rejectionReason: expense.rejection_reason
@@ -309,7 +311,10 @@ export async function sendExpenseDirectorValidatedNotification(expenseData: Expe
 
     const toEmails = [`${requester.name} <${requester.email}>`]
 
-    const emailTemplate = generateExpenseDirectorValidatedEmail(expenseData, requester.email)
+    // Choisir le template selon le statut réel
+    const emailTemplate = expenseData.status === 'director_rejected'
+      ? generateExpenseDirectorRejectedEmail(expenseData, requester.email)
+      : generateExpenseDirectorValidatedEmail(expenseData, requester.email)
 
     return await sendEmail({
       to: toEmails,
@@ -388,6 +393,27 @@ export async function sendTransferValidatedNotification(transferData: TransferEm
     })
   } catch (error: any) {
     console.error('Erreur lors de l\'envoi de la notification de transfert validé:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+// 2bis. Notification pour transfert rejeté
+export async function sendTransferRejectedNotification(transferData: TransferEmailData): Promise<{ success: boolean; error?: string }> {
+  try {
+    const recipients = await getEmailRecipients('transfer_validated')
+    const toEmails = formatEmailAddresses(recipients.to)
+    const ccEmails = formatEmailAddresses(recipients.cc)
+
+    const emailTemplate = generateTransferRejectedEmail(transferData)
+
+    return await sendEmail({
+      to: toEmails,
+      cc: ccEmails,
+      subject: emailTemplate.subject,
+      html: emailTemplate.html
+    })
+  } catch (error: any) {
+    console.error('Erreur lors de l\'envoi de la notification de transfert rejeté:', error)
     return { success: false, error: error.message }
   }
 }

@@ -483,29 +483,24 @@ export async function updateTransactionRealAmount(
         await sendTransactionValidatedNotification(convertTransactionToEmailData(updatedTransaction))
       }
     } else if (newStatus === "rejected") {
-      // Notification de rejet automatique
-      const { sendEmail, getEmailRecipients } = await import('./email-notifications')
-      const recipients = await getEmailRecipients('transaction_validated')
-      
-      await sendEmail({
-        to: recipients.to.map(u => u.email).join(', '),
-        cc: recipients.cc.map(u => u.email).join(', '),
-        subject: `Transaction rejetée automatiquement - Commission insuffisante`,
-        html: `
-          <h2>Transaction Rejetée Automatiquement</h2>
-          <p>La transaction <strong>${updatedTransaction.id}</strong> a été rejetée automatiquement car la commission est insuffisante.</p>
-          <h3>Détails de la Transaction</h3>
-          <ul>
-            <li><strong>ID:</strong> ${updatedTransaction.id}</li>
-            <li><strong>Type:</strong> ${updatedTransaction.type}</li>
-            <li><strong>Description:</strong> ${updatedTransaction.description}</li>
-            <li><strong>Montant reçu:</strong> ${updatedTransaction.amount} ${updatedTransaction.currency}</li>
-            <li><strong>Montant réel:</strong> ${realAmountEUR} EUR</li>
-            <li><strong>Commission calculée:</strong> ${commissionAmount} XAF</li>
-            <li><strong>Raison du rejet:</strong> Commission insuffisante (< 5000 XAF)</li>
-          </ul>
-        `
-      })
+      // Notification standardisée de rejet de transfert
+      if (updatedTransaction.type === "transfer") {
+        const { sendTransferRejectedNotification } = await import('./email-notifications')
+        const transferData = convertTransferToEmailData(updatedTransaction)
+        await sendTransferRejectedNotification(transferData)
+      } else {
+        const { sendEmail, getEmailRecipients } = await import('./email-notifications')
+        const recipients = await getEmailRecipients('transaction_validated')
+        await sendEmail({
+          to: recipients.to.map(u => u.email).join(', '),
+          cc: recipients.cc.map(u => u.email).join(', '),
+          subject: `Transaction rejetée`,
+          html: `
+            <h2>Transaction Rejetée</h2>
+            <p>La transaction <strong>${updatedTransaction.id}</strong> a été rejetée.</p>
+          `
+        })
+      }
     }
   } catch (error) {
     console.error('Erreur lors de l\'envoi de la notification:', error)

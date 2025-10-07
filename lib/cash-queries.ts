@@ -232,8 +232,8 @@ export async function addCommissionToAccount(
     throw new Error("Compte commissions non trouvé")
   }
 
-  const currentBalance = commissionAccount[0].current_balance
-  const newBalance = currentBalance + commissionAmount
+  const currentBalance = Number(commissionAccount[0].current_balance)
+  const newBalance = Number(currentBalance) + Number(commissionAmount)
 
   // Mettre à jour le solde des commissions
   await sql`
@@ -365,4 +365,22 @@ export async function getTotalCommissions(): Promise<number> {
   `
   
   return result[0]?.total || 0
+}
+
+// Réconcilier le solde du compte commissions avec la somme réelle des transactions de commission
+export async function reconcileCommissionsBalance(updatedBy: string = 'system'): Promise<number> {
+  // Calculer la somme réelle des transactions de type commission
+  const total = await getTotalCommissions()
+
+  // Mettre à jour le solde du compte commissions pour refléter exactement cette somme
+  await sql`
+    UPDATE cash_accounts 
+    SET 
+      current_balance = ${total},
+      last_updated = NOW(),
+      updated_by = ${updatedBy}
+    WHERE account_type = 'commissions'
+  `
+
+  return total
 }

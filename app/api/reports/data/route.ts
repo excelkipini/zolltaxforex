@@ -3,7 +3,11 @@ import { requireAuth } from "@/lib/auth"
 import { 
   getMonthlyExpensesData, 
   getMonthlyTransactionsData, 
-  getReportsStats 
+  getReportsStats,
+  getOperationStatusIndicators,
+  getExpenseStatusIndicators,
+  getMonthlyExpenseStatusSeries,
+  getMonthlyOperationStatusSeries
 } from "@/lib/reports-queries"
 
 // Force dynamic rendering for this API route
@@ -27,11 +31,19 @@ export async function GET(request: NextRequest) {
     if (type === "all" || type === "expenses") {
       const expensesData = await getMonthlyExpensesData(period)
       responseData.expenses = expensesData
+      const expenseIndicators = await getExpenseStatusIndicators(period)
+      responseData.expenseIndicators = expenseIndicators
+      const expenseSeriesByStatus = await getMonthlyExpenseStatusSeries(period)
+      responseData.expenseSeriesByStatus = expenseSeriesByStatus
     }
 
     if (type === "all" || type === "transactions") {
       const transactionsData = await getMonthlyTransactionsData(period)
       responseData.transactions = transactionsData
+      const operationIndicators = await getOperationStatusIndicators(period)
+      responseData.operationIndicators = operationIndicators
+      const operationSeriesByStatus = await getMonthlyOperationStatusSeries(period)
+      responseData.operationSeriesByStatus = operationSeriesByStatus
     }
 
     if (type === "all" || type === "stats") {

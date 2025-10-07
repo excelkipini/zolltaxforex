@@ -339,9 +339,9 @@ export default function CardsClient({
       const data = await res.json()
       
       if (res.ok && data?.ok) {
-        await loadCards()
-        clearSelection()
-        setBulkDeleteOpen(false)
+      await loadCards()
+      clearSelection()
+      setBulkDeleteOpen(false)
         alert(`${data.data.deleted_count} cartes supprimées avec succès`)
       } else {
         alert(`Erreur lors de la suppression: ${data?.error || 'Erreur inconnue'}`)
@@ -672,14 +672,14 @@ export default function CardsClient({
         <h1 className="text-3xl font-bold">Gestion des Cartes</h1>
         <div className="flex items-center space-x-2">
           {/* Bouton Distribuer - Vert et plus gros */}
-          <Button 
+                <Button 
             onClick={() => setDistributionOpen(true)} 
-            disabled={pending}
+                  disabled={pending}
             className="bg-green-600 hover:bg-green-700 text-white h-10 px-6"
-          >
+                >
             <DollarSign className="h-5 w-5 mr-2" />
             Distribuer
-          </Button>
+                </Button>
           
           {/* Bouton Importer Excel */}
           <Button 
@@ -704,7 +704,7 @@ export default function CardsClient({
               loadCountryLimits()
             }}
             disabled={pending}
-            variant="outline"
+            variant="outline" 
             className="bg-purple-50 hover:bg-purple-100 border-purple-200 text-purple-700"
           >
             <Zap className="h-4 w-4 mr-2" />
@@ -1982,11 +1982,11 @@ function RechargeDialog({
 }
 
 // Composant pour la suppression en lot
-function BulkDeleteDialog({ 
-  open, 
-  onOpenChange, 
-  onConfirm, 
-  selectedCount, 
+function BulkDeleteDialog({
+  open,
+  onOpenChange,
+  onConfirm,
+  selectedCount,
   pending 
 }: {
   open: boolean

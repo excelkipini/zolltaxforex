@@ -125,7 +125,7 @@ export function isEmailConfigured(): boolean {
 }
 
 // Fonction pour récupérer les destinataires selon le type de notification
-export async function getEmailRecipients(type: 'transaction_created' | 'transaction_validated' | 'transaction_completed' | 'deletion_requested' | 'deletion_validated' | 'expense_submitted' | 'expense_accounting_validated' | 'expense_director_validated' | 'transfer_created' | 'transfer_validated' | 'transfer_executed' | 'transfer_completed'): Promise<{
+export async function getEmailRecipients(type: 'transaction_created' | 'transaction_validated' | 'transaction_completed' | 'deletion_requested' | 'deletion_validated' | 'expense_submitted' | 'expense_accounting_validated' | 'expense_director_validated' | 'transfer_created' | 'transfer_validated' | 'transfer_executed' | 'transfer_completed' | 'transfer_rejected'): Promise<{
   to: User[]
   cc: User[]
 }> {
@@ -214,6 +214,13 @@ export async function getEmailRecipients(type: 'transaction_created' | 'transact
         cc: await getUsersByRoles(['director', 'accounting']),
       }
     
+    case 'transfer_rejected':
+      // Transfert rejeté (commission insuffisante ou décision): caissier en TO, directeur et comptables en CC
+      return {
+        to: [], // Le caissier sera ajouté dynamiquement
+        cc: await getUsersByRoles(['director', 'accounting']),
+      }
+
     default:
       return { to: [], cc: [] }
   }

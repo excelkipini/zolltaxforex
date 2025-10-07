@@ -7,7 +7,8 @@ import {
   getCashTransactions,
   getTotalCommissions,
   initializeCashAccounts,
-  syncExistingCommissions
+  syncExistingCommissions,
+  reconcileCommissionsBalance
 } from "@/lib/cash-queries"
 
 // GET - Récupérer les comptes de caisse et leurs soldes
@@ -20,6 +21,8 @@ export async function GET(request: NextRequest) {
       case 'accounts':
         // Initialiser les comptes s'ils n'existent pas
         await initializeCashAccounts()
+        // Réconciliation automatique du solde des commissions
+        await reconcileCommissionsBalance('system_auto')
         const accounts = await getCashAccounts()
         return NextResponse.json({ success: true, accounts })
 
@@ -35,15 +38,19 @@ export async function GET(request: NextRequest) {
 
       case 'sync-commissions':
         const syncResult = await syncExistingCommissions()
+        const reconciled = await reconcileCommissionsBalance('system')
         return NextResponse.json({ 
           success: true, 
-          message: `Synchronisation terminée: ${syncResult.transactionsProcessed} transactions traitées, ${syncResult.totalAdded} XAF ajoutés`,
-          syncResult 
+          message: `Synchronisation terminée: ${syncResult.transactionsProcessed} transactions traitées, ${syncResult.totalAdded} XAF ajoutés. Solde commissions réconcilié à ${reconciled} XAF`,
+          syncResult,
+          reconciled
         })
 
       default:
         // Par défaut, retourner les comptes
         await initializeCashAccounts()
+        // Réconciliation automatique du solde des commissions
+        await reconcileCommissionsBalance('system_auto')
         const defaultAccounts = await getCashAccounts()
         return NextResponse.json({ success: true, accounts: defaultAccounts })
     }

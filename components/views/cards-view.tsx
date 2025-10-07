@@ -188,7 +188,7 @@ export function CardsView() {
       })
 
       const data = await res.json()
-
+      
       if (res.ok && data?.ok) {
         toast({
           title: "Succès",
@@ -509,7 +509,7 @@ export function CardsView() {
               <CreditCard className="h-5 w-5" />
               Gestion des Cartes
             </span>
-            <div className="flex gap-2">
+          <div className="flex gap-2">
               <Button
                 onClick={() => setIsLimitsDialogOpen(true)}
                 variant="outline"
@@ -535,11 +535,11 @@ export function CardsView() {
               <Label htmlFor="search">Rechercher</Label>
               <div className="relative">
                 <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                <Input
+            <Input 
                   id="search"
                   placeholder="Rechercher par CID..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-10"
                 />
               </div>
@@ -565,17 +565,17 @@ export function CardsView() {
                 <Label htmlFor="status-filter">Statut</Label>
                 <Select value={filter} onValueChange={(value: "all" | "active" | "inactive") => setFilter(value)}>
                   <SelectTrigger className="w-32">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
                     <SelectItem value="all">Tous</SelectItem>
                     <SelectItem value="active">Actif</SelectItem>
                     <SelectItem value="inactive">Inactif</SelectItem>
-                  </SelectContent>
-                </Select>
+              </SelectContent>
+            </Select>
               </div>
-            </div>
           </div>
+        </div>
 
           {/* Table des cartes */}
           <div className="rounded-md border">
@@ -637,7 +637,7 @@ export function CardsView() {
                 ))}
               </TableBody>
             </Table>
-          </div>
+        </div>
 
           {filteredCards.length === 0 && (
             <div className="text-center py-8 text-muted-foreground">
@@ -695,12 +695,12 @@ export function CardsView() {
       {/* Dialog de création de carte */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
+      <DialogHeader>
             <DialogTitle>Nouvelle Carte</DialogTitle>
             <DialogDescription>
               Créer une nouvelle carte avec les informations requises.
             </DialogDescription>
-          </DialogHeader>
+      </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="cid" className="text-right">
@@ -773,7 +773,7 @@ export function CardsView() {
                 className="col-span-3"
               />
             </div>
-          </div>
+      </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
               Annuler
@@ -781,8 +781,8 @@ export function CardsView() {
             <Button onClick={handleCreateCard}>
               Créer la carte
             </Button>
-          </DialogFooter>
-        </DialogContent>
+      </DialogFooter>
+    </DialogContent>
       </Dialog>
 
       {/* Dialog de recharge */}

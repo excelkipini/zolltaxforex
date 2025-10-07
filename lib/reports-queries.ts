@@ -23,6 +23,24 @@ export interface ReportsStats {
   expensesVariation: number
   operationsVariation: number
 }
+export interface StatusIndicator {
+  status: string
+  count: number
+  total_amount: number
+}
+
+export interface MonthlyStatusAmount {
+  date: string
+  status: string
+  amount: number
+}
+
+export interface MonthlyStatusOperation {
+  date: string
+  status: string
+  transactions: number
+  total_amount: number
+}
 
 // Fonction pour récupérer les données de dépenses agrégées par mois
 export async function getExpensesReportData(period: string = "year"): Promise<ExpenseReportData[]> {
@@ -62,6 +80,43 @@ export async function getExpensesReportData(period: string = "year"): Promise<Ex
     return []
   }
 }
+// Indicateurs par statut pour les dépenses
+export async function getExpenseStatusIndicators(period: string = "year"): Promise<StatusIndicator[]> {
+  try {
+    let dateCondition = ""
+    switch (period) {
+      case "week":
+        dateCondition = "AND date >= CURRENT_DATE - INTERVAL '7 days'"
+        break
+      case "month":
+        dateCondition = "AND date >= CURRENT_DATE - INTERVAL '1 month'"
+        break
+      case "quarter":
+        dateCondition = "AND date >= CURRENT_DATE - INTERVAL '3 months'"
+        break
+      case "year":
+        dateCondition = "AND date >= CURRENT_DATE - INTERVAL '1 year'"
+        break
+    }
+
+    const rows = await sql<StatusIndicator[]>`
+      SELECT 
+        status,
+        COUNT(*)::int as count,
+        COALESCE(SUM(amount), 0)::bigint as total_amount
+      FROM expenses
+      WHERE TRUE
+      ${sql.unsafe(dateCondition)}
+      GROUP BY status
+      ORDER BY status ASC
+    `
+
+    return rows
+  } catch (error) {
+    console.error("Erreur lors de la récupération des indicateurs de dépenses:", error)
+    return []
+  }
+}
 
 // Fonction pour récupérer les données de transactions agrégées par mois
 export async function getTransactionsReportData(period: string = "year"): Promise<TransactionReportData[]> {
@@ -98,6 +153,43 @@ export async function getTransactionsReportData(period: string = "year"): Promis
     return rows
   } catch (error) {
     console.error("Erreur lors de la récupération des données de transactions:", error)
+    return []
+  }
+}
+// Indicateurs par statut pour les opérations (transactions)
+export async function getOperationStatusIndicators(period: string = "year"): Promise<StatusIndicator[]> {
+  try {
+    let dateCondition = ""
+    switch (period) {
+      case "week":
+        dateCondition = "AND created_at >= CURRENT_DATE - INTERVAL '7 days'"
+        break
+      case "month":
+        dateCondition = "AND created_at >= CURRENT_DATE - INTERVAL '1 month'"
+        break
+      case "quarter":
+        dateCondition = "AND created_at >= CURRENT_DATE - INTERVAL '3 months'"
+        break
+      case "year":
+        dateCondition = "AND created_at >= CURRENT_DATE - INTERVAL '1 year'"
+        break
+    }
+
+    const rows = await sql<StatusIndicator[]>`
+      SELECT 
+        status,
+        COUNT(*)::int as count,
+        COALESCE(SUM(amount), 0)::bigint as total_amount
+      FROM transactions
+      WHERE TRUE
+      ${sql.unsafe(dateCondition)}
+      GROUP BY status
+      ORDER BY status ASC
+    `
+
+    return rows
+  } catch (error) {
+    console.error("Erreur lors de la récupération des indicateurs d'opérations:", error)
     return []
   }
 }
@@ -263,6 +355,83 @@ export async function getMonthlyTransactionsData(period: string = "year"): Promi
     return rows
   } catch (error) {
     console.error("Erreur lors de la récupération des données mensuelles de transactions:", error)
+    return []
+  }
+}
+
+// Séries mensuelles par statut – Dépenses
+export async function getMonthlyExpenseStatusSeries(period: string = "year"): Promise<MonthlyStatusAmount[]> {
+  try {
+    let dateCondition = ""
+    switch (period) {
+      case "week":
+        dateCondition = "AND date >= CURRENT_DATE - INTERVAL '7 days'"
+        break
+      case "month":
+        dateCondition = "AND date >= CURRENT_DATE - INTERVAL '1 month'"
+        break
+      case "quarter":
+        dateCondition = "AND date >= CURRENT_DATE - INTERVAL '3 months'"
+        break
+      case "year":
+        dateCondition = "AND date >= CURRENT_DATE - INTERVAL '1 year'"
+        break
+    }
+
+    const rows = await sql<MonthlyStatusAmount[]>`
+      SELECT 
+        TO_CHAR(date, 'YYYY-MM') as date,
+        status,
+        SUM(amount)::bigint as amount
+      FROM expenses 
+      WHERE TRUE
+      ${sql.unsafe(dateCondition)}
+      GROUP BY TO_CHAR(date, 'YYYY-MM'), status
+      ORDER BY date ASC
+    `
+
+    return rows
+  } catch (error) {
+    console.error("Erreur lors des séries mensuelles par statut (dépenses):", error)
+    return []
+  }
+}
+
+// Séries mensuelles par statut – Opérations
+export async function getMonthlyOperationStatusSeries(period: string = "year"): Promise<MonthlyStatusOperation[]> {
+  try {
+    let dateCondition = ""
+    switch (period) {
+      case "week":
+        dateCondition = "AND created_at >= CURRENT_DATE - INTERVAL '7 days'"
+        break
+      case "month":
+        dateCondition = "AND created_at >= CURRENT_DATE - INTERVAL '1 month'"
+        break
+      case "quarter":
+        dateCondition = "AND created_at >= CURRENT_DATE - INTERVAL '3 months'"
+        break
+      case "year":
+        dateCondition = "AND created_at >= CURRENT_DATE - INTERVAL '1 year'"
+        break
+    }
+
+    const rows = await sql<MonthlyStatusOperation[]>`
+      SELECT 
+        TO_CHAR(created_at, 'YYYY-MM') as date,
+        status,
+        COUNT(*) as transactions,
+        SUM(amount)::bigint as total_amount
+      FROM transactions 
+      WHERE TRUE
+      ${sql.unsafe(dateCondition)}
+      GROUP BY TO_CHAR(created_at, 'YYYY-MM'), status
+      ORDER BY date ASC
+    `
+
+    return rows
+  } catch (error) {
+    console.error("Erreur lors des séries mensuelles par statut (opérations):", error)
     return []
   }
 }

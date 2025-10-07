@@ -1934,7 +1934,7 @@ export function TransactionsView({ user }: TransactionsViewProps = {}) {
             <div className="text-2xl font-bold text-green-600">
               {filteredTransactions
                 .filter(t => t.status === "validated" || t.status === "executed" || t.status === "completed")
-                .reduce((sum, t) => sum + (t.commission_amount || 0), 0)
+                .reduce((sum, t) => sum + Number(t.commission_amount ?? 0), 0)
                 .toLocaleString("fr-FR")} XAF
             </div>
             <div className="text-sm text-gray-600">Commissions cumulées</div>
@@ -2395,7 +2395,7 @@ export function TransactionsView({ user }: TransactionsViewProps = {}) {
                                     </div>
                                     <div>
                                       <span className="text-sm font-medium text-green-700">Commission:</span>
-                                      <p className="text-sm font-semibold text-green-900">{(selectedTransaction.commission_amount || 0).toLocaleString("fr-FR")} XAF</p>
+                                      <p className="text-sm font-semibold text-green-900">{Number(selectedTransaction.commission_amount ?? 0).toLocaleString("fr-FR")} XAF</p>
                                     </div>
                                   </div>
                                 )}
@@ -2472,7 +2472,7 @@ export function TransactionsView({ user }: TransactionsViewProps = {}) {
                             </div>
                             <div>
                               <span className="text-sm font-medium text-gray-600">Commission:</span>
-                              <p className="text-sm">{(selectedTransaction.details.commission || 0).toLocaleString("fr-FR")} XAF</p>
+                              <p className="text-sm">{Number(selectedTransaction.details.commission ?? 0).toLocaleString("fr-FR")} XAF</p>
                             </div>
                       </div>
                     ) : selectedTransaction.type === "exchange" ? (
@@ -2499,7 +2499,7 @@ export function TransactionsView({ user }: TransactionsViewProps = {}) {
                         </div>
                         <div>
                           <span className="text-sm font-medium text-gray-600">Commission:</span>
-                          <p className="text-sm">{(selectedTransaction.details.commission || 0).toLocaleString("fr-FR")} XAF</p>
+                          <p className="text-sm">{Number(selectedTransaction.details.commission ?? 0).toLocaleString("fr-FR")} XAF</p>
                         </div>
                       </div>
                     ) : selectedTransaction.type === "card" ? (

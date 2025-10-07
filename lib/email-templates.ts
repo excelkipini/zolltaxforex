@@ -544,6 +544,34 @@ export function generateExpenseDirectorValidatedEmail(data: ExpenseEmailData, re
   }
 }
 
+// 8bis. Template pour dépense rejetée par le directeur
+export function generateExpenseDirectorRejectedEmail(data: ExpenseEmailData, requesterEmail: string): { subject: string; html: string } {
+  const subject = `[ZOLL TAX FOREX] Dépense rejetée par le directeur - ${data.expenseId}`
+
+  const content = `
+    <h2>❌ Dépense Rejetée par le Directeur</h2>
+    <p>Votre demande de dépense a été rejetée par le directeur.</p>
+    
+    <div class="alert error">
+        <strong>Statut:</strong> Dépense rejetée par le directeur.
+    </div>
+    
+    ${EXPENSE_DETAILS_TEMPLATE(data)}
+    
+    ${data.rejectionReason ? `
+    <div class="detail-row">
+        <span class="detail-label">Motif de rejet:</span>
+        <span class="detail-value">${data.rejectionReason}</span>
+    </div>
+    ` : ''}
+  `
+
+  return {
+    subject,
+    html: BASE_TEMPLATE(content, "Dépense Rejetée par le Directeur")
+  }
+}
+
 // 5. Template pour demande de suppression validée
 export function generateDeletionValidatedEmail(data: DeletionRequestEmailData, cashierEmail: string): { subject: string; html: string } {
   const subject = `[ZOLL TAX FOREX] Demande de suppression validée - ${data.transactionId}`
@@ -624,6 +652,29 @@ export function generateTransferValidatedEmail(data: TransferEmailData): { subje
   return {
     subject,
     html: BASE_TEMPLATE(content, "Transfert Validé par l'Auditeur")
+  }
+}
+
+// 2bis. Template pour transfert rejeté (commission insuffisante ou autre raison)
+export function generateTransferRejectedEmail(data: TransferEmailData): { subject: string; html: string } {
+  const subject = `[ZOLL TAX FOREX] Transfert rejeté - ${data.transactionId}`
+
+  const content = `
+    <h2>❌ Transfert Rejeté</h2>
+    <p>Un transfert d'argent a été rejeté.</p>
+    
+    <div class="alert error">
+        <strong>Statut:</strong> Transfert rejeté.
+    </div>
+    
+    ${TRANSFER_DETAILS_TEMPLATE(data)}
+    
+    <p><strong>Information:</strong> Ce rejet peut provenir d'une commission insuffisante ou d'une validation négative.</p>
+  `
+
+  return {
+    subject,
+    html: BASE_TEMPLATE(content, "Transfert Rejeté")
   }
 }
 
