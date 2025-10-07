@@ -6,6 +6,9 @@ import {
   getReportsStats 
 } from "@/lib/reports-queries"
 
+// Force dynamic rendering for this API route
+export const dynamic = 'force-dynamic'
+
 export async function GET(request: NextRequest) {
   try {
     const { user } = await requireAuth()
