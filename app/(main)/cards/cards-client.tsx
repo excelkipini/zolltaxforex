@@ -1707,12 +1707,11 @@ function ImportDialog({
   function extractCID(reference: string): string | null {
     if (!reference) return null
     
-    // Patterns pour extraire le CID dans différents formats
+    // Patterns restreints pour extraire le CID
     const patterns = [
-      /CID:\s*(\d{8})/,                    // CID: 21172078
-      /Card load.*CID:\s*(\d{8})/,         // Card load by ZOLL TAX FOREX - CID: 21172078
-      /CID:\s*(\d{8})\s+[a-zA-Z]/,         // CID: 21172078 nathalie ngonda
-      /(\d{8})/                            // 21172078 (8 chiffres isolés)
+      /CID:\s*(\d{8})/,                    // CID: 21172078 (format standard)
+      /Card load.*CID:\s*(\d{8})/,         // Card load by ZOLL TAX FOREX - CID: 21172078 (avec contexte)
+      /CID:\s*(\d{8})\s+[a-zA-Z]/          // CID: 21172078 nathalie ngonda (avec nom)
     ]
     
     for (const pattern of patterns) {
@@ -1727,13 +1726,11 @@ function ImportDialog({
 
   // Fonction pour vérifier si une ligne contient un CID valide
   function hasValidCID(line: string): boolean {
-    // Chercher dans toute la ligne, pas seulement dans la colonne Reference
-    // Patterns plus flexibles pour détecter les CID
+    // Patterns restreints pour détecter les CID
     const patterns = [
-      /CID:\s*\d{8}/,           // CID: 21172078
-      /\b\d{8}\b/,              // 21172078 (8 chiffres isolés)
-      /Card load.*CID:\s*\d{8}/, // Card load by ZOLL TAX FOREX - CID: 21172078
-      /CID:\s*\d{8}.*[a-zA-Z]/  // CID: 21172078 nathalie ngonda
+      /CID:\s*\d{8}/,           // CID: 21172078 (format standard)
+      /Card load.*CID:\s*\d{8}/, // Card load by ZOLL TAX FOREX - CID: 21172078 (avec contexte)
+      /CID:\s*\d{8}.*[a-zA-Z]/  // CID: 21172078 nathalie ngonda (avec nom)
     ]
     
     return patterns.some(pattern => pattern.test(line))
@@ -1981,14 +1978,13 @@ function ImportDialog({
             <h4 className="font-medium text-blue-800 mb-1">Formats supportés:</h4>
             <ul className="text-sm text-blue-700 space-y-1">
               <li>• <strong>Types de fichiers:</strong> CSV (virgules) et TSV (tabulations)</li>
-              <li>• <strong>Filtrage automatique:</strong> Seules les lignes contenant <code>CID: XXXXXXXX</code> ou séquence de 8 chiffres sont traitées</li>
+              <li>• <strong>Filtrage automatique:</strong> Seules les lignes contenant les formats CID spécifiques sont traitées</li>
               <li>• <strong>Parsing simplifié:</strong> Parcourt toutes les lignes sans détection de colonnes</li>
               <li>• <strong>Date d'importation:</strong> Toutes les cartes utilisent la date d'importation comme dernière recharge</li>
               <li>• <strong>Formats CID supportés:</strong></li>
               <li className="ml-4">- <code>CID: 21172078</code> (format standard)</li>
               <li className="ml-4">- <code>Card load by ZOLL TAX FOREX - CID: 21172078</code> (avec contexte)</li>
               <li className="ml-4">- <code>CID: 21172078 nathalie ngonda</code> (avec nom)</li>
-              <li className="ml-4">- <code>21172078</code> (8 chiffres isolés)</li>
               <li>• Une carte par ligne</li>
               <li>• Les doublons de CID seront ignorés</li>
               <li>• Support des guillemets et virgules dans les champs</li>
