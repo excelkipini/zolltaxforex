@@ -18,6 +18,7 @@ import {
   MoreHorizontal,
   DollarSign,
   Zap,
+  Loader2,
   ChevronUp,
   ChevronDown,
   FileText,
@@ -169,11 +170,11 @@ export default function CardsClient({
           setDistributionStats(data.data.distributionStats)
         } else {
           // Recalculer les statistiques à partir des nouvelles cartes actives seulement
-          const activeNewCards = newCards.filter(c => c.status === 'active')
-          const totalLimit = activeNewCards.reduce((sum, c) => sum + Number(c.monthly_limit), 0)
-          const totalUsed = activeNewCards.reduce((sum, c) => sum + Number(c.monthly_used), 0)
+          const activeNewCards = newCards.filter((c: CardData) => c.status === 'active')
+          const totalLimit = activeNewCards.reduce((sum: number, c: CardData) => sum + Number(c.monthly_limit), 0)
+          const totalUsed = activeNewCards.reduce((sum: number, c: CardData) => sum + Number(c.monthly_used), 0)
           const activeCards = activeNewCards.length
-          const availableCards = activeNewCards.filter(c => Number(c.monthly_used) < Number(c.monthly_limit)).length
+          const availableCards = activeNewCards.filter((c: CardData) => Number(c.monthly_used) < Number(c.monthly_limit)).length
           
           setDistributionStats({
             total_limit: totalLimit,
@@ -346,6 +347,9 @@ export default function CardsClient({
       clearSelection()
       setBulkDeleteOpen(false)
         alert(`${data.data.deleted_count} cartes supprimées avec succès`)
+        
+        // Actualiser la page après la suppression en lot
+        window.location.reload()
       } else {
         alert(`Erreur lors de la suppression: ${data?.error || 'Erreur inconnue'}`)
       }
@@ -534,6 +538,9 @@ export default function CardsClient({
         return
       }
       await loadCards()
+      
+      // Actualiser la page après la suppression individuelle
+      window.location.reload()
     } finally {
       setPending(false)
     }
@@ -1208,7 +1215,7 @@ function CardDialog({
   }, [country, initial])
 
   // Déterminer si les plafonds doivent être désactivés
-  const areLimitsDisabled = initial && country === initial.country
+  const areLimitsDisabled = !!(initial && country === initial.country)
 
   function handleSubmit() {
     onSubmit({
@@ -1614,16 +1621,68 @@ function ImportDialog({
   const [file, setFile] = React.useState<File | null>(null)
   const [parsedData, setParsedData] = React.useState<any[]>([])
   const [parsing, setParsing] = React.useState(false)
+  const [importing, setImporting] = React.useState(false)
 
   // Fonction pour parser le format de date Excel
   function parseExcelDate(dateStr: string): string | undefined {
     if (!dateStr) return undefined
     
     try {
-      // Format: 09-22-25 10:28:08 AM
-      const match = dateStr.match(/(\d{2})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2}):(\d{2})\s+(AM|PM)/)
-      if (match) {
-        const [, month, day, year, hour, minute, second, ampm] = match
+      // Format 1: 09-22-25 10:28:08 AM (MM-DD-YY avec AM/PM)
+      const matchAMPM_MMDD = dateStr.match(/(\d{2})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2}):(\d{2})\s+(AM|PM)/)
+      if (matchAMPM_MMDD) {
+        const [, month, day, year, hour, minute, second, ampm] = matchAMPM_MMDD
+        const fullYear = parseInt(year) + 2000 // Convertir 25 -> 2025
+        const hour24 = ampm === 'PM' && parseInt(hour) !== 12 ? parseInt(hour) + 12 : 
+                     ampm === 'AM' && parseInt(hour) === 12 ? 0 : parseInt(hour)
+        
+        const date = new Date(fullYear, parseInt(month) - 1, parseInt(day), hour24, parseInt(minute), parseInt(second))
+        return date.toISOString().split('T')[0] // Retourner au format YYYY-MM-DD
+      }
+      
+      // Format 2: 29-09-25 10:40:50 (DD-MM-YY sans AM/PM)
+      const match24h_DDMM = dateStr.match(/(\d{2})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2}):(\d{2})/)
+      if (match24h_DDMM) {
+        const [, day, month, year, hour, minute, second] = match24h_DDMM
+        const fullYear = parseInt(year) + 2000 // Convertir 25 -> 2025
+        
+        const date = new Date(fullYear, parseInt(month) - 1, parseInt(day), parseInt(hour), parseInt(minute), parseInt(second))
+        return date.toISOString().split('T')[0] // Retourner au format YYYY-MM-DD
+      }
+      
+      // Format 3: 09-22-25 10:28:08 (MM-DD-YY sans AM/PM)
+      const match24h_MMDD = dateStr.match(/(\d{2})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2}):(\d{2})/)
+      if (match24h_MMDD) {
+        const [, month, day, year, hour, minute, second] = match24h_MMDD
+        const fullYear = parseInt(year) + 2000 // Convertir 25 -> 2025
+        
+        const date = new Date(fullYear, parseInt(month) - 1, parseInt(day), parseInt(hour), parseInt(minute), parseInt(second))
+        return date.toISOString().split('T')[0] // Retourner au format YYYY-MM-DD
+      }
+      
+      // Format 4: 2025-09-29 10:40:50 (YYYY-MM-DD)
+      const matchISO = dateStr.match(/(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2}):(\d{2})/)
+      if (matchISO) {
+        const [, year, month, day, hour, minute, second] = matchISO
+        
+        const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day), parseInt(hour), parseInt(minute), parseInt(second))
+        return date.toISOString().split('T')[0] // Retourner au format YYYY-MM-DD
+      }
+      
+      // Format 5: 29/09/25 10:40:50 (DD/MM/YY)
+      const matchSlash_DDMM = dateStr.match(/(\d{2})\/(\d{2})\/(\d{2})\s+(\d{2}):(\d{2}):(\d{2})/)
+      if (matchSlash_DDMM) {
+        const [, day, month, year, hour, minute, second] = matchSlash_DDMM
+        const fullYear = parseInt(year) + 2000 // Convertir 25 -> 2025
+        
+        const date = new Date(fullYear, parseInt(month) - 1, parseInt(day), parseInt(hour), parseInt(minute), parseInt(second))
+        return date.toISOString().split('T')[0] // Retourner au format YYYY-MM-DD
+      }
+      
+      // Format 6: 09/22/25 10:28:08 AM (MM/DD/YY avec AM/PM)
+      const matchSlashAMPM_MMDD = dateStr.match(/(\d{2})\/(\d{2})\/(\d{2})\s+(\d{2}):(\d{2}):(\d{2})\s+(AM|PM)/)
+      if (matchSlashAMPM_MMDD) {
+        const [, month, day, year, hour, minute, second, ampm] = matchSlashAMPM_MMDD
         const fullYear = parseInt(year) + 2000 // Convertir 25 -> 2025
         const hour24 = ampm === 'PM' && parseInt(hour) !== 12 ? parseInt(hour) + 12 : 
                      ampm === 'AM' && parseInt(hour) === 12 ? 0 : parseInt(hour)
@@ -1638,6 +1697,7 @@ function ImportDialog({
         return date.toISOString().split('T')[0]
       }
     } catch (error) {
+      console.log('Erreur parsing date:', dateStr, error)
     }
     
     return undefined
@@ -1645,51 +1705,71 @@ function ImportDialog({
 
   // Fonction pour extraire le CID de la référence
   function extractCID(reference: string): string | null {
-    const cidMatch = reference.match(/CID:\s*(\d{8})/)
-    return cidMatch ? cidMatch[1] : null
+    if (!reference) return null
+    
+    // Patterns pour extraire le CID dans différents formats
+    const patterns = [
+      /CID:\s*(\d{8})/,                    // CID: 21172078
+      /Card load.*CID:\s*(\d{8})/,         // Card load by ZOLL TAX FOREX - CID: 21172078
+      /CID:\s*(\d{8})\s+[a-zA-Z]/,         // CID: 21172078 nathalie ngonda
+      /(\d{8})/                            // 21172078 (8 chiffres isolés)
+    ]
+    
+    for (const pattern of patterns) {
+      const match = reference.match(pattern)
+      if (match) {
+        return match[1]
+      }
+    }
+    
+    return null
+  }
+
+  // Fonction pour vérifier si une ligne contient un CID valide
+  function hasValidCID(line: string): boolean {
+    // Chercher dans toute la ligne, pas seulement dans la colonne Reference
+    // Patterns plus flexibles pour détecter les CID
+    const patterns = [
+      /CID:\s*\d{8}/,           // CID: 21172078
+      /\b\d{8}\b/,              // 21172078 (8 chiffres isolés)
+      /Card load.*CID:\s*\d{8}/, // Card load by ZOLL TAX FOREX - CID: 21172078
+      /CID:\s*\d{8}.*[a-zA-Z]/  // CID: 21172078 nathalie ngonda
+    ]
+    
+    return patterns.some(pattern => pattern.test(line))
   }
 
   // Fonction pour parser le fichier Excel/CSV
   function parseFile(content: string): any[] {
     const lines = content.trim().split('\n')
-    const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/"/g, ''))
+    const importDate = new Date().toISOString().split('T')[0] // Date d'importation
     
-    // Trouver les indices des colonnes Date et Reference
-    const dateIndex = headers.findIndex(h => h === 'date')
-    const referenceIndex = headers.findIndex(h => h === 'reference')
-    
-    
-    if (dateIndex === -1 || referenceIndex === -1) {
-      return []
-    }
+    console.log('Parsing du fichier avec date d\'importation:', importDate)
     
     const data = lines.slice(1).map((line, index) => {
-      // Parser la ligne CSV en gérant les guillemets
-      const values = parseCSVLine(line)
-      
-      if (values.length < Math.max(dateIndex, referenceIndex) + 1) {
+      // Vérifier d'abord si la ligne contient un CID valide
+      if (!hasValidCID(line)) {
+        console.log(`Ligne ${index + 1}: Pas de CID valide, ignorée`)
         return null
       }
       
-      const dateValue = values[dateIndex] || ''
-      const referenceValue = values[referenceIndex] || ''
-      
-      
-      // Extraire le CID de la référence
-      const cid = extractCID(referenceValue)
+      // Extraire le CID directement de la ligne complète
+      const cid = extractCID(line)
       if (!cid) {
+        console.log(`Ligne ${index + 1}: CID non trouvé`)
         return null
       }
       
-      const parsedDate = parseExcelDate(dateValue)
+      console.log(`Ligne ${index + 1}: CID=${cid} trouvé`)
       
       return {
         cid,
-        last_recharge_date: parsedDate,
-        reference: referenceValue
+        last_recharge_date: importDate, // Toujours utiliser la date d'importation
+        reference: line // Garder la ligne complète comme référence
       }
     }).filter(Boolean)
     
+    console.log(`${data.length} cartes trouvées dans le fichier`)
     return data
   }
 
@@ -1724,6 +1804,20 @@ function ImportDialog({
     result.push(current.trim())
     
     return result
+  }
+
+  // Fonction pour nettoyer les valeurs CSV (enlever les guillemets et espaces)
+  function cleanCSVValue(value: string): string {
+    if (!value) return ''
+    
+    // Enlever les guillemets au début et à la fin
+    let cleaned = value.trim()
+    if (cleaned.startsWith('"') && cleaned.endsWith('"')) {
+      cleaned = cleaned.slice(1, -1)
+    }
+    
+    // Enlever les espaces supplémentaires
+    return cleaned.trim()
   }
 
   // Gestionnaire de changement de fichier
@@ -1764,6 +1858,8 @@ function ImportDialog({
       return
     }
 
+    setImporting(true)
+
     try {
       const res = await fetch("/api/cards/import", {
         method: "POST",
@@ -1792,8 +1888,13 @@ function ImportDialog({
       setExcelData("")
       setFile(null)
       setParsedData([])
+      
+      // Actualiser la page après l'importation
+      window.location.reload()
     } catch (error: any) {
       alert(`Erreur: ${error.message}`)
+    } finally {
+      setImporting(false)
     }
   }
 
@@ -1877,11 +1978,17 @@ function ImportDialog({
           )}
           
           <div className="p-3 bg-blue-50 rounded-lg">
-            <h4 className="font-medium text-blue-800 mb-1">Format attendu:</h4>
+            <h4 className="font-medium text-blue-800 mb-1">Formats supportés:</h4>
             <ul className="text-sm text-blue-700 space-y-1">
-              <li>• Colonnes: <code>Date,Reference</code> (ou format complet avec 9 colonnes)</li>
-              <li>• Format date: <code>09-22-25 10:28:08 AM</code></li>
-              <li>• Référence doit contenir: <code>CID: XXXXXXXX</code></li>
+              <li>• <strong>Types de fichiers:</strong> CSV (virgules) et TSV (tabulations)</li>
+              <li>• <strong>Filtrage automatique:</strong> Seules les lignes contenant <code>CID: XXXXXXXX</code> ou séquence de 8 chiffres sont traitées</li>
+              <li>• <strong>Parsing simplifié:</strong> Parcourt toutes les lignes sans détection de colonnes</li>
+              <li>• <strong>Date d'importation:</strong> Toutes les cartes utilisent la date d'importation comme dernière recharge</li>
+              <li>• <strong>Formats CID supportés:</strong></li>
+              <li className="ml-4">- <code>CID: 21172078</code> (format standard)</li>
+              <li className="ml-4">- <code>Card load by ZOLL TAX FOREX - CID: 21172078</code> (avec contexte)</li>
+              <li className="ml-4">- <code>CID: 21172078 nathalie ngonda</code> (avec nom)</li>
+              <li className="ml-4">- <code>21172078</code> (8 chiffres isolés)</li>
               <li>• Une carte par ligne</li>
               <li>• Les doublons de CID seront ignorés</li>
               <li>• Support des guillemets et virgules dans les champs</li>
@@ -1891,17 +1998,33 @@ function ImportDialog({
         </div>
 
         <DialogFooter className="gap-2">
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={pending || importing}>
             Annuler
           </Button>
           <Button 
             onClick={handleImport} 
-            disabled={pending || parsing || parsedData.length === 0}
+            disabled={pending || parsing || importing || parsedData.length === 0}
           >
-            {parsing ? "Parsing..." : 
-             pending ? "Import..." : 
-             parsedData.length > 0 ? `Importer (${parsedData.length} cartes)` : 
-             "Aucune donnée valide"}
+            {parsing ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Parsing...
+              </>
+            ) : importing ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Importation en cours...
+              </>
+            ) : pending ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Import...
+              </>
+            ) : parsedData.length > 0 ? (
+              `Importer (${parsedData.length} cartes)`
+            ) : (
+              "Aucune donnée valide"
+            )}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -2006,12 +2129,12 @@ function RechargeDialog({
         </div>
 
         <DialogFooter className="gap-2">
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={!!pending}>
             Annuler
           </Button>
           <Button 
             onClick={onRecharge} 
-            disabled={pending || !amount || parseFloat(amount) <= 0 || (card && parseFloat(amount) > card.recharge_limit)}
+            disabled={!!pending || !amount || parseFloat(amount) <= 0 || (!!card && parseFloat(amount) > card.recharge_limit)}
             className="bg-green-600 hover:bg-green-700"
           >
             {pending ? "Recharge..." : "Recharger"}
