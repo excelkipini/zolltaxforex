@@ -46,6 +46,8 @@ export type Permission =
   | "delete_reports"
   | "view_settings"
   | "edit_settings"
+  | "view_receipts"
+  | "create_receipts"
 
 const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   super_admin: [
@@ -84,6 +86,8 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "delete_reports",
     "view_settings",
     "edit_settings",
+    "view_receipts",
+    "create_receipts",
   ],
   director: [
     "view_dashboard",
@@ -105,6 +109,8 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "view_reports",
     "create_reports",
     "edit_reports",
+    "view_receipts",
+    "create_receipts",
   ],
   delegate: [
     "view_dashboard",
@@ -135,6 +141,8 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "view_reports",
     "create_reports",
     "edit_reports",
+    "view_receipts",
+    "create_receipts",
   ],
   cashier: [
     "view_dashboard",
@@ -148,6 +156,8 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "edit_exchange",
     "view_expenses",
     "create_expenses",
+    "view_receipts",
+    "create_receipts",
   ],
   auditor: [
     "view_dashboard",

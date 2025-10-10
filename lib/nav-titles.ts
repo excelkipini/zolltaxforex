@@ -12,6 +12,7 @@ const TITLES: Record<Locale, Record<string, string>> = {
     "/users": "Gestion des utilisateurs",
     "/agencies": "Gestion des agences",
     "/rates": "Gestion des taux & plafonds",
+    "/receipt": "Emettre un reçu",
   },
   en: {
     "/dashboard": "Dashboard",
@@ -24,6 +25,7 @@ const TITLES: Record<Locale, Record<string, string>> = {
     "/users": "User Management",
     "/agencies": "Agencies Management",
     "/rates": "Rates & Limits",
+    "/receipt": "Issue Receipt",
   },
 }
 
