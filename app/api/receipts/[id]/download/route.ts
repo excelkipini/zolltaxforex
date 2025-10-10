@@ -1,39 +1,27 @@
 import { NextRequest, NextResponse } from "next/server"
 import { requireAuth } from "@/lib/auth"
-import { createReceipt } from "@/lib/receipts-queries"
+import { hasPermission } from "@/lib/rbac"
+import { getReceiptById } from "@/lib/receipts-queries"
 import jsPDF from "jspdf"
 import QRCode from "qrcode"
 
 export const dynamic = 'force-dynamic'
 
-interface ReceiptData {
-  clientName: string
-  clientPhone: string
-  clientEmail: string
-  operationType: string
-  amountReceived: number
-  amountSent: number
-  commission: number
-  commissionRate: number
-  currency: string
-  notes: string
-  receiptNumber: string
-}
-
-export async function POST(request: NextRequest) {
+export async function GET(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
   try {
     const { user } = await requireAuth()
     
     // Vérifier les permissions
-    if (user.role !== "cashier" && user.role !== "accounting" && user.role !== "director" && user.role !== "super_admin") {
+    if (!hasPermission(user, "view_receipts")) {
       return NextResponse.json({ error: "Permission refusée" }, { status: 403 })
     }
 
-    const receiptData: ReceiptData = await request.json()
-
-    // Validation des données
-    if (!receiptData.clientName || !receiptData.operationType || !receiptData.amountReceived) {
-      return NextResponse.json({ error: "Données manquantes" }, { status: 400 })
+    const receipt = await getReceiptById(params.id)
+    if (!receipt) {
+      return NextResponse.json({ error: "Reçu non trouvé" }, { status: 404 })
     }
 
     // Créer le PDF
@@ -42,10 +30,10 @@ export async function POST(request: NextRequest) {
     const pageHeight = doc.internal.pageSize.getHeight()
     
     // Configuration des couleurs
-    const primaryColor: [number, number, number] = [0, 51, 102] // Bleu foncé
-    const secondaryColor: [number, number, number] = [0, 123, 255] // Bleu
-    const textColor: [number, number, number] = [51, 51, 51] // Gris foncé
-    const lightGray: [number, number, number] = [240, 240, 240]
+    const primaryColor = [0, 51, 102] // Bleu foncé
+    const secondaryColor = [0, 123, 255] // Bleu
+    const textColor = [51, 51, 51] // Gris foncé
+    const lightGray = [240, 240, 240]
 
     // En-tête
     doc.setFillColor(...primaryColor)
@@ -72,14 +60,14 @@ export async function POST(request: NextRequest) {
     doc.setFont("helvetica", "bold")
     doc.text("Numéro de reçu:", 20, currentY)
     doc.setFont("helvetica", "normal")
-    doc.text(receiptData.receiptNumber, 70, currentY)
+    doc.text(receipt.receipt_number, 70, currentY)
     
     doc.text("Date:", pageWidth - 60, currentY)
-    doc.text(new Date().toLocaleDateString('fr-FR'), pageWidth - 25, currentY)
+    doc.text(new Date(receipt.created_at).toLocaleDateString('fr-FR'), pageWidth - 25, currentY)
     
     currentY += 8
     doc.text("Heure:", pageWidth - 60, currentY)
-    doc.text(new Date().toLocaleTimeString('fr-FR'), pageWidth - 25, currentY)
+    doc.text(new Date(receipt.created_at).toLocaleTimeString('fr-FR'), pageWidth - 25, currentY)
 
     currentY += 15
 
@@ -100,22 +88,22 @@ export async function POST(request: NextRequest) {
     doc.setFont("helvetica", "bold")
     doc.text("Nom:", 20, currentY)
     doc.setFont("helvetica", "normal")
-    doc.text(receiptData.clientName, 40, currentY)
+    doc.text(receipt.client_name, 40, currentY)
     currentY += 6
 
-    if (receiptData.clientPhone) {
+    if (receipt.client_phone) {
       doc.setFont("helvetica", "bold")
       doc.text("Téléphone:", 20, currentY)
       doc.setFont("helvetica", "normal")
-      doc.text(receiptData.clientPhone, 60, currentY)
+      doc.text(receipt.client_phone, 60, currentY)
       currentY += 6
     }
 
-    if (receiptData.clientEmail) {
+    if (receipt.client_email) {
       doc.setFont("helvetica", "bold")
       doc.text("Email:", 20, currentY)
       doc.setFont("helvetica", "normal")
-      doc.text(receiptData.clientEmail, 40, currentY)
+      doc.text(receipt.client_email, 40, currentY)
       currentY += 6
     }
 
@@ -148,11 +136,11 @@ export async function POST(request: NextRequest) {
       other: "Autre"
     }
     
-    doc.text(operationTypes[receiptData.operationType as keyof typeof operationTypes] || "Non spécifié", 80, currentY)
+    doc.text(operationTypes[receipt.operation_type as keyof typeof operationTypes] || "Non spécifié", 80, currentY)
     currentY += 6
 
     // Notes dans la section Détails de l'opération
-    if (receiptData.notes) {
+    if (receipt.notes) {
       currentY += 4
       doc.setFont("helvetica", "bold")
       doc.text("Notes:", 20, currentY)
@@ -160,7 +148,7 @@ export async function POST(request: NextRequest) {
       
       doc.setFont("helvetica", "normal")
       // Diviser les notes en plusieurs lignes si nécessaire
-      const notesLines = doc.splitTextToSize(receiptData.notes, pageWidth - 40)
+      const notesLines = doc.splitTextToSize(receipt.notes, pageWidth - 40)
       doc.text(notesLines, 20, currentY)
       currentY += notesLines.length * 5 + 4
     }
@@ -194,15 +182,15 @@ export async function POST(request: NextRequest) {
     doc.setFont("helvetica", "bold")
     doc.text("Montant reçu:", 20, currentY)
     doc.setFont("helvetica", "normal")
-    doc.text(`${formatCurrency(receiptData.amountReceived)} ${receiptData.currency}`, pageWidth - 50, currentY, { align: "right" })
+    doc.text(`${formatCurrency(receipt.amount_received)} ${receipt.currency}`, pageWidth - 50, currentY, { align: "right" })
     currentY += 6
 
     // Commission
     doc.setFont("helvetica", "bold")
-    doc.text(`Commission (${receiptData.commissionRate}%):`, 20, currentY)
+    doc.text(`Commission (${receipt.commission_rate}%):`, 20, currentY)
     doc.setFont("helvetica", "normal")
     doc.setTextColor(200, 0, 0) // Rouge
-    doc.text(`-${formatCurrency(receiptData.commission)} ${receiptData.currency}`, pageWidth - 50, currentY, { align: "right" })
+    doc.text(`-${formatCurrency(receipt.commission)} ${receipt.currency}`, pageWidth - 50, currentY, { align: "right" })
     doc.setTextColor(...textColor) // Retour à la couleur normale
     currentY += 6
 
@@ -215,7 +203,7 @@ export async function POST(request: NextRequest) {
     doc.setFont("helvetica", "bold")
     doc.setFontSize(11)
     doc.text("Montant envoyé:", 20, currentY)
-    doc.text(`${formatCurrency(receiptData.amountSent)} ${receiptData.currency}`, pageWidth - 50, currentY, { align: "right" })
+    doc.text(`${formatCurrency(receipt.amount_sent)} ${receipt.currency}`, pageWidth - 50, currentY, { align: "right" })
 
     currentY += 15
 
@@ -226,18 +214,18 @@ export async function POST(request: NextRequest) {
     const qrCodeX = (pageWidth - qrCodeSize) / 2 // Centré horizontalement
     
     try {
-      // Générer le QR Code avec les informations du reçu
-      const qrData = JSON.stringify({
-        receiptNumber: receiptData.receiptNumber,
-        clientName: receiptData.clientName,
-        amountReceived: receiptData.amountReceived,
-        amountSent: receiptData.amountSent,
-        currency: receiptData.currency,
-        date: new Date().toISOString(),
-        operationType: receiptData.operationType
-      })
+      // Utiliser les données QR Code sauvegardées ou générer à partir des données du reçu
+      const qrData = receipt.qr_code_data || {
+        receiptNumber: receipt.receipt_number,
+        clientName: receipt.client_name,
+        amountReceived: receipt.amount_received,
+        amountSent: receipt.amount_sent,
+        currency: receipt.currency,
+        date: receipt.created_at,
+        operationType: receipt.operation_type
+      }
 
-      const qrCodeDataURL = await QRCode.toDataURL(qrData, {
+      const qrCodeDataURL = await QRCode.toDataURL(JSON.stringify(qrData), {
         width: qrCodeSize,
         margin: 1,
         color: {
@@ -265,42 +253,8 @@ export async function POST(request: NextRequest) {
     doc.setFontSize(8)
     doc.setTextColor(100, 100, 100)
     doc.text("Ce reçu a été généré automatiquement par le système ZOLL TAX FOREX", pageWidth / 2, pageHeight - 20, { align: "center" })
-    doc.text(`Généré par: ${user.name} (${user.role})`, pageWidth / 2, pageHeight - 15, { align: "center" })
-    doc.text(`Date de génération: ${new Date().toLocaleString('fr-FR')}`, pageWidth / 2, pageHeight - 10, { align: "center" })
-
-    // Enregistrer le reçu en base de données
-    try {
-      const qrData = {
-        receiptNumber: receiptData.receiptNumber,
-        clientName: receiptData.clientName,
-        amountReceived: receiptData.amountReceived,
-        amountSent: receiptData.amountSent,
-        currency: receiptData.currency,
-        date: new Date().toISOString(),
-        operationType: receiptData.operationType
-      }
-
-      await createReceipt({
-        receipt_number: receiptData.receiptNumber,
-        client_name: receiptData.clientName,
-        client_phone: receiptData.clientPhone || undefined,
-        client_email: receiptData.clientEmail || undefined,
-        operation_type: receiptData.operationType,
-        amount_received: receiptData.amountReceived,
-        amount_sent: receiptData.amountSent,
-        commission: receiptData.commission,
-        commission_rate: receiptData.commissionRate,
-        currency: receiptData.currency,
-        notes: receiptData.notes || undefined,
-        qr_code_data: qrData,
-        created_by: user.id
-      })
-
-      console.log(`Reçu ${receiptData.receiptNumber} enregistré en base de données`)
-    } catch (dbError) {
-      console.error('Erreur lors de l\'enregistrement en base de données:', dbError)
-      // Continuer même en cas d'erreur de base de données
-    }
+    doc.text(`Généré par: ${receipt.created_by_name || 'Système'}`, pageWidth / 2, pageHeight - 15, { align: "center" })
+    doc.text(`Date de génération: ${new Date(receipt.created_at).toLocaleString('fr-FR')}`, pageWidth / 2, pageHeight - 10, { align: "center" })
 
     // Générer le PDF
     const pdfBuffer = doc.output('arraybuffer')
@@ -308,7 +262,7 @@ export async function POST(request: NextRequest) {
     return new NextResponse(pdfBuffer, {
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="receipt_${receiptData.receiptNumber}.pdf"`,
+        'Content-Disposition': `attachment; filename="receipt_${receipt.receipt_number}.pdf"`,
       },
     })
 

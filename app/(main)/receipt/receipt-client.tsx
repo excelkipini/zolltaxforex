@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -8,7 +8,9 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { Separator } from "@/components/ui/separator"
-import { Receipt, Download, QrCode } from "lucide-react"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Badge } from "@/components/ui/badge"
+import { Receipt, Download, QrCode, History, Search, FileText } from "lucide-react"
 import { toast } from "sonner"
 
 interface ReceiptData {
@@ -23,6 +25,23 @@ interface ReceiptData {
   currency: string
   notes: string
   receiptNumber: string
+}
+
+interface ReceiptHistoryItem {
+  id: string
+  receipt_number: string
+  client_name: string
+  client_phone?: string
+  client_email?: string
+  operation_type: string
+  amount_received: number
+  amount_sent: number
+  commission: number
+  commission_rate: number
+  currency: string
+  notes?: string
+  created_by_name?: string
+  created_at: string
 }
 
 export default function ReceiptClient() {
@@ -41,6 +60,10 @@ export default function ReceiptClient() {
   })
 
   const [isGenerating, setIsGenerating] = useState(false)
+  const [showHistory, setShowHistory] = useState(false)
+  const [receiptHistory, setReceiptHistory] = useState<ReceiptHistoryItem[]>([])
+  const [searchQuery, setSearchQuery] = useState("")
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false)
 
   // Générer un numéro de reçu automatique
   const generateReceiptNumber = () => {
@@ -68,6 +91,59 @@ export default function ReceiptClient() {
     calculateAmounts(amount)
   }
 
+  // Charger l'historique des reçus
+  const loadReceiptHistory = async () => {
+    setIsLoadingHistory(true)
+    try {
+      const response = await fetch(`/api/receipts?search=${encodeURIComponent(searchQuery)}`)
+      const data = await response.json()
+      
+      if (data.ok) {
+        setReceiptHistory(data.receipts)
+      } else {
+        toast.error("Erreur lors du chargement de l'historique")
+      }
+    } catch (error) {
+      console.error('Erreur:', error)
+      toast.error("Erreur lors du chargement de l'historique")
+    } finally {
+      setIsLoadingHistory(false)
+    }
+  }
+
+  // Télécharger un reçu PDF
+  const downloadReceiptPDF = async (receiptId: string, receiptNumber: string) => {
+    try {
+      const response = await fetch(`/api/receipts/${receiptId}/download`)
+      
+      if (!response.ok) {
+        throw new Error('Erreur lors du téléchargement')
+      }
+
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `receipt_${receiptNumber}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+
+      toast.success("Reçu téléchargé avec succès")
+    } catch (error) {
+      console.error('Erreur:', error)
+      toast.error("Erreur lors du téléchargement du reçu")
+    }
+  }
+
+  // Charger l'historique au montage du composant
+  useEffect(() => {
+    if (showHistory) {
+      loadReceiptHistory()
+    }
+  }, [showHistory, searchQuery])
+
   const handleGenerateReceipt = async () => {
     if (!receiptData.clientName || !receiptData.operationType || !receiptData.amountReceived) {
       toast.error("Veuillez remplir tous les champs obligatoires")
@@ -79,7 +155,7 @@ export default function ReceiptClient() {
     try {
       const finalReceiptData = {
         ...receiptData,
-        receiptNumber: receiptData.receiptNumber || generateReceiptNumber()
+        receiptNumber: generateReceiptNumber()
       }
 
       const response = await fetch('/api/receipt/generate', {
@@ -106,6 +182,11 @@ export default function ReceiptClient() {
 
       toast.success("Reçu généré avec succès")
       
+      // Recharger l'historique si affiché
+      if (showHistory) {
+        loadReceiptHistory()
+      }
+      
       // Réinitialiser le formulaire
       setReceiptData({
         clientName: "",
@@ -130,9 +211,19 @@ export default function ReceiptClient() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center space-x-2">
-        <Receipt className="h-6 w-6" />
-        <h1 className="text-2xl font-bold">Emettre un reçu</h1>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center space-x-2">
+          <Receipt className="h-6 w-6" />
+          <h1 className="text-2xl font-bold">Emettre un reçu</h1>
+        </div>
+        <Button
+          variant="outline"
+          onClick={() => setShowHistory(!showHistory)}
+          className="flex items-center space-x-2"
+        >
+          <History className="h-4 w-4" />
+          <span>{showHistory ? "Masquer l'historique" : "Historique des reçus"}</span>
+        </Button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -202,17 +293,36 @@ export default function ReceiptClient() {
             </div>
 
             {/* Montants */}
-            <div className="space-y-2">
-              <Label htmlFor="amountReceived">Montant reçu ({receiptData.currency}) *</Label>
-              <Input
-                id="amountReceived"
-                type="number"
-                value={receiptData.amountReceived || ""}
-                onChange={(e) => handleAmountReceivedChange(e.target.value)}
-                placeholder="0"
-                min="0"
-                step="0.01"
-              />
+            <div className="grid grid-cols-3 gap-4">
+              <div className="col-span-2 space-y-2">
+                <Label htmlFor="amountReceived">Montant reçu *</Label>
+                <Input
+                  id="amountReceived"
+                  type="number"
+                  value={receiptData.amountReceived || ""}
+                  onChange={(e) => handleAmountReceivedChange(e.target.value)}
+                  placeholder="0"
+                  min="0"
+                  step="0.01"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="currency">Devise</Label>
+                <Select
+                  value={receiptData.currency}
+                  onValueChange={(value) => setReceiptData(prev => ({ ...prev, currency: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="XAF">XAF</SelectItem>
+                    <SelectItem value="USD">USD</SelectItem>
+                    <SelectItem value="EUR">EUR</SelectItem>
+                    <SelectItem value="GBP">GBP</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -238,35 +348,6 @@ export default function ReceiptClient() {
 
             <Separator />
 
-            {/* Devise */}
-            <div className="space-y-2">
-              <Label htmlFor="currency">Devise</Label>
-              <Select
-                value={receiptData.currency}
-                onValueChange={(value) => setReceiptData(prev => ({ ...prev, currency: value }))}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="XAF">XAF (Franc CFA)</SelectItem>
-                  <SelectItem value="USD">USD (Dollar américain)</SelectItem>
-                  <SelectItem value="EUR">EUR (Euro)</SelectItem>
-                  <SelectItem value="GBP">GBP (Livre sterling)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Numéro de reçu */}
-            <div className="space-y-2">
-              <Label htmlFor="receiptNumber">Numéro de reçu</Label>
-              <Input
-                id="receiptNumber"
-                value={receiptData.receiptNumber}
-                onChange={(e) => setReceiptData(prev => ({ ...prev, receiptNumber: e.target.value }))}
-                placeholder="Laissé vide pour génération automatique"
-              />
-            </div>
 
             {/* Notes */}
             <div className="space-y-2">
@@ -318,7 +399,7 @@ export default function ReceiptClient() {
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
                   <span>Numéro:</span>
-                  <span className="font-mono">{receiptData.receiptNumber || "RC------"}</span>
+                  <span className="font-mono">{receiptData.receiptNumber || generateReceiptNumber()}</span>
                 </div>
                 <div className="flex justify-between">
                   <span>Date:</span>
@@ -411,6 +492,133 @@ export default function ReceiptClient() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Historique des reçus */}
+      {showHistory && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center space-x-2">
+              <History className="h-5 w-5" />
+              <span>Historique des reçus</span>
+            </CardTitle>
+            <CardDescription>
+              Liste de tous les reçus générés
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {/* Barre de recherche */}
+            <div className="flex items-center space-x-2 mb-4">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input
+                  placeholder="Rechercher par numéro, client, téléphone..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+              <Button
+                onClick={loadReceiptHistory}
+                disabled={isLoadingHistory}
+                variant="outline"
+              >
+                {isLoadingHistory ? "Chargement..." : "Rechercher"}
+              </Button>
+            </div>
+
+            {/* Tableau des reçus */}
+            <div className="border rounded-lg">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Numéro</TableHead>
+                    <TableHead>Client</TableHead>
+                    <TableHead>Opération</TableHead>
+                    <TableHead>Montant reçu</TableHead>
+                    <TableHead>Commission</TableHead>
+                    <TableHead>Montant envoyé</TableHead>
+                    <TableHead>Créé par</TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {isLoadingHistory ? (
+                    <TableRow>
+                      <TableCell colSpan={9} className="text-center py-8">
+                        <div className="flex items-center justify-center space-x-2">
+                          <QrCode className="h-4 w-4 animate-spin" />
+                          <span>Chargement...</span>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ) : receiptHistory.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={9} className="text-center py-8 text-gray-500">
+                        Aucun reçu trouvé
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    receiptHistory.map((receipt) => (
+                      <TableRow key={receipt.id}>
+                        <TableCell className="font-mono text-sm">
+                          {receipt.receipt_number}
+                        </TableCell>
+                        <TableCell>
+                          <div>
+                            <div className="font-medium">{receipt.client_name}</div>
+                            {receipt.client_phone && (
+                              <div className="text-sm text-gray-500">{receipt.client_phone}</div>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline">
+                            {receipt.operation_type === "transfer" && "Transfert"}
+                            {receipt.operation_type === "exchange" && "Bureau de change"}
+                            {receipt.operation_type === "card_recharge" && "Recharge carte"}
+                            {receipt.operation_type === "cash_deposit" && "Dépôt espèces"}
+                            {receipt.operation_type === "cash_withdrawal" && "Retrait espèces"}
+                            {receipt.operation_type === "other" && "Autre"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {receipt.amount_received.toLocaleString('fr-FR')} {receipt.currency}
+                        </TableCell>
+                        <TableCell className="text-right text-red-600">
+                          -{receipt.commission.toLocaleString('fr-FR')} {receipt.currency}
+                        </TableCell>
+                        <TableCell className="text-right font-medium">
+                          {receipt.amount_sent.toLocaleString('fr-FR')} {receipt.currency}
+                        </TableCell>
+                        <TableCell>
+                          {receipt.created_by_name || "Système"}
+                        </TableCell>
+                        <TableCell className="text-sm text-gray-500">
+                          {new Date(receipt.created_at).toLocaleDateString('fr-FR')}
+                          <br />
+                          {new Date(receipt.created_at).toLocaleTimeString('fr-FR')}
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => downloadReceiptPDF(receipt.id, receipt.receipt_number)}
+                            className="flex items-center space-x-1"
+                          >
+                            <FileText className="h-3 w-3" />
+                            <span>PDF</span>
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }
