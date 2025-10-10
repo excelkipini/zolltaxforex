@@ -112,7 +112,6 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "edit_users",
     "view_agencies",
     "view_transactions",
-    "view_cards",
     "view_rates",
     "view_expenses",
     "edit_expenses",
@@ -144,9 +143,6 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "view_transfer",
     "create_transfer",
     "edit_transfer",
-    "view_cards",
-    "create_cards",
-    "edit_cards",
     "view_exchange",
     "create_exchange",
     "edit_exchange",
@@ -158,7 +154,6 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "view_users", // Consultation seule - pas de create/edit/delete
     "view_transactions",
     "edit_transactions", // Pour valider/rejeter les transactions
-    "view_cards",
     "view_rates", // Consultation seule - pas d'edit
     "view_expenses",
     "view_reports",
