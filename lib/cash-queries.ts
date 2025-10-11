@@ -213,6 +213,68 @@ export async function deductExpenseFromCoffre(
   `
 }
 
+// Déduire une dépense du compte commissions des reçus
+export async function deductExpenseFromReceiptCommissions(
+  expenseId: string,
+  amount: number,
+  description: string,
+  updatedBy: string
+): Promise<void> {
+  // Récupérer le solde actuel des commissions des reçus
+  const receiptCommissionAccount = await sql<CashAccount[]>`
+    SELECT 
+      id::text,
+      account_type,
+      account_name,
+      current_balance::bigint as current_balance,
+      last_updated::text as last_updated,
+      updated_by,
+      created_at::text as created_at
+    FROM cash_accounts 
+    WHERE account_type = 'receipt_commissions'
+  `
+
+  if (receiptCommissionAccount.length === 0) {
+    throw new Error("Compte commissions des reçus non trouvé")
+  }
+
+  const currentBalance = Number(receiptCommissionAccount[0].current_balance)
+  const newBalance = Math.max(0, currentBalance - Number(amount)) // Éviter les soldes négatifs
+
+  // Mettre à jour le solde des commissions des reçus
+  await sql`
+    UPDATE cash_accounts 
+    SET 
+      current_balance = ${newBalance},
+      last_updated = NOW(),
+      updated_by = ${updatedBy}
+    WHERE account_type = 'receipt_commissions'
+  `
+
+  // Enregistrer la transaction de dépense
+  await sql`
+    INSERT INTO cash_transactions (
+      account_type, 
+      transaction_type, 
+      amount, 
+      description, 
+      reference_id,
+      created_by
+    )
+    VALUES (
+      'receipt_commissions', 
+      'expense', 
+      ${Math.round(amount)}, 
+      ${description}, 
+      ${expenseId},
+      ${updatedBy}
+    )
+  `
+
+  // Réconcilier le solde du compte commissions des reçus
+  await reconcileReceiptCommissionsBalance(updatedBy)
+}
+
 // Ajouter des commissions au compte commissions (pour les transferts)
 export async function addCommissionToAccount(
   transactionId: string,
@@ -482,13 +544,18 @@ export async function getTotalCommissions(): Promise<number> {
   return result[0]?.total || 0
 }
 
-// Calculer le total des commissions des reçus
+// Calculer le total des commissions des reçus (commissions + dépenses)
 export async function getTotalReceiptCommissions(): Promise<number> {
   const result = await sql<{ total: number }[]>`
-    SELECT COALESCE(SUM(amount), 0) as total
+    SELECT COALESCE(SUM(
+      CASE 
+        WHEN transaction_type = 'commission' THEN amount
+        WHEN transaction_type = 'expense' THEN -amount
+        ELSE 0
+      END
+    ), 0) as total
     FROM cash_transactions
-    WHERE transaction_type = 'commission' 
-    AND account_type = 'receipt_commissions'
+    WHERE account_type = 'receipt_commissions'
   `
   
   return result[0]?.total || 0
