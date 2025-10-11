@@ -53,7 +53,7 @@ export default function ReceiptClient() {
     amountReceived: 0,
     amountSent: 0,
     commission: 0,
-    commissionRate: 3.6,
+    commissionRate: 3.775,
     currency: "XAF",
     notes: "",
     receiptNumber: ""
@@ -75,7 +75,7 @@ export default function ReceiptClient() {
 
   // Calculer automatiquement les montants
   const calculateAmounts = (received: number) => {
-    const commission = (received * receiptData.commissionRate) / 100
+    const commission = Math.ceil((received * receiptData.commissionRate) / 100)
     const sent = received - commission
     
     setReceiptData(prev => ({
@@ -196,7 +196,7 @@ export default function ReceiptClient() {
         amountReceived: 0,
         amountSent: 0,
         commission: 0,
-        commissionRate: 3.6,
+        commissionRate: 3.775,
         currency: "XAF",
         notes: "",
         receiptNumber: ""
