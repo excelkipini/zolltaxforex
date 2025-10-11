@@ -2,7 +2,7 @@ import { sql } from "./db"
 
 export type CashAccount = {
   id: string
-  account_type: "uba" | "ecobank" | "coffre" | "commissions"
+  account_type: "uba" | "ecobank" | "coffre" | "commissions" | "receipt_commissions"
   account_name: string
   current_balance: number
   last_updated: string
@@ -12,7 +12,7 @@ export type CashAccount = {
 
 export type CashTransaction = {
   id: string
-  account_type: "uba" | "ecobank" | "coffre" | "commissions"
+  account_type: "uba" | "ecobank" | "coffre" | "commissions" | "receipt_commissions"
   transaction_type: "deposit" | "withdrawal" | "transfer" | "expense" | "commission"
   amount: number
   description: string
@@ -28,7 +28,7 @@ export async function initializeCashAccounts(): Promise<void> {
     await sql`
       CREATE TABLE IF NOT EXISTS cash_accounts (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        account_type TEXT NOT NULL CHECK (account_type IN ('uba', 'ecobank', 'coffre', 'commissions')),
+        account_type TEXT NOT NULL CHECK (account_type IN ('uba', 'ecobank', 'coffre', 'commissions', 'receipt_commissions')),
         account_name TEXT NOT NULL,
         current_balance BIGINT NOT NULL DEFAULT 0,
         last_updated TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -41,7 +41,7 @@ export async function initializeCashAccounts(): Promise<void> {
     await sql`
       CREATE TABLE IF NOT EXISTS cash_transactions (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        account_type TEXT NOT NULL CHECK (account_type IN ('uba', 'ecobank', 'coffre', 'commissions')),
+        account_type TEXT NOT NULL CHECK (account_type IN ('uba', 'ecobank', 'coffre', 'commissions', 'receipt_commissions')),
         transaction_type TEXT NOT NULL CHECK (transaction_type IN ('deposit', 'withdrawal', 'transfer', 'expense', 'commission')),
         amount BIGINT NOT NULL,
         description TEXT NOT NULL,
@@ -56,7 +56,8 @@ export async function initializeCashAccounts(): Promise<void> {
       { account_type: "uba", account_name: "Compte UBA" },
       { account_type: "ecobank", account_name: "Compte Ecobank" },
       { account_type: "coffre", account_name: "Coffre" },
-      { account_type: "commissions", account_name: "Commissions Transferts" }
+      { account_type: "commissions", account_name: "Commissions Transferts" },
+      { account_type: "receipt_commissions", account_name: "Commissions Reçus" }
     ]
 
     for (const account of defaultAccounts) {
@@ -101,6 +102,11 @@ export async function updateCashAccountBalance(
   updatedBy: string,
   description: string
 ): Promise<CashAccount> {
+  // Empêcher la modification manuelle des comptes de commissions
+  if (accountType === 'commissions' || accountType === 'receipt_commissions') {
+    throw new Error("Le solde des commissions ne peut pas être modifié manuellement. Il est calculé automatiquement à partir des transactions.")
+  }
+
   // Mettre à jour le solde du compte
   const updatedAccount = await sql<CashAccount[]>`
     UPDATE cash_accounts 
@@ -207,7 +213,7 @@ export async function deductExpenseFromCoffre(
   `
 }
 
-// Ajouter des commissions au compte commissions
+// Ajouter des commissions au compte commissions (pour les transferts)
 export async function addCommissionToAccount(
   transactionId: string,
   commissionAmount: number,
@@ -258,9 +264,68 @@ export async function addCommissionToAccount(
     VALUES (
       'commissions', 
       'commission', 
-      ${commissionAmount}, 
+      ${Math.round(commissionAmount)}, 
       ${description}, 
       ${transactionId},
+      ${updatedBy}
+    )
+  `
+}
+
+// Ajouter des commissions au compte commissions des reçus
+export async function addReceiptCommissionToAccount(
+  receiptId: string,
+  commissionAmount: number,
+  description: string,
+  updatedBy: string
+): Promise<void> {
+  // Récupérer le solde actuel des commissions des reçus
+  const receiptCommissionAccount = await sql<CashAccount[]>`
+    SELECT 
+      id::text,
+      account_type,
+      account_name,
+      current_balance::bigint as current_balance,
+      last_updated::text as last_updated,
+      updated_by,
+      created_at::text as created_at
+    FROM cash_accounts 
+    WHERE account_type = 'receipt_commissions'
+  `
+
+  if (receiptCommissionAccount.length === 0) {
+    throw new Error("Compte commissions des reçus non trouvé")
+  }
+
+  const currentBalance = Number(receiptCommissionAccount[0].current_balance)
+  const newBalance = Number(currentBalance) + Number(commissionAmount)
+
+  // Mettre à jour le solde des commissions des reçus
+  await sql`
+    UPDATE cash_accounts 
+    SET 
+      current_balance = ${newBalance},
+      last_updated = NOW(),
+      updated_by = ${updatedBy}
+    WHERE account_type = 'receipt_commissions'
+  `
+
+  // Enregistrer la transaction de commission des reçus
+  await sql`
+    INSERT INTO cash_transactions (
+      account_type, 
+      transaction_type, 
+      amount, 
+      description, 
+      reference_id,
+      created_by
+    )
+    VALUES (
+      'receipt_commissions', 
+      'commission', 
+      ${Math.round(commissionAmount)}, 
+      ${description}, 
+      ${receiptId},
       ${updatedBy}
     )
   `
@@ -333,6 +398,7 @@ export async function syncExistingCommissions(): Promise<{ totalAdded: number; t
       const existingCommission = await sql`
         SELECT id FROM cash_transactions 
         WHERE transaction_type = 'commission' 
+        AND account_type = 'commissions'
         AND reference_id = ${transaction.id}
       `
 
@@ -344,7 +410,7 @@ export async function syncExistingCommissions(): Promise<{ totalAdded: number; t
           `Commission transfert (sync): ${transaction.description}`,
           'system'
         )
-        totalAdded += transaction.commission_amount
+        totalAdded += Number(transaction.commission_amount)
         transactionsProcessed++
       }
     }
@@ -356,12 +422,73 @@ export async function syncExistingCommissions(): Promise<{ totalAdded: number; t
   }
 }
 
-// Calculer le total des commissions générées
+// Synchroniser les commissions des reçus existants avec le compte commissions des reçus
+export async function syncExistingReceiptCommissions(): Promise<{ totalAdded: number; receiptsProcessed: number }> {
+  try {
+    // Récupérer tous les reçus avec des commissions >= 5000 XAF
+    const receipts = await sql`
+      SELECT 
+        id,
+        receipt_number,
+        client_name,
+        operation_type,
+        commission,
+        created_by
+      FROM receipts 
+      WHERE commission >= 5000
+    `
+
+    let totalAdded = 0
+    let receiptsProcessed = 0
+
+    // Pour chaque reçu, vérifier si sa commission a déjà été ajoutée au compte commissions des reçus
+    for (const receipt of receipts) {
+      const existingCommission = await sql`
+        SELECT id FROM cash_transactions 
+        WHERE transaction_type = 'commission' 
+        AND account_type = 'receipt_commissions'
+        AND reference_id = ${receipt.id}
+      `
+
+      // Si la commission n'a pas encore été ajoutée, l'ajouter
+      if (existingCommission.length === 0) {
+        await addReceiptCommissionToAccount(
+          receipt.id,
+          receipt.commission,
+          `Commission reçu (sync): ${receipt.operation_type} - ${receipt.client_name}`,
+          'system'
+        )
+        totalAdded += Number(receipt.commission)
+        receiptsProcessed++
+      }
+    }
+
+    return { totalAdded, receiptsProcessed }
+  } catch (error) {
+    console.error('Erreur lors de la synchronisation des commissions des reçus:', error)
+    throw error
+  }
+}
+
+// Calculer le total des commissions générées (transferts uniquement)
 export async function getTotalCommissions(): Promise<number> {
   const result = await sql<{ total: number }[]>`
     SELECT COALESCE(SUM(amount), 0) as total
     FROM cash_transactions
-    WHERE transaction_type = 'commission'
+    WHERE transaction_type = 'commission' 
+    AND account_type = 'commissions'
+  `
+  
+  return result[0]?.total || 0
+}
+
+// Calculer le total des commissions des reçus
+export async function getTotalReceiptCommissions(): Promise<number> {
+  const result = await sql<{ total: number }[]>`
+    SELECT COALESCE(SUM(amount), 0) as total
+    FROM cash_transactions
+    WHERE transaction_type = 'commission' 
+    AND account_type = 'receipt_commissions'
   `
   
   return result[0]?.total || 0
@@ -369,7 +496,7 @@ export async function getTotalCommissions(): Promise<number> {
 
 // Réconcilier le solde du compte commissions avec la somme réelle des transactions de commission
 export async function reconcileCommissionsBalance(updatedBy: string = 'system'): Promise<number> {
-  // Calculer la somme réelle des transactions de type commission
+  // Calculer la somme réelle des transactions de type commission (transferts uniquement)
   const total = await getTotalCommissions()
 
   // Mettre à jour le solde du compte commissions pour refléter exactement cette somme
@@ -380,6 +507,24 @@ export async function reconcileCommissionsBalance(updatedBy: string = 'system'):
       last_updated = NOW(),
       updated_by = ${updatedBy}
     WHERE account_type = 'commissions'
+  `
+
+  return total
+}
+
+// Réconcilier le solde du compte commissions des reçus
+export async function reconcileReceiptCommissionsBalance(updatedBy: string = 'system'): Promise<number> {
+  // Calculer la somme réelle des transactions de type commission des reçus
+  const total = await getTotalReceiptCommissions()
+
+  // Mettre à jour le solde du compte commissions des reçus pour refléter exactement cette somme
+  await sql`
+    UPDATE cash_accounts 
+    SET 
+      current_balance = ${total},
+      last_updated = NOW(),
+      updated_by = ${updatedBy}
+    WHERE account_type = 'receipt_commissions'
   `
 
   return total

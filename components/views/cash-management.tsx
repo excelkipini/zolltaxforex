@@ -23,7 +23,7 @@ import { useToast } from "@/hooks/use-toast"
 
 type CashAccount = {
   id: string
-  account_type: "uba" | "ecobank" | "coffre" | "commissions"
+  account_type: "uba" | "ecobank" | "coffre" | "commissions" | "receipt_commissions"
   account_name: string
   current_balance: number
   last_updated: string
@@ -33,7 +33,7 @@ type CashAccount = {
 
 type CashTransaction = {
   id: string
-  account_type: "uba" | "ecobank" | "coffre" | "commissions"
+  account_type: "uba" | "ecobank" | "coffre" | "commissions" | "receipt_commissions"
   transaction_type: "deposit" | "withdrawal" | "transfer" | "expense" | "commission"
   amount: number
   description: string
@@ -56,6 +56,7 @@ export function CashManagement({ user }: CashManagementProps) {
   const [updateDescription, setUpdateDescription] = React.useState("")
   const [updating, setUpdating] = React.useState(false)
   const [syncing, setSyncing] = React.useState(false)
+  const [syncingReceipts, setSyncingReceipts] = React.useState(false)
   const { toast } = useToast()
 
   // Synchroniser les commissions existantes
@@ -86,6 +87,37 @@ export function CashManagement({ user }: CashManagementProps) {
       })
     } finally {
       setSyncing(false)
+    }
+  }
+
+  // Synchroniser les commissions des reçus existants
+  const handleSyncReceiptCommissions = async () => {
+    try {
+      setSyncingReceipts(true)
+
+      const response = await fetch('/api/cash?action=sync-receipt-commissions')
+      const result = await response.json()
+
+      if (result.success) {
+        toast({
+          title: "Synchronisation réussie",
+          description: result.message,
+        })
+        
+        // Recharger les données pour voir les mises à jour
+        await loadCashData()
+      } else {
+        throw new Error(result.error)
+      }
+
+    } catch (error: any) {
+      toast({
+        title: "Erreur",
+        description: `Erreur lors de la synchronisation des commissions des reçus: ${error.message}`,
+        variant: "destructive"
+      })
+    } finally {
+      setSyncingReceipts(false)
     }
   }
 
@@ -151,6 +183,8 @@ export function CashManagement({ user }: CashManagementProps) {
         return <PiggyBank className="h-5 w-5" />
       case 'commissions':
         return <TrendingUp className="h-5 w-5" />
+      case 'receipt_commissions':
+        return <TrendingUp className="h-5 w-5" />
       default:
         return <Wallet className="h-5 w-5" />
     }
@@ -167,6 +201,8 @@ export function CashManagement({ user }: CashManagementProps) {
         return "text-orange-600"
       case 'commissions':
         return "text-purple-600"
+      case 'receipt_commissions':
+        return "text-indigo-600"
       default:
         return "text-gray-600"
     }
@@ -188,6 +224,17 @@ export function CashManagement({ user }: CashManagementProps) {
       default:
         return <Badge variant="secondary">{transactionType}</Badge>
     }
+  }
+
+  // Traduire les types d'opération dans les descriptions
+  const translateOperationType = (description: string) => {
+    return description
+      .replace(/cash_deposit/g, 'Dépôt espèces')
+      .replace(/transfer/g, 'Transfert')
+      .replace(/exchange/g, 'Bureau de change')
+      .replace(/card_recharge/g, 'Recharge de carte')
+      .replace(/cash_withdrawal/g, 'Retrait espèces')
+      .replace(/other/g, 'Autre')
   }
 
   // Ouvrir le dialog de mise à jour
@@ -316,6 +363,10 @@ export function CashManagement({ user }: CashManagementProps) {
             <RefreshCw className={`h-4 w-4 mr-2 ${syncing ? 'animate-spin' : ''}`} />
             {syncing ? 'Synchronisation...' : 'Synchroniser commissions'}
           </Button>
+          <Button onClick={handleSyncReceiptCommissions} variant="outline" disabled={syncingReceipts}>
+            <RefreshCw className={`h-4 w-4 mr-2 ${syncingReceipts ? 'animate-spin' : ''}`} />
+            {syncingReceipts ? 'Synchronisation...' : 'Synchroniser commissions reçus'}
+          </Button>
           <Button onClick={loadCashData} variant="outline">
             <RefreshCw className="h-4 w-4 mr-2" />
             Actualiser
@@ -324,7 +375,7 @@ export function CashManagement({ user }: CashManagementProps) {
       </div>
 
       {/* Statistiques des comptes */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-5 gap-4">
         {accounts.map((account) => (
           <Card key={account.id}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -339,14 +390,16 @@ export function CashManagement({ user }: CashManagementProps) {
                 <p className="text-xs text-muted-foreground">
                   Mis à jour: {formatDate(account.last_updated)}
                 </p>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => handleUpdateBalance(account)}
-                  className="h-6 px-2"
-                >
-                  <Edit className="h-3 w-3" />
-                </Button>
+                {account.account_type !== 'commissions' && account.account_type !== 'receipt_commissions' && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleUpdateBalance(account)}
+                    className="h-6 px-2"
+                  >
+                    <Edit className="h-3 w-3" />
+                  </Button>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -386,7 +439,12 @@ export function CashManagement({ user }: CashManagementProps) {
               </div>
               <div className="p-3 bg-purple-50 rounded-lg border border-purple-200">
                 <p className="text-sm text-purple-800">
-                  <strong>Commissions :</strong> Commissions générées par les transferts d'argent (≥ 5000 XAF)
+                  <strong>Commissions Transferts :</strong> Commissions générées par les transferts d'argent (≥ 5000 XAF)
+                </p>
+              </div>
+              <div className="p-3 bg-indigo-50 rounded-lg border border-indigo-200">
+                <p className="text-sm text-indigo-800">
+                  <strong>Commissions Reçus :</strong> Commissions générées par l'émission de reçus (≥ 5000 XAF)
                 </p>
               </div>
             </CardContent>
@@ -439,7 +497,7 @@ export function CashManagement({ user }: CashManagementProps) {
                         {formatAmount(Math.abs(transaction.amount))}
                       </TableCell>
                       <TableCell className="text-sm">
-                        {transaction.description}
+                        {translateOperationType(transaction.description)}
                       </TableCell>
                       <TableCell className="text-sm">
                         {transaction.created_by}

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { requireAuth } from "@/lib/auth"
 import { createReceipt } from "@/lib/receipts-queries"
+import { addReceiptCommissionToAccount } from "@/lib/cash-queries"
 import jsPDF from "jspdf"
 import QRCode from "qrcode"
 
@@ -268,7 +269,7 @@ export async function POST(request: NextRequest) {
     doc.text(`Généré par: ${user.name} (${user.role})`, pageWidth / 2, pageHeight - 15, { align: "center" })
     doc.text(`Date de génération: ${new Date().toLocaleString('fr-FR')}`, pageWidth / 2, pageHeight - 10, { align: "center" })
 
-    // Enregistrer le reçu en base de données
+    // Enregistrer le reçu en base de données et ajouter la commission
     try {
       const qrData = {
         receiptNumber: receiptData.receiptNumber,
@@ -280,7 +281,8 @@ export async function POST(request: NextRequest) {
         operationType: receiptData.operationType
       }
 
-      await createReceipt({
+      // Créer le reçu en base de données
+      const savedReceipt = await createReceipt({
         receipt_number: receiptData.receiptNumber,
         client_name: receiptData.clientName,
         client_phone: receiptData.clientPhone || undefined,
@@ -297,6 +299,25 @@ export async function POST(request: NextRequest) {
       })
 
       console.log(`Reçu ${receiptData.receiptNumber} enregistré en base de données`)
+
+      // Ajouter la commission au compte des commissions des reçus si le montant est >= 5000 XAF
+      if (receiptData.commission >= 5000) {
+        try {
+          await addReceiptCommissionToAccount(
+            savedReceipt.id, // Utiliser l'ID du reçu comme référence
+            receiptData.commission,
+            `Commission reçu: ${receiptData.operationType} - ${receiptData.clientName}`,
+            user.name
+          )
+          console.log(`Commission de ${receiptData.commission} XAF ajoutée au compte commissions des reçus`)
+        } catch (commissionError) {
+          console.error('Erreur lors de l\'ajout de la commission des reçus:', commissionError)
+          // Continuer même en cas d'erreur de commission
+        }
+      } else {
+        console.log(`Commission de ${receiptData.commission} XAF < 5000 XAF, non ajoutée au compte commissions des reçus`)
+      }
+
     } catch (dbError) {
       console.error('Erreur lors de l\'enregistrement en base de données:', dbError)
       // Continuer même en cas d'erreur de base de données
