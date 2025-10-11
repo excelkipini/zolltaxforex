@@ -78,6 +78,13 @@ export function RoleBasedSidebar({ user }: RoleBasedSidebarProps) {
       primary: user.role === "director" || user.role === "accounting",
     },
     {
+      title: "Emettre un reçu",
+      href: "/receipt",
+      icon: Receipt,
+      permission: "view_receipts" as const,
+      primary: user.role === "cashier" || user.role === "accounting",
+    },
+    {
       title: "Caisse",
       href: "/cash",
       icon: Wallet,
@@ -90,13 +97,6 @@ export function RoleBasedSidebar({ user }: RoleBasedSidebarProps) {
       icon: FileText,
       permission: "view_reports" as const,
       primary: user.role === "accounting" || user.role === "director" || user.role === "delegate",
-    },
-    {
-      title: "Emettre un reçu",
-      href: "/receipt",
-      icon: Receipt,
-      permission: "view_receipts" as const,
-      primary: user.role === "cashier" || user.role === "accounting",
     },
   ]
 
