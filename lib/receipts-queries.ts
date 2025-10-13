@@ -21,6 +21,9 @@ export interface ReceiptData {
   created_at: string
   updated_at: string
   created_by_name?: string
+  card_fees?: number
+  number_of_cards?: number
+  real_commission?: number
 }
 
 export interface CreateReceiptData {
@@ -37,6 +40,9 @@ export interface CreateReceiptData {
   notes?: string
   qr_code_data?: any
   created_by: string
+  card_fees?: number
+  number_of_cards?: number
+  real_commission?: number
 }
 
 export async function createReceipt(data: CreateReceiptData): Promise<ReceiptData> {
@@ -44,11 +50,13 @@ export async function createReceipt(data: CreateReceiptData): Promise<ReceiptDat
     INSERT INTO receipts (
       receipt_number, client_name, client_phone, client_email, 
       operation_type, amount_received, amount_sent, commission, 
-      commission_rate, currency, notes, qr_code_data, created_by
+      commission_rate, currency, notes, qr_code_data, created_by,
+      card_fees, number_of_cards, real_commission
     ) VALUES (
       ${data.receipt_number}, ${data.client_name}, ${data.client_phone}, ${data.client_email},
       ${data.operation_type}, ${data.amount_received}, ${data.amount_sent}, ${data.commission},
-      ${data.commission_rate}, ${data.currency}, ${data.notes}, ${data.qr_code_data}, ${data.created_by}
+      ${data.commission_rate}, ${data.currency}, ${data.notes}, ${data.qr_code_data}, ${data.created_by},
+      ${data.card_fees || 0}, ${data.number_of_cards || 0}, ${data.real_commission || 0}
     )
     RETURNING *
   `

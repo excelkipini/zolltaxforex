@@ -405,8 +405,8 @@ export async function updateTransactionRealAmount(
   let newStatus: Transaction["status"]
   let executorId: string | null = null
 
-  if (commissionAmount >= 5000) {
-    // Commission >= 5000 XAF : validation automatique et assignation à un exécuteur
+  if (commissionAmount >= 10000) {
+    // Commission >= 10000 XAF : validation automatique et assignation à un exécuteur
     newStatus = "validated"
     
     // Assigner un exécuteur disponible
@@ -418,7 +418,7 @@ export async function updateTransactionRealAmount(
     `
     executorId = executorRows[0]?.id || null
   } else {
-    // Commission < 5000 XAF : rejet automatique
+    // Commission < 10000 XAF : rejet automatique
     newStatus = "rejected"
   }
 

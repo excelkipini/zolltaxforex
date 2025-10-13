@@ -35,6 +35,14 @@ export async function GET(
     const textColor = [51, 51, 51] // Gris foncé
     const lightGray = [240, 240, 240]
 
+    // Fonction pour formater les montants avec points comme séparateurs de milliers
+    const formatCurrency = (amount: number): string => {
+      return new Intl.NumberFormat('fr-FR', {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0
+      }).format(amount).replace(/\s/g, '.')
+    }
+
     // En-tête
     doc.setFillColor(...primaryColor)
     doc.rect(0, 0, pageWidth, 30, 'F')
@@ -82,9 +90,53 @@ export async function GET(
     doc.text("Informations du client", 20, currentY)
     currentY += 8
 
-    doc.setFontSize(10)
+    doc.setFontSize(16)
     doc.setFont("helvetica", "normal")
     
+    // QR Code à droite des informations client
+    const qrCodeSize = 25 // Réduit de 50 à 25
+    const qrCodeX = pageWidth - 20 - qrCodeSize // Positionné à droite
+    const qrCodeY = currentY - 5 // Aligné avec le début des informations
+    
+    try {
+      // Générer le QR Code avec les informations du reçu
+      const qrData = JSON.stringify({
+        receiptNumber: receipt.receipt_number,
+        clientName: receipt.client_name,
+        amountReceived: receipt.amount_received,
+        amountSent: receipt.amount_sent,
+        cardFees: receipt.card_fees || 0,
+        numberOfCards: receipt.number_of_cards || 0,
+        totalAmountToCoffre: (receipt.amount_sent + (receipt.card_fees || 0)),
+        realCommission: receipt.real_commission || 0,
+        currency: receipt.currency,
+        date: receipt.created_at,
+        operationType: receipt.operation_type
+      })
+
+      const qrCodeDataURL = await QRCode.toDataURL(qrData, {
+        width: qrCodeSize,
+        margin: 1,
+        color: {
+          dark: '#000000',
+          light: '#FFFFFF'
+        }
+      })
+
+      // Ajouter le QR Code au PDF (à droite)
+      doc.addImage(qrCodeDataURL, 'PNG', qrCodeX, qrCodeY, qrCodeSize, qrCodeSize)
+      
+      // Texte sous le QR Code
+      doc.setFontSize(7)
+      doc.setTextColor(100, 100, 100)
+      doc.text("QR Code", qrCodeX + qrCodeSize / 2, qrCodeY + qrCodeSize + 6, { align: "center" })
+    } catch (error) {
+      console.error('Erreur lors de la génération du QR Code:', error)
+      // Continuer sans QR Code en cas d'erreur
+    }
+    
+    // Redéfinir la taille de police pour les informations client
+    doc.setFontSize(12)
     doc.setFont("helvetica", "bold")
     doc.text("Nom:", 20, currentY)
     doc.setFont("helvetica", "normal")
@@ -130,37 +182,32 @@ export async function GET(
     const operationTypes = {
       transfer: "Transfert d'argent",
       exchange: "Bureau de change",
-      card_recharge: "Recharge de carte",
-      cash_deposit: "Dépôt d'espèces",
-      cash_withdrawal: "Retrait d'espèces",
+      card_recharge: "Recharge carte",
+      cash_deposit: "Dépôt espèces",
+      cash_withdrawal: "Retrait espèces",
       other: "Autre"
     }
     
-    doc.text(operationTypes[receipt.operation_type as keyof typeof operationTypes] || "Non spécifié", 80, currentY)
+    doc.text(operationTypes[receipt.operation_type as keyof typeof operationTypes] || receipt.operation_type, 80, currentY)
     currentY += 6
 
-    // Notes dans la section Détails de l'opération
+    // Notes si présentes
     if (receipt.notes) {
-      currentY += 4
       doc.setFont("helvetica", "bold")
       doc.text("Notes:", 20, currentY)
-      currentY += 4
-      
       doc.setFont("helvetica", "normal")
-      // Diviser les notes en plusieurs lignes si nécessaire
-      const notesLines = doc.splitTextToSize(receipt.notes, pageWidth - 40)
-      doc.text(notesLines, 20, currentY)
-      currentY += notesLines.length * 5 + 4
+      doc.text(receipt.notes, 50, currentY)
+      currentY += 6
     }
 
-    currentY += 9
+    currentY += 10
 
     // Ligne de séparation
     doc.setDrawColor(200, 200, 200)
     doc.line(20, currentY, pageWidth - 20, currentY)
     currentY += 10
 
-    // Montants
+    // Détail des montants
     doc.setFont("helvetica", "bold")
     doc.setFontSize(12)
     doc.text("Détail des montants", 20, currentY)
@@ -168,15 +215,6 @@ export async function GET(
 
     doc.setFontSize(10)
     doc.setFont("helvetica", "normal")
-
-    // Fonction pour formater les nombres avec des points comme séparateurs de milliers
-    const formatCurrency = (amount: number) => {
-      return new Intl.NumberFormat('fr-FR', {
-        style: 'decimal',
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 2,
-      }).format(amount).replace(/\s/g, '.')
-    }
 
     // Montant reçu
     doc.setFont("helvetica", "bold")
@@ -205,46 +243,38 @@ export async function GET(
     doc.text("Montant envoyé:", 20, currentY)
     doc.text(`${formatCurrency(receipt.amount_sent)} ${receipt.currency}`, pageWidth - 50, currentY, { align: "right" })
 
-    currentY += 15
+    currentY += 20
 
-    // QR Code - Positionnement à 15px au-dessus du pied de page
-    const qrCodeSize = 50
-    const footerStartY = pageHeight - 30 // Pied de page commence à 30px du bas
-    const qrCodeY = footerStartY - 15 - qrCodeSize // 15px au-dessus du pied de page
-    const qrCodeX = (pageWidth - qrCodeSize) / 2 // Centré horizontalement
+    // Section des signatures
+    doc.setFont("helvetica", "bold")
+    doc.setFontSize(10)
+    doc.text("Signatures", 20, currentY)
+    currentY += 8
+
+    // Ligne de séparation pour les signatures
+    doc.setDrawColor(200, 200, 200)
+    doc.line(20, currentY, pageWidth - 20, currentY)
+    currentY += 10
+
+    // Signature du client (à gauche)
+    doc.setFont("helvetica", "normal")
+    doc.setFontSize(10)
+    doc.text("Client:", 20, currentY)
+    currentY += 12
     
-    try {
-      // Utiliser les données QR Code sauvegardées ou générer à partir des données du reçu
-      const qrData = receipt.qr_code_data || {
-        receiptNumber: receipt.receipt_number,
-        clientName: receipt.client_name,
-        amountReceived: receipt.amount_received,
-        amountSent: receipt.amount_sent,
-        currency: receipt.currency,
-        date: receipt.created_at,
-        operationType: receipt.operation_type
-      }
+    // Ligne de signature client
+    doc.setDrawColor(100, 100, 100)
+    doc.line(20, currentY, 120, currentY)
+    doc.text(`${receipt.client_name}`, 20, currentY + 8)
 
-      const qrCodeDataURL = await QRCode.toDataURL(JSON.stringify(qrData), {
-        width: qrCodeSize,
-        margin: 1,
-        color: {
-          dark: '#000000',
-          light: '#FFFFFF'
-        }
-      })
+    // Signature du comptable (à droite) - Aligné avec le client
+    doc.text("Comptable:", pageWidth - 60, currentY - 12, { align: "right" })
+    
+    // Ligne de signature comptable - Alignée avec la ligne du client
+    doc.line(pageWidth - 120, currentY, pageWidth - 20, currentY)
+    doc.text(`${receipt.created_by_name || "Système"}`, pageWidth - 60, currentY + 8, { align: "right" })
 
-      // Ajouter le QR Code au PDF (centré)
-      doc.addImage(qrCodeDataURL, 'PNG', qrCodeX, qrCodeY, qrCodeSize, qrCodeSize)
-      
-      // Texte sous le QR Code (centré)
-      doc.setFontSize(8)
-      doc.setTextColor(100, 100, 100)
-      doc.text("QR Code du reçu", pageWidth / 2, qrCodeY + qrCodeSize + 8, { align: "center" })
-    } catch (error) {
-      console.error('Erreur lors de la génération du QR Code:', error)
-      // Continuer sans QR Code en cas d'erreur
-    }
+    currentY += 15
 
     // Pied de page
     doc.setDrawColor(200, 200, 200)
@@ -253,24 +283,23 @@ export async function GET(
     doc.setFontSize(8)
     doc.setTextColor(100, 100, 100)
     doc.text("Ce reçu a été généré automatiquement par le système ZOLL TAX FOREX", pageWidth / 2, pageHeight - 20, { align: "center" })
-    doc.text(`Généré par: ${receipt.created_by_name || 'Système'}`, pageWidth / 2, pageHeight - 15, { align: "center" })
+    doc.text(`Généré par: ${receipt.created_by_name || "Système"}`, pageWidth / 2, pageHeight - 15, { align: "center" })
     doc.text(`Date de génération: ${new Date(receipt.created_at).toLocaleString('fr-FR')}`, pageWidth / 2, pageHeight - 10, { align: "center" })
 
-    // Générer le PDF
+    // Convertir en buffer
     const pdfBuffer = doc.output('arraybuffer')
-    
+
     return new NextResponse(pdfBuffer, {
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="receipt_${receipt.receipt_number}.pdf"`,
-      },
+        'Content-Disposition': `attachment; filename="receipt-${receipt.receipt_number}.pdf"`
+      }
     })
 
   } catch (error: any) {
-    console.error('Erreur lors de la génération du reçu:', error)
-    return NextResponse.json(
-      { error: error.message || "Erreur lors de la génération du reçu" },
-      { status: 500 }
-    )
+    console.error("Erreur lors du téléchargement du reçu:", error)
+    return NextResponse.json({ 
+      error: error.message || "Erreur interne du serveur" 
+    }, { status: 500 })
   }
 }

@@ -434,17 +434,20 @@ export function CashManagement({ user }: CashManagementProps) {
               </div>
               <div className="p-3 bg-orange-50 rounded-lg border border-orange-200">
                 <p className="text-sm text-orange-800">
-                  <strong>Coffre :</strong> Espèces disponibles. Les dépenses validées par le Directeur sont automatiquement déduites de ce solde.
+                  <strong>Coffre :</strong> Espèces disponibles pour les opérations courantes
                 </p>
               </div>
               <div className="p-3 bg-purple-50 rounded-lg border border-purple-200">
                 <p className="text-sm text-purple-800">
-                  <strong>Commissions Transferts :</strong> Commissions générées par les transferts d'argent (≥ 5000 XAF)
+                  <strong>Commissions Transferts :</strong> Commissions générées par les transferts d'argent (≥ 10000 XAF)
                 </p>
               </div>
               <div className="p-3 bg-indigo-50 rounded-lg border border-indigo-200">
                 <p className="text-sm text-indigo-800">
-                  <strong>Commissions Reçus :</strong> Commissions générées par l'émission de reçus (≥ 5000 XAF)
+                  <strong>Commissions Reçus :</strong> Commissions générées par l'émission de reçus
+                </p>
+                <p className="text-xs text-indigo-700 mt-1">
+                  Les dépenses validées par le Directeur sont automatiquement déduites du solde Commissions Reçus
                 </p>
               </div>
             </CardContent>

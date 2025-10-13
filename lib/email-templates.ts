@@ -617,7 +617,7 @@ export function generateTransferCreatedEmail(data: TransferEmailData): { subject
         <li>Accédez à la section "Opérations"</li>
         <li>Saisissez le montant réel envoyé en EUR</li>
         <li>Le système calculera automatiquement la commission</li>
-        <li>Validez ou rejetez selon le seuil de 5000 XAF</li>
+        <li>Validez ou rejetez selon le seuil de 10000 XAF</li>
     </ul>
   `
   

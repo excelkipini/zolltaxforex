@@ -487,7 +487,7 @@ export async function syncExistingCommissions(): Promise<{ totalAdded: number; t
 // Synchroniser les commissions des reçus existants avec le compte commissions des reçus
 export async function syncExistingReceiptCommissions(): Promise<{ totalAdded: number; receiptsProcessed: number }> {
   try {
-    // Récupérer tous les reçus avec des commissions >= 5000 XAF
+    // Récupérer tous les reçus avec des commissions > 0 XAF
     const receipts = await sql`
       SELECT 
         id,
@@ -497,7 +497,7 @@ export async function syncExistingReceiptCommissions(): Promise<{ totalAdded: nu
         commission,
         created_by
       FROM receipts 
-      WHERE commission >= 5000
+      WHERE commission > 0
     `
 
     let totalAdded = 0

@@ -10,7 +10,8 @@ import { Textarea } from "@/components/ui/textarea"
 import { Separator } from "@/components/ui/separator"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { Receipt, Download, QrCode, History, Search, FileText } from "lucide-react"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Receipt, Download, QrCode, History, Search, FileText, Eye } from "lucide-react"
 import { toast } from "sonner"
 
 interface ReceiptData {
@@ -42,6 +43,9 @@ interface ReceiptHistoryItem {
   notes?: string
   created_by_name?: string
   created_at: string
+  card_fees?: number
+  number_of_cards?: number
+  real_commission?: number
 }
 
 export default function ReceiptClient() {
@@ -535,7 +539,6 @@ export default function ReceiptClient() {
                     <TableHead>Client</TableHead>
                     <TableHead>Opération</TableHead>
                     <TableHead>Montant reçu</TableHead>
-                    <TableHead>Commission</TableHead>
                     <TableHead>Montant envoyé</TableHead>
                     <TableHead>Créé par</TableHead>
                     <TableHead>Date</TableHead>
@@ -545,7 +548,7 @@ export default function ReceiptClient() {
                 <TableBody>
                   {isLoadingHistory ? (
                     <TableRow>
-                      <TableCell colSpan={9} className="text-center py-8">
+                      <TableCell colSpan={8} className="text-center py-8">
                         <div className="flex items-center justify-center space-x-2">
                           <QrCode className="h-4 w-4 animate-spin" />
                           <span>Chargement...</span>
@@ -554,7 +557,7 @@ export default function ReceiptClient() {
                     </TableRow>
                   ) : receiptHistory.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={9} className="text-center py-8 text-gray-500">
+                      <TableCell colSpan={8} className="text-center py-8 text-gray-500">
                         Aucun reçu trouvé
                       </TableCell>
                     </TableRow>
@@ -583,13 +586,10 @@ export default function ReceiptClient() {
                           </Badge>
                         </TableCell>
                         <TableCell className="text-right">
-                          {receipt.amount_received.toLocaleString('fr-FR')} {receipt.currency}
-                        </TableCell>
-                        <TableCell className="text-right text-red-600">
-                          -{receipt.commission.toLocaleString('fr-FR')} {receipt.currency}
+                          {receipt.amount_received.toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} {receipt.currency}
                         </TableCell>
                         <TableCell className="text-right font-medium">
-                          {receipt.amount_sent.toLocaleString('fr-FR')} {receipt.currency}
+                          {receipt.amount_sent.toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} {receipt.currency}
                         </TableCell>
                         <TableCell>
                           {receipt.created_by_name || "Système"}
@@ -600,15 +600,119 @@ export default function ReceiptClient() {
                           {new Date(receipt.created_at).toLocaleTimeString('fr-FR')}
                         </TableCell>
                         <TableCell>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => downloadReceiptPDF(receipt.id, receipt.receipt_number)}
-                            className="flex items-center space-x-1"
-                          >
-                            <FileText className="h-3 w-3" />
-                            <span>PDF</span>
-                          </Button>
+                          <div className="flex items-center space-x-1">
+                            <Dialog>
+                              <DialogTrigger asChild>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="flex items-center space-x-1"
+                                >
+                                  <Eye className="h-3 w-3" />
+                                  <span>Détails</span>
+                                </Button>
+                              </DialogTrigger>
+                              <DialogContent className="max-w-2xl">
+                                <DialogHeader>
+                                  <DialogTitle>Détails du reçu {receipt.receipt_number}</DialogTitle>
+                                </DialogHeader>
+                                <div className="space-y-4">
+                                  {/* Informations client */}
+                                  <div>
+                                    <h4 className="font-semibold mb-2">Informations client</h4>
+                                    <div className="grid grid-cols-2 gap-4 text-sm">
+                                      <div>
+                                        <span className="font-medium">Nom:</span> {receipt.client_name}
+                                      </div>
+                                      {receipt.client_phone && (
+                                        <div>
+                                          <span className="font-medium">Téléphone:</span> {receipt.client_phone}
+                                        </div>
+                                      )}
+                                      {receipt.client_email && (
+                                        <div>
+                                          <span className="font-medium">Email:</span> {receipt.client_email}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  <Separator />
+
+                                  {/* Détails financiers */}
+                                  <div>
+                                    <h4 className="font-semibold mb-2">Détails financiers</h4>
+                                    <div className="grid grid-cols-2 gap-4 text-sm">
+                                      <div>
+                                        <span className="font-medium">Montant reçu:</span> {receipt.amount_received.toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} {receipt.currency}
+                                      </div>
+                                      <div>
+                                        <span className="font-medium">Commission ({receipt.commission_rate}%):</span> -{receipt.commission.toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} {receipt.currency}
+                                      </div>
+                                      <div>
+                                        <span className="font-medium">Montant envoyé:</span> {receipt.amount_sent.toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} {receipt.currency}
+                                      </div>
+                                      <div>
+                                        <span className="font-medium">Frais cartes:</span> {receipt.card_fees ? `${receipt.card_fees.toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} ${receipt.currency} (${receipt.number_of_cards || 0} cartes)` : '0 XAF (0 cartes)'}
+                                      </div>
+                                      <div>
+                                        <span className="font-medium">Commission réelle:</span> 
+                                        <span className={`ml-1 ${receipt.real_commission && receipt.real_commission > 0 ? 'text-green-600 font-medium' : 'text-gray-600'}`}>
+                                          {receipt.real_commission ? `${receipt.real_commission.toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} ${receipt.currency}` : '0 XAF'}
+                                          {receipt.real_commission && receipt.real_commission > 0 && ' ✓ Ajouté'}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  <Separator />
+
+                                  {/* Informations système */}
+                                  <div>
+                                    <h4 className="font-semibold mb-2">Informations système</h4>
+                                    <div className="grid grid-cols-2 gap-4 text-sm">
+                                      <div>
+                                        <span className="font-medium">Type d'opération:</span> 
+                                        <Badge variant="outline" className="ml-2">
+                                          {receipt.operation_type === "transfer" && "Transfert"}
+                                          {receipt.operation_type === "exchange" && "Bureau de change"}
+                                          {receipt.operation_type === "card_recharge" && "Recharge carte"}
+                                          {receipt.operation_type === "cash_deposit" && "Dépôt espèces"}
+                                          {receipt.operation_type === "cash_withdrawal" && "Retrait espèces"}
+                                          {receipt.operation_type === "other" && "Autre"}
+                                        </Badge>
+                                      </div>
+                                      <div>
+                                        <span className="font-medium">Créé par:</span> {receipt.created_by_name || "Système"}
+                                      </div>
+                                      <div>
+                                        <span className="font-medium">Date de création:</span> {new Date(receipt.created_at).toLocaleString('fr-FR')}
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {receipt.notes && (
+                                    <>
+                                      <Separator />
+                                      <div>
+                                        <h4 className="font-semibold mb-2">Notes</h4>
+                                        <p className="text-sm text-gray-600">{receipt.notes}</p>
+                                      </div>
+                                    </>
+                                  )}
+                                </div>
+                              </DialogContent>
+                            </Dialog>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => downloadReceiptPDF(receipt.id, receipt.receipt_number)}
+                              className="flex items-center space-x-1"
+                            >
+                              <FileText className="h-3 w-3" />
+                              <span>PDF</span>
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))

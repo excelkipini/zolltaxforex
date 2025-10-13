@@ -727,7 +727,7 @@ export function AuditorPendingTransactions({ user }: AuditorPendingTransactionsP
                   className="mt-1"
                 />
                 <p className="text-xs text-gray-500 mt-1">
-                  Le système calculera automatiquement la commission et validera/rejettera selon le seuil de 5000 XAF
+                  Le système calculera automatiquement la commission et validera/rejettera selon le seuil de 10000 XAF
                 </p>
               </div>
             </div>

@@ -1,11 +1,23 @@
 import { NextRequest, NextResponse } from "next/server"
 import { requireAuth } from "@/lib/auth"
 import { createReceipt } from "@/lib/receipts-queries"
-import { addReceiptCommissionToAccount } from "@/lib/cash-queries"
+import { addReceiptCommissionToAccount, updateCashAccountBalance } from "@/lib/cash-queries"
 import jsPDF from "jspdf"
 import QRCode from "qrcode"
 
 export const dynamic = 'force-dynamic'
+
+// Fonction pour calculer les frais de cartes
+function calculateCardFees(amountSent: number): { numberOfCards: number; cardFees: number } {
+  const numberOfCards = Math.ceil(amountSent / 800000) // Arrondi supérieur
+  const cardFees = numberOfCards * 10000 // 10,000 XAF par carte
+  return { numberOfCards, cardFees }
+}
+
+// Fonction pour calculer la commission réelle
+function calculateRealCommission(amountReceived: number, amountSent: number, cardFees: number): number {
+  return amountReceived - (amountSent + cardFees)
+}
 
 interface ReceiptData {
   clientName: string
@@ -36,6 +48,19 @@ export async function POST(request: NextRequest) {
     if (!receiptData.clientName || !receiptData.operationType || !receiptData.amountReceived) {
       return NextResponse.json({ error: "Données manquantes" }, { status: 400 })
     }
+
+    // Calculer les frais de cartes et la commission réelle
+    const { numberOfCards, cardFees } = calculateCardFees(receiptData.amountSent)
+    const realCommission = calculateRealCommission(receiptData.amountReceived, receiptData.amountSent, cardFees)
+    const totalAmountToAddToCoffre = receiptData.amountSent + cardFees
+
+    console.log(`Calculs pour le reçu ${receiptData.receiptNumber}:`)
+    console.log(`- Montant reçu: ${receiptData.amountReceived} XAF`)
+    console.log(`- Montant envoyé: ${receiptData.amountSent} XAF`)
+    console.log(`- Nombre de cartes: ${numberOfCards}`)
+    console.log(`- Frais de cartes: ${cardFees} XAF`)
+    console.log(`- Commission réelle: ${realCommission} XAF`)
+    console.log(`- Montant total à ajouter au coffre: ${totalAmountToAddToCoffre} XAF`)
 
     // Créer le PDF
     const doc = new jsPDF()
@@ -95,9 +120,53 @@ export async function POST(request: NextRequest) {
     doc.text("Informations du client", 20, currentY)
     currentY += 8
 
-    doc.setFontSize(10)
+    doc.setFontSize(14)
     doc.setFont("helvetica", "normal")
     
+    // QR Code à droite des informations client
+    const qrCodeSize = 25 // Réduit de 50 à 25
+    const qrCodeX = pageWidth - 20 - qrCodeSize // Positionné à droite
+    const qrCodeY = currentY - 5 // Aligné avec le début des informations
+    
+    try {
+      // Générer le QR Code avec les informations du reçu
+      const qrData = JSON.stringify({
+        receiptNumber: receiptData.receiptNumber,
+        clientName: receiptData.clientName,
+        amountReceived: receiptData.amountReceived,
+        amountSent: receiptData.amountSent,
+        cardFees: cardFees,
+        numberOfCards: numberOfCards,
+        totalAmountToCoffre: totalAmountToAddToCoffre,
+        realCommission: realCommission,
+        currency: receiptData.currency,
+        date: new Date().toISOString(),
+        operationType: receiptData.operationType
+      })
+
+      const qrCodeDataURL = await QRCode.toDataURL(qrData, {
+        width: qrCodeSize,
+        margin: 1,
+        color: {
+          dark: '#000000',
+          light: '#FFFFFF'
+        }
+      })
+
+      // Ajouter le QR Code au PDF (à droite)
+      doc.addImage(qrCodeDataURL, 'PNG', qrCodeX, qrCodeY, qrCodeSize, qrCodeSize)
+      
+      // Texte sous le QR Code
+      doc.setFontSize(7)
+      doc.setTextColor(100, 100, 100)
+      doc.text("QR Code", qrCodeX + qrCodeSize / 2, qrCodeY + qrCodeSize + 6, { align: "center" })
+    } catch (error) {
+      console.error('Erreur lors de la génération du QR Code:', error)
+      // Continuer sans QR Code en cas d'erreur
+    }
+    
+    // Redéfinir la taille de police pour les informations client
+    doc.setFontSize(12)
     doc.setFont("helvetica", "bold")
     doc.text("Nom:", 20, currentY)
     doc.setFont("helvetica", "normal")
@@ -218,46 +287,38 @@ export async function POST(request: NextRequest) {
     doc.text("Montant envoyé:", 20, currentY)
     doc.text(`${formatCurrency(receiptData.amountSent)} ${receiptData.currency}`, pageWidth - 50, currentY, { align: "right" })
 
-    currentY += 15
+    currentY += 20
 
-    // QR Code - Positionnement à 15px au-dessus du pied de page
-    const qrCodeSize = 50
-    const footerStartY = pageHeight - 30 // Pied de page commence à 30px du bas
-    const qrCodeY = footerStartY - 15 - qrCodeSize // 15px au-dessus du pied de page
-    const qrCodeX = (pageWidth - qrCodeSize) / 2 // Centré horizontalement
+    // Section des signatures
+    doc.setFont("helvetica", "bold")
+    doc.setFontSize(10)
+    doc.text("Signatures", 20, currentY)
+    currentY += 8
+
+    // Ligne de séparation pour les signatures
+    doc.setDrawColor(200, 200, 200)
+    doc.line(20, currentY, pageWidth - 20, currentY)
+    currentY += 10
+
+    // Signature du client (à gauche)
+    doc.setFont("helvetica", "normal")
+    doc.setFontSize(10)
+    doc.text("Client:", 20, currentY)
+    currentY += 12
     
-    try {
-      // Générer le QR Code avec les informations du reçu
-      const qrData = JSON.stringify({
-        receiptNumber: receiptData.receiptNumber,
-        clientName: receiptData.clientName,
-        amountReceived: receiptData.amountReceived,
-        amountSent: receiptData.amountSent,
-        currency: receiptData.currency,
-        date: new Date().toISOString(),
-        operationType: receiptData.operationType
-      })
+    // Ligne de signature client
+    doc.setDrawColor(100, 100, 100)
+    doc.line(20, currentY, 120, currentY)
+    doc.text(`${receiptData.clientName}`, 20, currentY + 8)
 
-      const qrCodeDataURL = await QRCode.toDataURL(qrData, {
-        width: qrCodeSize,
-        margin: 1,
-        color: {
-          dark: '#000000',
-          light: '#FFFFFF'
-        }
-      })
+    // Signature du comptable (à droite) - Aligné avec le client
+    doc.text("Comptable:", pageWidth - 60, currentY - 12, { align: "right" })
+    
+    // Ligne de signature comptable - Alignée avec la ligne du client
+    doc.line(pageWidth - 120, currentY, pageWidth - 20, currentY)
+    doc.text(`${user.name}`, pageWidth - 60, currentY + 8, { align: "right" })
 
-      // Ajouter le QR Code au PDF (centré)
-      doc.addImage(qrCodeDataURL, 'PNG', qrCodeX, qrCodeY, qrCodeSize, qrCodeSize)
-      
-      // Texte sous le QR Code (centré)
-      doc.setFontSize(8)
-      doc.setTextColor(100, 100, 100)
-      doc.text("QR Code du reçu", pageWidth / 2, qrCodeY + qrCodeSize + 8, { align: "center" })
-    } catch (error) {
-      console.error('Erreur lors de la génération du QR Code:', error)
-      // Continuer sans QR Code en cas d'erreur
-    }
+    currentY += 15
 
     // Pied de page
     doc.setDrawColor(200, 200, 200)
@@ -295,27 +356,44 @@ export async function POST(request: NextRequest) {
         currency: receiptData.currency,
         notes: receiptData.notes || undefined,
         qr_code_data: qrData,
-        created_by: user.id
+        created_by: user.id,
+        card_fees: cardFees,
+        number_of_cards: numberOfCards,
+        real_commission: realCommission
       })
 
       console.log(`Reçu ${receiptData.receiptNumber} enregistré en base de données`)
 
-      // Ajouter la commission au compte des commissions des reçus si le montant est >= 5000 XAF
-      if (receiptData.commission >= 5000) {
+      // 1. Ajouter le montant total au coffre (montant envoyé + frais de cartes)
+      try {
+        await updateCashAccountBalance(
+          'coffre',
+          totalAmountToAddToCoffre,
+          user.name,
+          `Reçu ${receiptData.receiptNumber}: Montant envoyé + frais cartes`
+        )
+        console.log(`Montant de ${totalAmountToAddToCoffre} XAF ajouté au coffre`)
+      } catch (coffreError) {
+        console.error('Erreur lors de l\'ajout au coffre:', coffreError)
+        // Continuer même en cas d'erreur coffre
+      }
+
+      // 2. Ajouter la commission réelle au compte des commissions des reçus si > 0 XAF
+      if (realCommission > 0) {
         try {
           await addReceiptCommissionToAccount(
-            savedReceipt.id, // Utiliser l'ID du reçu comme référence
-            receiptData.commission,
-            `Commission reçu: ${receiptData.operationType} - ${receiptData.clientName}`,
+            savedReceipt.id,
+            realCommission,
+            `Commission reçu: ${receiptData.operationType} - ${receiptData.clientName} (${numberOfCards} cartes)`,
             user.name
           )
-          console.log(`Commission de ${receiptData.commission} XAF ajoutée au compte commissions des reçus`)
+          console.log(`Commission réelle de ${realCommission} XAF ajoutée au compte commissions des reçus`)
         } catch (commissionError) {
           console.error('Erreur lors de l\'ajout de la commission des reçus:', commissionError)
           // Continuer même en cas d'erreur de commission
         }
       } else {
-        console.log(`Commission de ${receiptData.commission} XAF < 5000 XAF, non ajoutée au compte commissions des reçus`)
+        console.log(`Commission réelle de ${realCommission} XAF <= 0 XAF, non ajoutée au compte commissions des reçus`)
       }
 
     } catch (dbError) {
