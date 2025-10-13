@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { requireAuth } from "@/lib/auth"
 import { distributeAmountToSpecificCards } from "@/lib/cards-queries"
+import { deductFromCoffre } from "@/lib/cash-queries"
 
 export async function POST(request: NextRequest) {
   const { user } = await requireAuth()
@@ -14,7 +15,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const { amount, country, cardIds } = body
+    const { amount, country, cardIds, deductFromCoffre: shouldDeductFromCoffre } = body
 
     if (!amount || !country || !cardIds || !Array.isArray(cardIds) || cardIds.length === 0) {
       return NextResponse.json({ 
@@ -34,6 +35,21 @@ export async function POST(request: NextRequest) {
         role: user.role
       }
     })
+
+    // Si la case "Déduire du coffre" est cochée, déduire le montant du coffre
+    if (shouldDeductFromCoffre) {
+      try {
+        await deductFromCoffre(
+          Number(amount),
+          `Distribution cartes ${country}: ${result.cards_used} cartes`,
+          user.name
+        )
+        console.log(`Montant de ${amount} XAF déduit du coffre pour la distribution`)
+      } catch (coffreError) {
+        console.error('Erreur lors de la déduction du coffre:', coffreError)
+        // Continuer même en cas d'erreur de coffre
+      }
+    }
 
     return NextResponse.json({ 
       ok: true, 

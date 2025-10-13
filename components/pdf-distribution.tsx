@@ -21,6 +21,7 @@ interface DistributionData {
   country: string
   distributedBy: string
   distributedAt: string
+  cardFees?: number
 }
 
 interface PDFDistributionProps {
@@ -36,6 +37,19 @@ export function PDFDistribution({ distributionData, onClose }: PDFDistributionPr
       maximumFractionDigits: 0,
     }).format(amount).replace(/\s/g, '.')
   }
+
+  // Calculer les frais de cartes selon le pays
+  const getCardFees = (country: string, numberOfCards: number): number => {
+    const feesPerCard: Record<string, number> = {
+      'Mali': 10000,
+      'RDC': 10000,
+      'France': 0,
+      'Congo': 0
+    }
+    return numberOfCards * (feesPerCard[country] || 0)
+  }
+
+  const cardFees = distributionData.cardFees || getCardFees(distributionData.country, distributionData.cards_used)
 
   const generatePDF = () => {
     const doc = new jsPDF()
@@ -72,6 +86,7 @@ export function PDFDistribution({ distributionData, onClose }: PDFDistributionPr
       [`Pays:`, distributionData.country || 'Non spécifié'],
       [`Montant total distribué:`, `${formatCurrency(distributionData.total_distributed || 0)} XAF`],
       [`Nombre de cartes:`, `${distributionData.cards_used}`],
+      [`Frais cartes:`, `${formatCurrency(cardFees)} XAF`],
       [`Montant restant:`, `${formatCurrency(distributionData.remaining_amount || 0)} XAF`],
       [`Distribué par:`, distributionData.distributedBy || 'Non spécifié'],
       [`Date de distribution:`, distributionData.distributedAt ? new Date(distributionData.distributedAt).toLocaleString('fr-FR') : 'Non disponible']
@@ -170,6 +185,9 @@ export function PDFDistribution({ distributionData, onClose }: PDFDistributionPr
             </div>
             <div>
               <span className="font-medium">Nombre de cartes:</span> {distributionData.cards_used}
+            </div>
+            <div>
+              <span className="font-medium">Frais cartes:</span> {formatCurrency(cardFees)} XAF
             </div>
             <div>
               <span className="font-medium">Montant restant:</span> {formatCurrency(distributionData.remaining_amount || 0)} XAF

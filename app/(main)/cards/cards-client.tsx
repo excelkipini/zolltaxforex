@@ -80,6 +80,9 @@ export default function CardsClient({
   const [availableCards, setAvailableCards] = React.useState<CardData[]>([])
   const [selectedCards, setSelectedCards] = React.useState<Set<string>>(new Set())
   const [remainingAmount, setRemainingAmount] = React.useState(0)
+  const [deductFromCoffre, setDeductFromCoffre] = React.useState(false)
+  const [cardSearchQuery, setCardSearchQuery] = React.useState("")
+  const [cardUsageFilter, setCardUsageFilter] = React.useState<"all" | "available" | "partial">("all")
 
   // Statistiques filtrées par pays
   const filteredCards = React.useMemo(() => {
@@ -614,6 +617,16 @@ export default function CardsClient({
     }
   }
 
+  // Fonction pour fermer le dialog et réinitialiser les filtres
+  const handleCloseDistributionDialog = (open: boolean) => {
+    setDistributionOpen(open)
+    if (!open) {
+      // Réinitialiser les filtres quand le dialog se ferme
+      setCardSearchQuery("")
+      setCardUsageFilter("all")
+    }
+  }
+
   // Fonction pour exécuter la distribution
   const handleDistribution = async () => {
     if (!distributionAmount || selectedCards.size === 0) {
@@ -623,14 +636,18 @@ export default function CardsClient({
 
     setPending(true)
     try {
+      const requestData = {
+        amount: parseInt(distributionAmount),
+        country: selectedCountry,
+        cardIds: Array.from(selectedCards),
+        deductFromCoffre: deductFromCoffre
+      }
+      
+      
       const res = await fetch('/api/cards/distribute', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          amount: parseInt(distributionAmount),
-          country: selectedCountry,
-          cardIds: Array.from(selectedCards)
-        })
+        body: JSON.stringify(requestData)
       })
 
       const data = await res.json()
@@ -651,11 +668,23 @@ export default function CardsClient({
         console.error('Erreur lors de la récupération de l\'utilisateur:', error)
       }
 
+      // Calculer les frais de cartes
+      const getCardFees = (country: "Mali" | "RDC" | "France" | "Congo", numberOfCards: number) => {
+        const feesPerCard: Record<string, number> = {
+          'Mali': 10000,
+          'RDC': 10000,
+          'France': 0,
+          'Congo': 0
+        }
+        return numberOfCards * feesPerCard[country]
+      }
+
       // Stocker les données de distribution pour le PDF
       const distributionData = {
         ...data.data,
         distributedBy: userName,
-        distributedAt: new Date().toISOString()
+        distributedAt: new Date().toISOString(),
+        cardFees: getCardFees(selectedCountry, data.data.cards_used)
       }
       setDistributionResult(distributionData)
       
@@ -665,6 +694,8 @@ export default function CardsClient({
       setDistributionAmount("")
       setSelectedCards(new Set())
       setRemainingAmount(0)
+      setCardSearchQuery("")
+      setCardUsageFilter("all")
       setDistributionOpen(false)
       
       // Afficher le dialog PDF
@@ -1086,7 +1117,7 @@ export default function CardsClient({
 
       <DistributionDialog
         open={distributionOpen}
-        onOpenChange={setDistributionOpen}
+        onOpenChange={handleCloseDistributionDialog}
         amount={distributionAmount}
         setAmount={setDistributionAmount}
         selectedCountry={selectedCountry}
@@ -1098,6 +1129,12 @@ export default function CardsClient({
         remainingAmount={remainingAmount}
         onDistribute={handleDistribution}
         pending={pending}
+        deductFromCoffre={deductFromCoffre}
+        setDeductFromCoffre={setDeductFromCoffre}
+        cardSearchQuery={cardSearchQuery}
+        setCardSearchQuery={setCardSearchQuery}
+        cardUsageFilter={cardUsageFilter}
+        setCardUsageFilter={setCardUsageFilter}
       />
 
       <ImportDialog
@@ -1374,6 +1411,12 @@ function DistributionDialog({
   remainingAmount,
   onDistribute,
   pending,
+  deductFromCoffre,
+  setDeductFromCoffre,
+  cardSearchQuery,
+  setCardSearchQuery,
+  cardUsageFilter,
+  setCardUsageFilter,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -1388,6 +1431,12 @@ function DistributionDialog({
   remainingAmount: number
   onDistribute: () => void
   pending: boolean
+  deductFromCoffre: boolean
+  setDeductFromCoffre: (deduct: boolean) => void
+  cardSearchQuery: string
+  setCardSearchQuery: (query: string) => void
+  cardUsageFilter: "all" | "available" | "partial"
+  setCardUsageFilter: (filter: "all" | "available" | "partial") => void
 }) {
   const getCountryFlag = (country: string) => {
     const flags: Record<string, string> = {
@@ -1413,6 +1462,42 @@ function DistributionDialog({
     if (percentage >= 75) return "text-orange-600"
     return "text-green-600"
   }
+
+  // Calculer les frais de cartes selon le pays
+  const getCardFees = (country: "Mali" | "RDC" | "France" | "Congo", numberOfCards: number) => {
+    const feesPerCard: Record<string, number> = {
+      'Mali': 10000,
+      'RDC': 10000,
+      'France': 0,
+      'Congo': 0
+    }
+    return numberOfCards * feesPerCard[country]
+  }
+
+  // Filtrer les cartes selon la recherche et le filtre d'usage
+  const filteredAvailableCards = React.useMemo(() => {
+    return availableCards.filter(card => {
+      // Filtre par recherche (CID)
+      const matchesSearch = cardSearchQuery === "" || 
+        card.cid.toLowerCase().includes(cardSearchQuery.toLowerCase())
+      
+      // Filtre par usage
+      const monthlyAvailable = Number(card.monthly_limit) - Number(card.monthly_used)
+      const monthlyUsed = Number(card.monthly_used)
+      const monthlyLimit = Number(card.monthly_limit)
+      let matchesUsage = true
+      
+      if (cardUsageFilter === "available") {
+        // Cartes complètement disponibles (jamais utilisées)
+        matchesUsage = monthlyUsed === 0 && monthlyAvailable === monthlyLimit
+      } else if (cardUsageFilter === "partial") {
+        // Cartes partiellement utilisées (utilisées mais pas complètement)
+        matchesUsage = monthlyUsed > 0 && monthlyAvailable > 0
+      }
+      
+      return matchesSearch && matchesUsage
+    })
+  }, [availableCards, cardSearchQuery, cardUsageFilter])
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -1455,6 +1540,25 @@ function DistributionDialog({
                 </Select>
               </div>
             </div>
+            
+            {/* Case à cocher pour déduire du coffre */}
+            <div className="mt-4">
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="deductFromCoffre"
+                  checked={deductFromCoffre}
+                  onChange={(e) => setDeductFromCoffre(e.target.checked)}
+                  className="rounded"
+                />
+                <Label htmlFor="deductFromCoffre" className="text-sm font-medium">
+                  Déduire dans le coffre
+                </Label>
+              </div>
+              <p className="text-xs text-gray-600 mt-1">
+                Si coché, le montant total sera déduit du solde du coffre après la distribution
+              </p>
+            </div>
           </div>
 
           {/* Étape 2: Cartes disponibles */}
@@ -1466,10 +1570,10 @@ function DistributionDialog({
               <div className="flex items-center gap-2">
                 <input
                   type="checkbox"
-                  checked={availableCards.filter(card => {
+                  checked={filteredAvailableCards.filter(card => {
                     const monthlyAvailable = Number(card.monthly_limit) - Number(card.monthly_used)
                     return monthlyAvailable > 0
-                  }).length > 0 && selectedCards.size === availableCards.filter(card => {
+                  }).length > 0 && selectedCards.size === filteredAvailableCards.filter(card => {
                     const monthlyAvailable = Number(card.monthly_limit) - Number(card.monthly_used)
                     return monthlyAvailable > 0
                   }).length}
@@ -1477,22 +1581,42 @@ function DistributionDialog({
                   className="rounded"
                 />
                 <span className="text-sm text-green-700">Tout sélectionner</span>
+              </div>
+            </div>
+
+            {/* Contrôles de recherche et filtre */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              <div>
+                <Label htmlFor="cardSearch">Rechercher par CID</Label>
+              <Input 
+                  id="cardSearch"
+                  type="text"
+                  placeholder="Ex: 21172078"
+                  value={cardSearchQuery}
+                  onChange={(e) => setCardSearchQuery(e.target.value)}
+                className="mt-1" 
+              />
+            </div>
+              <div>
+                <Label htmlFor="usageFilter">Filtrer par usage</Label>
+                <Select value={cardUsageFilter} onValueChange={(value: "all" | "available" | "partial") => setCardUsageFilter(value)}>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Toutes les cartes</SelectItem>
+                    <SelectItem value="available">Cartes disponibles</SelectItem>
+                    <SelectItem value="partial">Cartes partiellement utilisées</SelectItem>
+                  </SelectContent>
+                </Select>
             </div>
           </div>
 
-            {availableCards.filter(card => {
-              const monthlyAvailable = Number(card.monthly_limit) - Number(card.monthly_used)
-              return monthlyAvailable > 0
-            }).length === 0 ? (
-              <p className="text-gray-500 text-center py-4">Aucune carte disponible pour ce pays</p>
+            {filteredAvailableCards.length === 0 ? (
+              <p className="text-gray-500 text-center py-4">Aucune carte trouvée avec ces critères</p>
             ) : (
                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-60 overflow-y-auto">
-                       {availableCards
-                         .filter((card) => {
-                           // Filtrer les cartes épuisées (disponibilité = 0)
-                           const monthlyAvailable = Number(card.monthly_limit) - Number(card.monthly_used)
-                           return monthlyAvailable > 0
-                         })
+                       {filteredAvailableCards
                          .map((card) => {
                            // Disponibilité = limite mensuelle - utilisation mensuelle
                            const monthlyAvailable = Number(card.monthly_limit) - Number(card.monthly_used)
@@ -1501,18 +1625,25 @@ function DistributionDialog({
                   return (
                     <div 
                       key={card.id} 
-                      className={`p-3 border rounded-lg cursor-pointer transition-colors ${
-                        isSelected ? 'bg-blue-100 border-blue-300' : 'bg-white border-gray-200 hover:bg-gray-50'
+                      className={`p-3 border rounded-lg transition-colors ${
+                        monthlyAvailable === 0 
+                          ? 'bg-gray-100 border-gray-300 cursor-not-allowed opacity-60'
+                          : isSelected 
+                            ? 'bg-blue-100 border-blue-300 cursor-pointer' 
+                            : 'bg-white border-gray-200 hover:bg-gray-50 cursor-pointer'
                       }`}
-                      onClick={() => onCardSelection(card.id, !isSelected)}
+                      onClick={() => monthlyAvailable > 0 && onCardSelection(card.id, !isSelected)}
                     >
                       <div className="flex items-center gap-2 mb-2">
                         <input
                           type="checkbox"
                           checked={isSelected}
+                          disabled={monthlyAvailable === 0}
                           onChange={(e) => {
                             e.stopPropagation()
-                            onCardSelection(card.id, e.target.checked)
+                            if (monthlyAvailable > 0) {
+                              onCardSelection(card.id, e.target.checked)
+                            }
                           }}
                           className="rounded"
                         />
@@ -1520,6 +1651,21 @@ function DistributionDialog({
                         <Badge variant={card.status === 'active' ? 'default' : 'secondary'}>
                           {card.status === 'active' ? 'Active' : 'Inactive'}
                         </Badge>
+                        {monthlyAvailable === 0 && (
+                          <Badge variant="destructive" className="text-xs">
+                            Épuisée
+                          </Badge>
+                        )}
+                        {monthlyAvailable > 0 && Number(card.monthly_used) > 0 && (
+                          <Badge variant="outline" className="text-xs text-orange-600">
+                            Partielle
+                          </Badge>
+                        )}
+                        {monthlyAvailable > 0 && Number(card.monthly_used) === 0 && (
+                          <Badge variant="outline" className="text-xs text-green-600">
+                            Disponible
+                          </Badge>
+                        )}
                   </div>
                       
                       <div className="space-y-1 text-xs">
@@ -1549,7 +1695,7 @@ function DistributionDialog({
           <div className="bg-purple-50 p-4 rounded-lg">
             <h3 className="font-semibold text-purple-800 mb-3">3. Résumé de la Distribution</h3>
             
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="text-center">
                 <div className="text-2xl font-bold text-purple-600">{selectedCards.size}</div>
                 <div className="text-sm text-purple-700">Cartes Sélectionnées</div>
@@ -1560,6 +1706,13 @@ function DistributionDialog({
                   {formatCurrency(parseInt(amount) || 0)}
                 </div>
                 <div className="text-sm text-green-700">Montant Total</div>
+              </div>
+              
+              <div className="text-center">
+                <div className="text-2xl font-bold text-blue-600">
+                  {formatCurrency(getCardFees(selectedCountry, selectedCards.size))}
+                </div>
+                <div className="text-sm text-blue-700">Frais Cartes</div>
               </div>
               
               <div className="text-center">

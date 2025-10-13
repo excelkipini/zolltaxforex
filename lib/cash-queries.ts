@@ -150,6 +150,64 @@ export async function updateCashAccountBalance(
   return updatedAccount[0]
 }
 
+// Déduire un montant du coffre (pour distributions, etc.)
+export async function deductFromCoffre(
+  amount: number,
+  description: string,
+  updatedBy: string
+): Promise<void> {
+  // Récupérer le solde actuel du coffre
+  const coffreAccount = await sql<CashAccount[]>`
+    SELECT 
+      id::text,
+      account_type,
+      account_name,
+      current_balance::bigint as current_balance,
+      last_updated::text as last_updated,
+      updated_by,
+      created_at::text as created_at
+    FROM cash_accounts 
+    WHERE account_type = 'coffre'
+  `
+
+  if (coffreAccount.length === 0) {
+    throw new Error("Compte coffre non trouvé")
+  }
+
+  const currentBalance = coffreAccount[0].current_balance
+  const newBalance = Math.max(0, currentBalance - amount) // Empêcher les soldes négatifs
+
+  // Mettre à jour le solde du coffre
+  await sql`
+    UPDATE cash_accounts 
+    SET 
+      current_balance = ${newBalance},
+      last_updated = NOW(),
+      updated_by = ${updatedBy}
+    WHERE account_type = 'coffre'
+  `
+
+  // Enregistrer la transaction comme dépense
+  await sql`
+    INSERT INTO cash_transactions (
+      account_type, 
+      transaction_type, 
+      amount, 
+      description, 
+      created_by
+    )
+    VALUES (
+      'coffre', 
+      'expense', 
+      ${amount}, 
+      ${description}, 
+      ${updatedBy}
+    )
+  `
+
+  console.log(`Montant de ${amount} XAF déduit du coffre. Nouveau solde: ${newBalance} XAF`)
+}
+
 // Déduire une dépense du coffre
 export async function deductExpenseFromCoffre(
   expenseId: string,
