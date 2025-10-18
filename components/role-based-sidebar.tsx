@@ -47,7 +47,7 @@ export function RoleBasedSidebar({ user }: RoleBasedSidebarProps) {
       href: "/transfer",
       icon: Send,
       permission: "view_transfer" as const,
-      primary: user.role === "cashier",
+      primary: user.role === "cashier" || user.role === "director",
     },
     {
       title: "Gestion Cartes",
@@ -68,7 +68,7 @@ export function RoleBasedSidebar({ user }: RoleBasedSidebarProps) {
       href: "/expenses",
       icon: Receipt,
       permission: "view_expenses" as const,
-      primary: user.role === "accounting",
+      primary: user.role === "accounting" || user.role === "director",
     },
     {
       title: "Opérations",
@@ -82,14 +82,14 @@ export function RoleBasedSidebar({ user }: RoleBasedSidebarProps) {
       href: "/receipt",
       icon: Receipt,
       permission: "view_receipts" as const,
-      primary: user.role === "cashier" || user.role === "accounting",
+      primary: user.role === "cashier" || user.role === "accounting" || user.role === "director",
     },
     {
       title: "Caisse",
       href: "/cash",
       icon: Wallet,
       permission: "view_cash" as const,
-      primary: user.role === "accounting",
+      primary: user.role === "accounting" || user.role === "director",
     },
     {
       title: "Rapports",
@@ -126,13 +126,13 @@ export function RoleBasedSidebar({ user }: RoleBasedSidebarProps) {
       title: "Nouvelle transaction",
       href: "/reception",
       permission: "create_reception" as const,
-      roles: ["cashier"],
+      roles: ["cashier", "director"],
     },
     {
       title: "Nouvelle dépense",
       href: "/expenses",
       permission: "create_expenses" as const,
-      roles: ["accounting"],
+      roles: ["accounting", "director"],
     },
     {
       title: "Rapport du jour",

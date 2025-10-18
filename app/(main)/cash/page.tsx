@@ -10,7 +10,7 @@ export default async function CashPage() {
   }
 
   // Vérifier que l'utilisateur a la permission d'accéder à la caisse
-  if (user.role !== "accounting" && user.role !== "super_admin") {
+  if (user.role !== "accounting" && user.role !== "super_admin" && user.role !== "director") {
     redirect("/dashboard")
   }
 
