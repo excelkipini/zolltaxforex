@@ -218,7 +218,7 @@ export default function ReceiptClient() {
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-2">
           <Receipt className="h-6 w-6" />
-          <h1 className="text-2xl font-bold">Emettre un reçu</h1>
+          <h1 className="text-2xl font-bold">Transfert International</h1>
         </div>
         <Button
           variant="outline"

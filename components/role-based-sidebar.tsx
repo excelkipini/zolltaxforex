@@ -78,7 +78,7 @@ export function RoleBasedSidebar({ user }: RoleBasedSidebarProps) {
       primary: user.role === "director" || user.role === "accounting",
     },
     {
-      title: "Emettre un reçu",
+      title: "Transfert International",
       href: "/receipt",
       icon: Receipt,
       permission: "view_receipts" as const,

@@ -5,7 +5,7 @@ import ReceiptClient from "./receipt-client"
 import type { Metadata } from "next"
 
 export const metadata: Metadata = {
-  title: "Emettre un reçu",
+  title: "Transfert International",
   description: "Création de reçus imprimables avec QR Code"
 }
 
