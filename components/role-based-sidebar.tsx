@@ -92,6 +92,13 @@ export function RoleBasedSidebar({ user }: RoleBasedSidebarProps) {
       primary: user.role === "accounting" || user.role === "director",
     },
     {
+      title: "Arrêté de caisse",
+      href: "/cash-settlements",
+      icon: Receipt,
+      permission: "view_cash_settlements" as const,
+      primary: user.role === "cashier" || user.role === "cash_manager" || user.role === "accounting" || user.role === "director",
+    },
+    {
       title: "Rapports",
       href: "/reports",
       icon: FileText,

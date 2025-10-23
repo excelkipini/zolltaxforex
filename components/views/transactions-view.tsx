@@ -15,11 +15,11 @@ import { useToast } from "@/hooks/use-toast"
 // Types pour les transactions
 type Transaction = {
   id: string
-  type: "reception" | "exchange" | "card" | "transfer" | "receipt"
+  type: "reception" | "exchange" | "card" | "transfer" | "receipt" | "settlement"
   description: string
   amount: number
   currency: string
-  status: "completed" | "pending" | "validated" | "rejected" | "cancelled"
+  status: "completed" | "pending" | "validated" | "rejected" | "cancelled" | "exception"
   created_by: string
   agency: string
   created_at: string
@@ -277,6 +277,8 @@ export function TransactionsView({ user }: TransactionsViewProps = {}) {
         return <Badge className="bg-yellow-100 text-yellow-800">En attente</Badge>
       case "rejected":
         return <Badge className="bg-red-100 text-red-800">Rejeté</Badge>
+      case "exception":
+        return <Badge className="bg-orange-100 text-orange-800">Exceptionnel</Badge>
       case "cancelled":
         return <Badge className="bg-red-100 text-red-800">Annulé</Badge>
       case "pending_delete":
@@ -298,6 +300,8 @@ export function TransactionsView({ user }: TransactionsViewProps = {}) {
         return "Transfert d'argent"
       case "receipt":
         return "Reçu d'opération"
+      case "settlement":
+        return "Arrêté de caisse"
       default:
         return type
     }
@@ -1886,6 +1890,7 @@ export function TransactionsView({ user }: TransactionsViewProps = {}) {
                 <SelectItem value="exchange">Bureau de change</SelectItem>
                 <SelectItem value="card">Gestion cartes</SelectItem>
                 <SelectItem value="transfer">Transfert d'argent</SelectItem>
+                <SelectItem value="settlement">Arrêté de caisse</SelectItem>
               </SelectContent>
             </Select>
             <Select value={cashierFilter} onValueChange={setCashierFilter}>

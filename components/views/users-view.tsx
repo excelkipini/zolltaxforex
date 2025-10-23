@@ -9,13 +9,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { useToast } from "@/hooks/use-toast"
-import { AVAILABLE_ROLES, ROLE_MAPPING } from "@/lib/users-queries"
+import { ROLE_MAPPING } from "@/lib/users-queries"
 
 type User = {
   id: string
   name: string
   email: string
-  role: "super_admin" | "director" | "accounting" | "cashier" | "auditor" | "delegate" | "executor"
+  role: "super_admin" | "director" | "accounting" | "cashier" | "auditor" | "delegate" | "executor" | "cash_manager"
   agency: string
   password_hash?: string
   last_login?: string
@@ -32,13 +32,14 @@ type Agency = {
   created_at: string
 }
 
-type FilterKey = "all" | "director" | "accounting" | "cashier" | "auditor" | "delegate"
+type FilterKey = "all" | "director" | "accounting" | "cashier" | "auditor" | "delegate" | "cash_manager"
 
 export function UsersView() {
   const [filter, setFilter] = useState<FilterKey>("all")
   const [search, setSearch] = useState("")
   const [users, setUsers] = useState<User[]>([])
   const [agencies, setAgencies] = useState<Agency[]>([])
+  const [availableRoles, setAvailableRoles] = useState<string[]>([])
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<User | null>(null)
   const [confirmId, setConfirmId] = useState<string | null>(null)
@@ -62,6 +63,7 @@ export function UsersView() {
         if (res.ok && data?.ok) {
           setUsers(data.data.users)
           setAgencies(data.data.agencies)
+          setAvailableRoles(data.data.availableRoles || [])
         } else {
           toast({
             title: "Erreur",
@@ -172,6 +174,7 @@ export function UsersView() {
                 <SelectItem value="cashier">Caissier</SelectItem>
                 <SelectItem value="auditor">Auditeur</SelectItem>
                 <SelectItem value="delegate">Délégué</SelectItem>
+                <SelectItem value="cash_manager">Gestionnaire de caisse</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -253,7 +256,7 @@ export function UsersView() {
                   <SelectValue placeholder="Sélectionnez un rôle" />
                 </SelectTrigger>
                 <SelectContent>
-                  {AVAILABLE_ROLES.map((role) => (
+                  {availableRoles.map((role) => (
                     <SelectItem key={role} value={role}>
                       {role}
                     </SelectItem>

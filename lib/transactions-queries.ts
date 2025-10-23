@@ -16,8 +16,8 @@ import { addCommissionToAccount } from "./cash-queries"
 
 export type Transaction = {
   id: string
-  type: "reception" | "exchange" | "transfer" | "card" | "receipt"
-  status: "pending" | "validated" | "rejected" | "completed" | "executed" | "pending_delete"
+  type: "reception" | "exchange" | "transfer" | "card" | "receipt" | "settlement"
+  status: "pending" | "validated" | "rejected" | "completed" | "executed" | "pending_delete" | "exception"
   description: string
   amount: number
   currency: string
@@ -73,7 +73,54 @@ export async function listTransactions(): Promise<Transaction[]> {
     FROM transactions
     ORDER BY created_at DESC
   `
-  return rows
+
+  // Récupérer les arrêtés de caisse et les convertir en transactions
+  const settlements = await sql`
+    SELECT 
+      id,
+      settlement_number,
+      cashier_id as created_by,
+      settlement_date,
+      total_transactions_amount as amount,
+      'XAF' as currency,
+      status,
+      validation_notes,
+      exception_reason,
+      rejection_reason,
+      validated_by,
+      validated_at,
+      created_at,
+      updated_at
+    FROM cash_settlements
+    ORDER BY created_at DESC
+  `
+
+  // Convertir les arrêtés en transactions
+  const settlementTransactions: Transaction[] = settlements.map(settlement => ({
+    id: settlement.id,
+    type: 'settlement' as const,
+    status: settlement.status,
+    description: `Arrêté de caisse ${settlement.settlement_number}`,
+    amount: settlement.amount,
+    currency: settlement.currency,
+    created_by: settlement.created_by,
+    agency: 'Système', // Les arrêtés n'ont pas d'agence spécifique
+    details: {
+      settlement_number: settlement.settlement_number,
+      settlement_date: settlement.settlement_date,
+      validation_notes: settlement.validation_notes,
+      exception_reason: settlement.exception_reason
+    },
+    rejection_reason: settlement.rejection_reason,
+    delete_validated_by: settlement.validated_by,
+    delete_validated_at: settlement.validated_at,
+    created_at: settlement.created_at,
+    updated_at: settlement.updated_at
+  }))
+
+  // Combiner et trier toutes les transactions
+  const allTransactions = [...rows, ...settlementTransactions]
+  return allTransactions.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
 }
 
 export async function createTransaction(input: CreateTransactionInput): Promise<Transaction> {

@@ -1,5 +1,5 @@
 import "server-only"
-import { TransactionEmailData, DeletionRequestEmailData, ExpenseEmailData, TransferEmailData } from "./email-service"
+import { TransactionEmailData, DeletionRequestEmailData, ExpenseEmailData, TransferEmailData, CashSettlementEmailData } from "./email-service"
 
 // Fonctions de traduction
 const translateTransactionType = (type: string): string => {
@@ -32,6 +32,16 @@ const translateExpenseStatus = (status: string): string => {
     'accounting_rejected': 'Rejetée par la comptabilité',
     'director_approved': 'Approuvée par le directeur',
     'director_rejected': 'Rejetée par le directeur'
+  }
+  return translations[status] || status
+}
+
+const translateSettlementStatus = (status: string): string => {
+  const translations: Record<string, string> = {
+    'pending': 'En attente',
+    'validated': 'Validé',
+    'rejected': 'Rejeté',
+    'exception': 'Exceptionnel'
   }
   return translations[status] || status
 }
@@ -726,5 +736,125 @@ export function generateTransferCompletedEmail(data: TransferEmailData): { subje
   return {
     subject,
     html: BASE_TEMPLATE(content, "Transfert Clôturé")
+  }
+}
+
+// Templates pour les arrêtés de caisse
+
+// Template de base pour les détails d'arrêté
+const SETTLEMENT_DETAILS_TEMPLATE = (data: CashSettlementEmailData) => `
+  <div class="details">
+    <h3>📋 Détails de l'arrêté</h3>
+    <table>
+      <tr><td><strong>Numéro d'arrêté:</strong></td><td>${data.settlementNumber}</td></tr>
+      <tr><td><strong>Caissier:</strong></td><td>${data.cashierName}</td></tr>
+      <tr><td><strong>Date:</strong></td><td>${new Date(data.settlementDate).toLocaleDateString('fr-FR')}</td></tr>
+      <tr><td><strong>Montant total des transactions:</strong></td><td>${data.totalTransactionsAmount.toLocaleString('fr-FR')} XAF</td></tr>
+      <tr><td><strong>Montant du délestage:</strong></td><td>${data.unloadingAmount.toLocaleString('fr-FR')} XAF</td></tr>
+      <tr><td><strong>Montant final:</strong></td><td>${data.finalAmount.toLocaleString('fr-FR')} XAF</td></tr>
+      <tr><td><strong>Montant reçu:</strong></td><td>${data.receivedAmount ? data.receivedAmount.toLocaleString('fr-FR') + ' XAF' : 'Non spécifié'}</td></tr>
+      <tr><td><strong>Statut:</strong></td><td>${translateSettlementStatus(data.status)}</td></tr>
+    </table>
+  </div>
+`
+
+// 1. Template pour arrêté rejeté
+export function generateSettlementRejectedEmail(data: CashSettlementEmailData): { subject: string; html: string } {
+  const subject = `[ZOLL TAX FOREX] Arrêté de caisse rejeté - ${data.settlementNumber}`
+  
+  const content = `
+    <h2>❌ Arrêté de Caisse Rejeté</h2>
+    <p>Un arrêté de caisse a été rejeté par le gestionnaire de caisse.</p>
+    
+    <div class="alert error">
+        <strong>Statut:</strong> Arrêté rejeté
+    </div>
+    
+    ${SETTLEMENT_DETAILS_TEMPLATE(data)}
+    
+    ${data.rejectionReason ? `
+    <div class="alert warning">
+        <strong>Motif du rejet:</strong> ${data.rejectionReason}
+    </div>
+    ` : ''}
+    
+    <p><strong>Action requise:</strong></p>
+    <ul>
+        <li>Connectez-vous au système ZOLL TAX FOREX</li>
+        <li>Accédez à la section "Arrêté de caisse"</li>
+        <li>Consultez les détails et corrigez les problèmes</li>
+        <li>Créez un nouvel arrêté si nécessaire</li>
+    </ul>
+  `
+  
+  return {
+    subject,
+    html: BASE_TEMPLATE(content, "Arrêté Rejeté")
+  }
+}
+
+// 2. Template pour arrêté validé avec exception
+export function generateSettlementExceptionEmail(data: CashSettlementEmailData): { subject: string; html: string } {
+  const subject = `[ZOLL TAX FOREX] Arrêté de caisse validé avec exception - ${data.settlementNumber}`
+  
+  const content = `
+    <h2>⚠️ Arrêté de Caisse Validé avec Exception</h2>
+    <p>Un arrêté de caisse a été validé avec exception par le gestionnaire de caisse.</p>
+    
+    <div class="alert warning">
+        <strong>Statut:</strong> Arrêté validé avec exception
+    </div>
+    
+    ${SETTLEMENT_DETAILS_TEMPLATE(data)}
+    
+    ${data.exceptionReason ? `
+    <div class="alert warning">
+        <strong>Raison de l'exception:</strong> ${data.exceptionReason}
+    </div>
+    ` : ''}
+    
+    <p><strong>Information:</strong> Cet arrêté a été validé malgré un écart entre le montant attendu et le montant reçu. Veuillez vérifier les détails.</p>
+    
+    <p><strong>Action recommandée:</strong></p>
+    <ul>
+        <li>Connectez-vous au système ZOLL TAX FOREX</li>
+        <li>Accédez à la section "Arrêté de caisse"</li>
+        <li>Consultez les détails de l'exception</li>
+        <li>Prenez les mesures correctives si nécessaire</li>
+    </ul>
+  `
+  
+  return {
+    subject,
+    html: BASE_TEMPLATE(content, "Arrêté avec Exception")
+  }
+}
+
+// 3. Template pour arrêté validé normalement
+export function generateSettlementValidatedEmail(data: CashSettlementEmailData): { subject: string; html: string } {
+  const subject = `[ZOLL TAX FOREX] Arrêté de caisse validé - ${data.settlementNumber}`
+  
+  const content = `
+    <h2>✅ Arrêté de Caisse Validé</h2>
+    <p>Un arrêté de caisse a été validé avec succès par le gestionnaire de caisse.</p>
+    
+    <div class="alert success">
+        <strong>Statut:</strong> Arrêté validé
+    </div>
+    
+    ${SETTLEMENT_DETAILS_TEMPLATE(data)}
+    
+    ${data.validationNotes ? `
+    <div class="alert info">
+        <strong>Notes de validation:</strong> ${data.validationNotes}
+    </div>
+    ` : ''}
+    
+    <p><strong>Information:</strong> Cet arrêté a été validé et enregistré dans le système. Les montants correspondent aux attentes.</p>
+  `
+  
+  return {
+    subject,
+    html: BASE_TEMPLATE(content, "Arrêté Validé")
   }
 }

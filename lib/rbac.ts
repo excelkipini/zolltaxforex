@@ -1,4 +1,4 @@
-export type Role = "super_admin" | "director" | "delegate" | "accounting" | "cashier" | "auditor" | "executor"
+export type Role = "super_admin" | "director" | "delegate" | "accounting" | "cashier" | "auditor" | "executor" | "cash_manager"
 
 export type Permission =
   | "view_dashboard"
@@ -48,6 +48,10 @@ export type Permission =
   | "edit_settings"
   | "view_receipts"
   | "create_receipts"
+  | "view_cash_settlements"
+  | "create_cash_settlements"
+  | "edit_cash_settlements"
+  | "validate_cash_settlements"
 
 const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   super_admin: [
@@ -88,6 +92,10 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "edit_settings",
     "view_receipts",
     "create_receipts",
+    "view_cash_settlements",
+    "create_cash_settlements",
+    "edit_cash_settlements",
+    "validate_cash_settlements",
   ],
   director: [
     "view_dashboard",
@@ -136,6 +144,10 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "edit_settings",
     "view_receipts",
     "create_receipts",
+    "view_cash_settlements",
+    "create_cash_settlements",
+    "edit_cash_settlements",
+    "validate_cash_settlements",
   ],
   delegate: [
     "view_dashboard",
@@ -168,6 +180,10 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "edit_reports",
     "view_receipts",
     "create_receipts",
+    "view_cash_settlements",
+    "create_cash_settlements",
+    "edit_cash_settlements",
+    "validate_cash_settlements",
   ],
   cashier: [
     "view_dashboard",
@@ -183,6 +199,8 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "create_expenses",
     "view_receipts",
     "create_receipts",
+    "view_cash_settlements",
+    "create_cash_settlements",
   ],
   auditor: [
     "view_dashboard",
@@ -192,12 +210,23 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "view_rates", // Consultation seule - pas d'edit
     "view_expenses",
     "view_reports",
+    "view_cash_settlements",
+    "validate_cash_settlements",
   ],
   executor: [
     "view_dashboard",
     "view_transactions",
     "execute_transactions", // Pour exécuter les transactions validées
     "view_expenses",
+  ],
+  cash_manager: [
+    "view_dashboard",
+    "view_transactions",
+    "view_cash_settlements",
+    "create_cash_settlements",
+    "edit_cash_settlements",
+    "validate_cash_settlements",
+    "view_reports",
   ],
 }
 
@@ -242,6 +271,7 @@ export function getRoleDisplayName(role: Role): string {
     cashier: "Caissier",
     auditor: "Auditeur",
     executor: "Exécuteur",
+    cash_manager: "Gestionnaire de caisse",
   }
   return names[role] || role
 }
@@ -281,6 +311,10 @@ export function getRolePrimaryActions(role: Role): Array<{ label: string; href: 
       { label: "Exécuter transferts", href: "/transactions" },
       { label: "Voir opérations", href: "/transactions" },
     ],
+    cash_manager: [
+      { label: "Valider arrêtés", href: "/cash-settlements" },
+      { label: "Historique arrêtés", href: "/cash-settlements" },
+    ],
   }
   return actions[role] || []
 }
@@ -293,4 +327,5 @@ export const ROLE_DESCRIPTIONS: Record<Role, string> = {
   cashier: "Interface opérationnelle pour transferts d'argent, cartes et opérations de change",
   auditor: "Contrôle et audit en mode lecture seule, génération de rapports de conformité",
   executor: "Exécution des transferts d'argent validés par les auditeurs",
+  cash_manager: "Validation et gestion des arrêtés de caisse des caissiers",
 }

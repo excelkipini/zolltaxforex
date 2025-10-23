@@ -245,3 +245,90 @@ export function createEmailHeaders(config: EmailConfig, to: string[], cc: string
   
   return headers
 }
+
+// Fonctions pour les arrêtés de caisse
+
+// Fonction pour obtenir les destinataires des emails d'arrêtés de caisse
+export async function getSettlementEmailRecipients(type: 'settlement_rejected' | 'settlement_exception' | 'settlement_validated'): Promise<{ to: User[]; cc: User[] }> {
+  switch (type) {
+    case 'settlement_rejected':
+      // Arrêté rejeté : caissier en TO, directeur, comptables et auditeurs en CC
+      return {
+        to: [], // Le caissier sera ajouté dynamiquement
+        cc: await getUsersByRoles(['director', 'accounting', 'auditor']),
+      }
+    
+    case 'settlement_exception':
+      // Arrêté avec exception : caissier en TO, directeur, comptables et auditeurs en CC
+      return {
+        to: [], // Le caissier sera ajouté dynamiquement
+        cc: await getUsersByRoles(['director', 'accounting', 'auditor']),
+      }
+    
+    case 'settlement_validated':
+      // Arrêté validé : caissier en TO, directeur et comptables en CC
+      return {
+        to: [], // Le caissier sera ajouté dynamiquement
+        cc: await getUsersByRoles(['director', 'accounting']),
+      }
+
+    default:
+      return { to: [], cc: [] }
+  }
+}
+
+// Fonction pour envoyer un email d'arrêté de caisse
+export async function sendSettlementEmail(
+  type: 'settlement_rejected' | 'settlement_exception' | 'settlement_validated',
+  data: CashSettlementEmailData,
+  cashierEmail?: string
+): Promise<void> {
+  try {
+    const config = getEmailConfig()
+    const recipients = await getSettlementEmailRecipients(type)
+    
+    // Ajouter le caissier aux destinataires si son email est fourni
+    const to = [...recipients.to]
+    if (cashierEmail) {
+      to.push({ email: cashierEmail, name: data.cashierName } as User)
+    }
+    
+    const toAddresses = formatEmailAddresses(to)
+    const ccAddresses = formatEmailAddresses(recipients.cc)
+    
+    const headers = createEmailHeaders(config, toAddresses, ccAddresses)
+    
+    // Générer le contenu email selon le type
+    let emailContent: { subject: string; html: string }
+    
+    switch (type) {
+      case 'settlement_rejected':
+        emailContent = generateSettlementRejectedEmail(data)
+        break
+      case 'settlement_exception':
+        emailContent = generateSettlementExceptionEmail(data)
+        break
+      case 'settlement_validated':
+        emailContent = generateSettlementValidatedEmail(data)
+        break
+      default:
+        throw new Error(`Type d'email d'arrêté non supporté: ${type}`)
+    }
+    
+    // Ici, vous intégreriez votre service d'envoi d'email (SendGrid, Nodemailer, etc.)
+    console.log('📧 Email d\'arrêté de caisse à envoyer:', {
+      type,
+      to: toAddresses,
+      cc: ccAddresses,
+      subject: emailContent.subject,
+      settlementNumber: data.settlementNumber
+    })
+    
+    // Pour l'instant, on log juste l'email
+    // Dans un environnement de production, vous remplaceriez ceci par l'envoi réel
+    
+  } catch (error) {
+    console.error('Erreur lors de l\'envoi de l\'email d\'arrêté:', error)
+    throw error
+  }
+}
