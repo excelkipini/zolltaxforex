@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS receipts (
     amount_received DECIMAL(15,2) NOT NULL,
     amount_sent DECIMAL(15,2) NOT NULL,
     commission DECIMAL(15,2) NOT NULL,
-    commission_rate DECIMAL(5,3) NOT NULL DEFAULT 3.775,
+    commission_rate DECIMAL(5,3) NOT NULL DEFAULT 3.384,
     currency VARCHAR(10) NOT NULL DEFAULT 'XAF',
     notes TEXT,
     qr_code_data JSONB,
