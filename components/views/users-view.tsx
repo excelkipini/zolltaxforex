@@ -39,7 +39,16 @@ export function UsersView() {
   const [search, setSearch] = useState("")
   const [users, setUsers] = useState<User[]>([])
   const [agencies, setAgencies] = useState<Agency[]>([])
-  const [availableRoles, setAvailableRoles] = useState<string[]>([])
+  const [availableRoles, setAvailableRoles] = useState<string[]>([
+    "Directeur Général",
+    "Comptable", 
+    "Auditeur",
+    "Caissier",
+    "Délégué",
+    "Exécuteur",
+    "Gestionnaire de caisse",
+    "Admin"
+  ])
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<User | null>(null)
   const [confirmId, setConfirmId] = useState<string | null>(null)
