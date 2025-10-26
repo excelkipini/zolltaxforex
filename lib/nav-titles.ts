@@ -13,7 +13,6 @@ const TITLES: Record<Locale, Record<string, string>> = {
     "/agencies": "Gestion des agences",
     "/rates": "Gestion des taux & plafonds",
     "/receipt": "Transfert International",
-    "/cash-settlements": "Arrêté de caisse",
   },
   en: {
     "/dashboard": "Dashboard",

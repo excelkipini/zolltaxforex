@@ -1,5 +1,6 @@
 "use client"
 
+import * as React from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
@@ -22,6 +23,8 @@ import {
   Building2,
   Settings,
   Plus,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react"
 import type { SessionUser } from "@/lib/auth-client"
 import { hasPermission, getRoleDisplayName } from "@/lib/rbac"
@@ -33,6 +36,14 @@ interface RoleBasedSidebarProps {
 
 export function RoleBasedSidebar({ user }: RoleBasedSidebarProps) {
   const pathname = usePathname()
+  const [openSubmenus, setOpenSubmenus] = React.useState<Record<string, boolean>>({})
+
+  const toggleSubmenu = (itemTitle: string) => {
+    setOpenSubmenus(prev => ({
+      ...prev,
+      [itemTitle]: !prev[itemTitle]
+    }))
+  }
 
   const menuItems = [
     {
@@ -90,13 +101,6 @@ export function RoleBasedSidebar({ user }: RoleBasedSidebarProps) {
       icon: Wallet,
       permission: "view_cash" as const,
       primary: user.role === "accounting" || user.role === "director",
-    },
-    {
-      title: "Arrêté de caisse",
-      href: "/cash-settlements",
-      icon: Receipt,
-      permission: "view_cash_settlements" as const,
-      primary: user.role === "cashier" || user.role === "cash_manager" || user.role === "accounting" || user.role === "director",
     },
     {
       title: "Rapports",
@@ -158,7 +162,17 @@ export function RoleBasedSidebar({ user }: RoleBasedSidebarProps) {
         menuItems.find((item) => item.href === "/users"),
         menuItems.find((item) => item.href === "/rates")
       ].filter(Boolean) // Supprimer les undefined
-    : menuItems.filter((item) => hasPermission(user, item.permission))
+    : menuItems.filter((item) => {
+        // Vérifier la permission principale
+        if (!hasPermission(user, item.permission)) return false
+        
+        // Si l'item a un sous-menu, vérifier qu'au moins un sous-menu est accessible
+        if (item.submenu && item.submenu.length > 0) {
+          return item.submenu.some(subItem => hasPermission(user, subItem.permission))
+        }
+        
+        return true
+      })
   
   const visibleAdminItems = adminItems.filter((item) => hasPermission(user, item.permission))
   const visibleQuickActions = quickActions.filter(
@@ -228,6 +242,57 @@ export function RoleBasedSidebar({ user }: RoleBasedSidebarProps) {
         {visibleMenuItems.map((item) => {
           const Icon = item.icon
           const isActive = pathname === item.href
+          const hasSubmenu = item.submenu && item.submenu.length > 0
+          const isSubmenuOpen = openSubmenus[item.title] || false
+
+          // Vérifier si un sous-menu est actif
+          const isSubmenuActive = hasSubmenu && item.submenu?.some(subItem => pathname === subItem.href)
+
+          if (hasSubmenu) {
+            return (
+              <div key={item.title}>
+                <Button
+                  variant={isActive || isSubmenuActive ? "secondary" : "ghost"}
+                  className={cn(
+                    "w-full justify-between",
+                    (isActive || isSubmenuActive) && "bg-blue-50 text-blue-700 hover:bg-blue-100"
+                  )}
+                  onClick={() => toggleSubmenu(item.title)}
+                >
+                  <div className="flex items-center">
+                    <Icon className="mr-2 h-4 w-4" />
+                    {item.title}
+                  </div>
+                  {isSubmenuOpen ? (
+                    <ChevronDown className="h-4 w-4" />
+                  ) : (
+                    <ChevronRight className="h-4 w-4" />
+                  )}
+                </Button>
+                
+                {isSubmenuOpen && (
+                  <div className="ml-4 mt-1 space-y-1">
+                    {item.submenu?.filter(subItem => hasPermission(user, subItem.permission)).map((subItem) => {
+                      const isSubActive = pathname === subItem.href
+                      return (
+                        <Link key={subItem.href} href={subItem.href}>
+                          <Button
+                            variant={isSubActive ? "secondary" : "ghost"}
+                            className={cn(
+                              "w-full justify-start text-sm",
+                              isSubActive && "bg-blue-50 text-blue-700 hover:bg-blue-100"
+                            )}
+                          >
+                            {subItem.title}
+                          </Button>
+                        </Link>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )
+          }
 
           return (
             <Link key={item.href} href={item.href}>
