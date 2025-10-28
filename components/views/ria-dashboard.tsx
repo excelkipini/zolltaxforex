@@ -389,7 +389,7 @@ export function RiaDashboard({ initialData, onImportSuccess }: RiaDashboardProps
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-teal-900">{formatAmount(dashboardData.montant_brut)}</div>
-            <p className="text-xs text-teal-700 mt-1">(Montant principal + Total frais) - Total Délestage</p>
+            <p className="text-xs text-teal-700 mt-1">Sent Amount + TTF + CTE + TVA + Frais Client</p>
           </CardContent>
         </Card>
 
@@ -418,7 +418,7 @@ export function RiaDashboard({ initialData, onImportSuccess }: RiaDashboardProps
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-emerald-900">{formatAmount(dashboardData.versement_banque)}</div>
-            <p className="text-xs text-emerald-700 mt-1">Montant brut – Remboursements</p>
+            <p className="text-xs text-emerald-700 mt-1">Montant brut – Remboursements – Total Délestage</p>
           </CardContent>
         </Card>
 
@@ -431,7 +431,7 @@ export function RiaDashboard({ initialData, onImportSuccess }: RiaDashboardProps
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-violet-900">{formatAmount(dashboardData.montant_a_debiter)}</div>
-            <p className="text-xs text-violet-700 mt-1">Versement banque – (Commissions ZTF + TVA ZTF + CA ZTF + CTE)</p>
+            <p className="text-xs text-violet-700 mt-1">Versement banque – (Commissions ZTF + TVA ZTF + CA ZTF + TVA RIA + TTF)</p>
           </CardContent>
         </Card>
 
@@ -444,7 +444,7 @@ export function RiaDashboard({ initialData, onImportSuccess }: RiaDashboardProps
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-cyan-900">{formatAmount(dashboardData.montant_en_coffre)}</div>
-            <p className="text-xs text-cyan-700 mt-1">Versement banque – Montant à débiter</p>
+            <p className="text-xs text-cyan-700 mt-1">Commissions ZTF + TVA ZTF + CA ZTF + TVA RIA + TTF</p>
           </CardContent>
         </Card>
 

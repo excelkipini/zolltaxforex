@@ -149,7 +149,71 @@ export async function POST(request: NextRequest) {
     }
 
     // Transformer les données CSV en format de base de données
-    // Utiliser les délestages par guichetier pour chaque transaction
+    // D'abord, calculer le délestage proportionnel par transaction pour chaque guichetier
+    const guichetierTransactions: Record<string, any[]> = {}
+    
+    // Grouper les transactions par guichetier
+    records.forEach((record: any, index: number) => {
+      try {
+        const guichetier = record["Guichetier"]?.trim()
+        if (guichetier) {
+          if (!guichetierTransactions[guichetier]) {
+            guichetierTransactions[guichetier] = []
+          }
+          guichetierTransactions[guichetier].push(record)
+        }
+      } catch (error) {
+        console.error(`Erreur lors du groupement ligne ${index + 1}:`, error)
+      }
+    })
+    
+    // Calculer les délestages proportionnels par transaction
+    const delestageByTransaction: Record<string, number> = {}
+    
+    Object.entries(guichetierTransactions).forEach(([guichetier, records]) => {
+      const totalDélestage = delestages[guichetier] || 0
+      if (totalDélestage > 0) {
+        // Calculer le total du montant_brut pour ce guichetier selon la nouvelle formule
+        let totalMontantBrut = 0
+        records.forEach(record => {
+          try {
+            const sentAmount = parseFloat(record["Sent Amount"]?.replace(/,/g, '.') || '0')
+            const commissionSa = parseFloat(record["Commission SA"]?.replace(/,/g, '.') || '0')
+            const ttfCalculated = Math.round(sentAmount * 1.5 / 100.0 * 100) / 100
+            const cteCalculated = Math.round(sentAmount * 0.25 / 100.0 * 100) / 100
+            const commissionRia = Math.round(commissionSa * 70.0 / 100.0 * 100) / 100
+            const tvaRia = Math.round(commissionRia * 18.9 / 100.0 * 100) / 100
+            // Montant brut = Sent Amount + TTF + CTE + TVA + Frais Client
+            totalMontantBrut += sentAmount + ttfCalculated + cteCalculated + tvaRia + commissionSa
+          } catch (error) {
+            console.error('Erreur calcul total:', error)
+          }
+        })
+        
+        // Calculer le délestage par transaction proportionnellement au montant_brut
+        records.forEach(record => {
+          try {
+            const sentAmount = parseFloat(record["Sent Amount"]?.replace(/,/g, '.') || '0')
+            const commissionSa = parseFloat(record["Commission SA"]?.replace(/,/g, '.') || '0')
+            const ttfCalculated = Math.round(sentAmount * 1.5 / 100.0 * 100) / 100
+            const cteCalculated = Math.round(sentAmount * 0.25 / 100.0 * 100) / 100
+            const commissionRia = Math.round(commissionSa * 70.0 / 100.0 * 100) / 100
+            const tvaRia = Math.round(commissionRia * 18.9 / 100.0 * 100) / 100
+            // Montant brut = Sent Amount + TTF + CTE + TVA + Frais Client
+            const montantBrut = sentAmount + ttfCalculated + cteCalculated + tvaRia + commissionSa
+            
+            if (totalMontantBrut > 0 && montantBrut > 0) {
+              const transactionKey = `${guichetier}-${record["SC Numéro du transfert"]}`
+              delestageByTransaction[transactionKey] = Math.round((montantBrut / totalMontantBrut) * totalDélestage * 100) / 100
+            }
+          } catch (error) {
+            console.error('Erreur calcul délestage:', error)
+          }
+        })
+      }
+    })
+    
+    // Transformer les données CSV en format de base de données
     const transactions = records.map((record: any, index: number) => {
       try {
         console.log(`🔍 Traitement ligne ${index + 1}:`, Object.keys(record))
@@ -219,19 +283,15 @@ export async function POST(request: NextRequest) {
         const actionMapping: { [key: string]: 'Envoyé' | 'Payé' | 'Annulé' | 'Remboursé' | 'En attente' } = {
           'envoye': 'Envoyé',
           'envoyé': 'Envoyé',
-          'envoye': 'Envoyé',
           'envoy': 'Envoyé',  // Cas partiel pour caractères corrompus
           'paye': 'Payé',
           'payé': 'Payé',
-          'paye': 'Payé',
           'pay': 'Payé',      // Cas partiel pour caractères corrompus
           'annule': 'Annulé',
           'annulé': 'Annulé',
-          'annule': 'Annulé',
           'annul': 'Annulé',  // Cas partiel pour caractères corrompus
           'rembourse': 'Remboursé',
           'remboursé': 'Remboursé',
-          'rembourse': 'Remboursé',
           'rembours': 'Remboursé', // Cas partiel pour caractères corrompus
           'en attente': 'En attente',
           'en_attente': 'En attente',
@@ -283,9 +343,10 @@ export async function POST(request: NextRequest) {
         const ttfCalculated = Math.round(sentAmount * 1.5 / 100.0 * 100) / 100
         const montantPrincipal = sentAmount
         const fraisClientCalculated = commissionSa
-        // Montant brut = (Montant principal + Total frais) - Total Délestage
-        const delestageAmount = delestages[guichetier] || 0
-        const montantBrut = sentAmount + commissionSa - delestageAmount
+        // Montant brut = Sent Amount + TTF + CTE + TVA + Frais Client
+        const transactionKey = `${guichetier}-${scNumeroTransfert}`
+        const delestageProportionnel = delestageByTransaction[transactionKey] || 0
+        const montantBrut = sentAmount + ttfCalculated + cteCalculated + tvaRia + commissionSa
         const isRemboursement = action === 'Annulé' || action === 'Remboursé'
 
         return {
@@ -337,9 +398,19 @@ export async function POST(request: NextRequest) {
 
     console.log(`✅ ${transactions.length} transactions préparées pour l'importation`)
 
+    // Préparer les délestages par transaction pour l'importation
+    const delestageForImport: Record<string, number> = {}
+    transactions.forEach(tx => {
+      const key = `${tx.guichetier}-${tx.sc_numero_transfert}`
+      const delestageAmount = delestageByTransaction[key] || 0
+      delestageForImport[key] = delestageAmount
+    })
+    
     // Importer dans la base de données
     console.log('💾 Début de l\'importation en base de données...')
-    await importRiaTransactions(transactions, delestages)
+    console.log('💰 Délestages totaux par guichetier:', delestages)
+    console.log('📊 Délestages répartis sur', transactions.length, 'transactions')
+    await importRiaTransactions(transactions, delestageForImport)
     console.log('✅ Importation en base terminée avec succès')
 
     return NextResponse.json({

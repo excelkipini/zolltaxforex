@@ -536,11 +536,13 @@ export async function getDashboardData(filters?: {
       COALESCE(SUM(montant_brut), 0) as montant_brut,
       COALESCE(SUM(frais_client_calculated), 0) as total_frais,
       COALESCE(SUM(CASE WHEN is_remboursement THEN montant_brut ELSE 0 END), 0) as remboursements,
-      -- versement_banque = montant_brut - remboursements (le délestage est déjà dans montant_brut)
-      COALESCE(SUM(montant_brut) - SUM(CASE WHEN is_remboursement THEN montant_brut ELSE 0 END), 0) as versement_banque,
+      -- versement_banque = montant_brut - remboursements - total_delestage
+      COALESCE(SUM(montant_brut) - SUM(CASE WHEN is_remboursement THEN montant_brut ELSE 0 END) - SUM(delestage), 0) as versement_banque,
+      -- montant_a_debiter = Versement banque – (Commissions ZTF + TVA ZTF + CA ZTF + TVA RIA + TTF)
       COALESCE(SUM(montant_brut) - SUM(CASE WHEN is_remboursement THEN montant_brut ELSE 0 END) - 
-               SUM(commission_ztf + tva_ztf + ca_ztf + cte_calculated), 0) as montant_a_debiter,
-      COALESCE(SUM(commission_ztf + tva_ztf + ca_ztf + cte_calculated), 0) as montant_en_coffre,
+               SUM(commission_ztf + tva_ztf + ca_ztf + tva_ria + ttf_calculated), 0) as montant_a_debiter,
+      -- montant_en_coffre = (Commissions ZTF + TVA ZTF + CA ZTF + TVA RIA + TTF)
+      COALESCE(SUM(commission_ztf + tva_ztf + ca_ztf + tva_ria + ttf_calculated), 0) as montant_en_coffre,
       
       -- Indicateurs secondaires
       COALESCE(SUM(commission_ria), 0) as commissions_ria,
@@ -618,7 +620,7 @@ export async function importRiaTransactions(transactions: any[], delestages: Rec
           ${tx.tva_uba || 0}, ${tx.commission_ztf || 0}, ${tx.ca_ztf || 0}, 
           ${tx.tva_ztf || 0}, ${tx.cte_calculated || 0}, ${tx.ttf_calculated || 0}, 
           ${tx.montant_principal || 0}, ${tx.frais_client_calculated || 0}, 
-          ${tx.montant_brut || 0}, ${tx.is_remboursement || false}, ${delestages[tx.guichetier] || 0}
+          ${tx.montant_brut || 0}, ${tx.is_remboursement || false}, ${delestages[`${tx.guichetier}-${tx.sc_numero_transfert}`] || 0}
         )
         ON CONFLICT (sc_numero_transfert) DO UPDATE SET
           pin = EXCLUDED.pin,
