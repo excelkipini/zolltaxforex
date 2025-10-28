@@ -25,6 +25,9 @@ import {
   Plus,
   ChevronDown,
   ChevronRight,
+  BarChart3,
+  Upload,
+  List,
 } from "lucide-react"
 import type { SessionUser } from "@/lib/auth-client"
 import { hasPermission, getRoleDisplayName } from "@/lib/rbac"
@@ -101,6 +104,13 @@ export function RoleBasedSidebar({ user }: RoleBasedSidebarProps) {
       icon: Wallet,
       permission: "view_cash" as const,
       primary: user.role === "accounting" || user.role === "director",
+    },
+    {
+      title: "Gestion RIA",
+      href: "/ria",
+      icon: BarChart3,
+      permission: "view_ria_dashboard" as const,
+      primary: user.role === "cash_manager",
     },
     {
       title: "Rapports",

@@ -1,0 +1,15 @@
+-- Ajout des colonnes de calculs RIA
+ALTER TABLE ria_transactions ADD COLUMN IF NOT EXISTS commission_ria DECIMAL(15,2) DEFAULT 0;
+ALTER TABLE ria_transactions ADD COLUMN IF NOT EXISTS tva_ria DECIMAL(15,2) DEFAULT 0;
+ALTER TABLE ria_transactions ADD COLUMN IF NOT EXISTS commission_uba DECIMAL(15,2) DEFAULT 0;
+ALTER TABLE ria_transactions ADD COLUMN IF NOT EXISTS tva_uba DECIMAL(15,2) DEFAULT 0;
+ALTER TABLE ria_transactions ADD COLUMN IF NOT EXISTS commission_ztf DECIMAL(15,2) DEFAULT 0;
+ALTER TABLE ria_transactions ADD COLUMN IF NOT EXISTS ca_ztf DECIMAL(15,2) DEFAULT 0;
+ALTER TABLE ria_transactions ADD COLUMN IF NOT EXISTS tva_ztf DECIMAL(15,2) DEFAULT 0;
+ALTER TABLE ria_transactions ADD COLUMN IF NOT EXISTS cte_calculated DECIMAL(15,2) DEFAULT 0;
+ALTER TABLE ria_transactions ADD COLUMN IF NOT EXISTS ttf_calculated DECIMAL(15,2) DEFAULT 0;
+ALTER TABLE ria_transactions ADD COLUMN IF NOT EXISTS montant_principal DECIMAL(15,2) DEFAULT 0;
+ALTER TABLE ria_transactions ADD COLUMN IF NOT EXISTS frais_client_calculated DECIMAL(15,2) DEFAULT 0;
+ALTER TABLE ria_transactions ADD COLUMN IF NOT EXISTS montant_brut DECIMAL(15,2) DEFAULT 0;
+ALTER TABLE ria_transactions ADD COLUMN IF NOT EXISTS is_remboursement BOOLEAN DEFAULT FALSE;
+

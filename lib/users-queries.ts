@@ -156,7 +156,7 @@ export const AVAILABLE_ROLES = [
   "Caissier",
   "Délégué",
   "Exécuteur",
-  "Gestionnaire de caisse",
+  "Responsable caisse",
   "Admin"
 ] as const
 
@@ -170,7 +170,7 @@ export const ROLE_MAPPING: Record<RoleLabel, User["role"]> = {
   "Caissier": "cashier",
   "Délégué": "delegate",
   "Exécuteur": "executor",
-  "Gestionnaire de caisse": "cash_manager",
+  "Responsable caisse": "cash_manager",
   "Admin": "super_admin"
 }
 

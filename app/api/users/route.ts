@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
       email,
       role,
       agency,
-      password_hash: password // En production, il faudrait hasher le mot de passe
+      password: password // Le mot de passe sera automatiquement hashé par createUser
     })
 
     return NextResponse.json({ ok: true, data: newUser })

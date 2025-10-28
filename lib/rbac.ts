@@ -1,4 +1,4 @@
-export type Role = "super_admin" | "director" | "delegate" | "accounting" | "cashier" | "auditor" | "executor"
+export type Role = "super_admin" | "director" | "delegate" | "accounting" | "cashier" | "auditor" | "executor" | "cash_manager"
 
 export type Permission =
   | "view_dashboard"
@@ -48,6 +48,9 @@ export type Permission =
   | "edit_settings"
   | "view_receipts"
   | "create_receipts"
+  | "view_ria_transactions"
+  | "import_ria_csv"
+  | "view_ria_dashboard"
 
 const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   super_admin: [
@@ -88,6 +91,9 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "edit_settings",
     "view_receipts",
     "create_receipts",
+    "view_ria_transactions",
+    "import_ria_csv",
+    "view_ria_dashboard",
   ],
   director: [
     "view_dashboard",
@@ -136,6 +142,9 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "edit_settings",
     "view_receipts",
     "create_receipts",
+    "view_ria_transactions",
+    "import_ria_csv",
+    "view_ria_dashboard",
   ],
   delegate: [
     "view_dashboard",
@@ -168,6 +177,9 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "edit_reports",
     "view_receipts",
     "create_receipts",
+    "view_ria_transactions",
+    "import_ria_csv",
+    "view_ria_dashboard",
   ],
   cashier: [
     "view_dashboard",
@@ -183,6 +195,9 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "create_expenses",
     "view_receipts",
     "create_receipts",
+    "view_ria_transactions",
+    "import_ria_csv",
+    "view_ria_dashboard",
   ],
   auditor: [
     "view_dashboard",
@@ -198,6 +213,13 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "view_transactions",
     "execute_transactions", // Pour exécuter les transactions validées
     "view_expenses",
+  ],
+  cash_manager: [
+    "view_dashboard",
+    "view_ria_transactions",
+    "import_ria_csv",
+    "view_ria_dashboard",
+    "view_reports",
   ],
 }
 
@@ -242,7 +264,7 @@ export function getRoleDisplayName(role: Role): string {
     cashier: "Caissier",
     auditor: "Auditeur",
     executor: "Exécuteur",
-    cash_manager: "Gestionnaire de caisse",
+    cash_manager: "Responsable caisse",
   }
   return names[role] || role
 }
@@ -282,6 +304,11 @@ export function getRolePrimaryActions(role: Role): Array<{ label: string; href: 
       { label: "Exécuter transferts", href: "/transactions" },
       { label: "Voir opérations", href: "/transactions" },
     ],
+    cash_manager: [
+      { label: "Importer CSV RIA", href: "/ria-import" },
+      { label: "Tableau de bord RIA", href: "/ria-dashboard" },
+      { label: "Transactions RIA", href: "/ria-transactions" },
+    ],
   }
   return actions[role] || []
 }
@@ -294,4 +321,5 @@ export const ROLE_DESCRIPTIONS: Record<Role, string> = {
   cashier: "Interface opérationnelle pour transferts d'argent, cartes et opérations de change",
   auditor: "Contrôle et audit en mode lecture seule, génération de rapports de conformité",
   executor: "Exécution des transferts d'argent validés par les auditeurs",
+  cash_manager: "Importation et gestion des opérations RIA, supervision du tableau de bord financier",
 }

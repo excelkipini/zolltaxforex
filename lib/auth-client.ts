@@ -56,7 +56,7 @@ export type SessionUser = {
   id: string
   name: string
   email: string
-  role: "super_admin" | "director" | "accounting" | "cashier" | "auditor" | "delegate"
+  role: "super_admin" | "director" | "accounting" | "cashier" | "auditor" | "delegate" | "executor" | "cash_manager"
   agency?: string
 }
 

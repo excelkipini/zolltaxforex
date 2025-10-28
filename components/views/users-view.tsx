@@ -32,7 +32,7 @@ type Agency = {
   created_at: string
 }
 
-type FilterKey = "all" | "director" | "accounting" | "cashier" | "auditor" | "delegate" | "cash_manager"
+type FilterKey = "all" | "director" | "accounting" | "cashier" | "auditor" | "delegate" | "executor" | "cash_manager"
 
 export function UsersView() {
   const [filter, setFilter] = useState<FilterKey>("all")
@@ -46,7 +46,7 @@ export function UsersView() {
     "Caissier",
     "Délégué",
     "Exécuteur",
-    "Gestionnaire de caisse",
+    "Responsable caisse",
     "Admin"
   ])
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -92,7 +92,18 @@ export function UsersView() {
   }, [toast])
 
   const handleCreateUser = async () => {
+    console.log('🔍 Données du formulaire:', formData)
+    console.log('🔍 Agences disponibles:', agencies)
+    console.log('🔍 Rôles disponibles:', availableRoles)
+    
     if (!formData.name.trim() || !formData.email.trim() || !formData.roleLabel || !formData.agency || !formData.password.trim()) {
+      console.log('❌ Validation échouée:', {
+        name: formData.name.trim(),
+        email: formData.email.trim(),
+        roleLabel: formData.roleLabel,
+        agency: formData.agency,
+        password: formData.password.trim()
+      })
       toast({
         title: "Erreur",
         description: "Tous les champs sont requis",
@@ -183,7 +194,8 @@ export function UsersView() {
                 <SelectItem value="cashier">Caissier</SelectItem>
                 <SelectItem value="auditor">Auditeur</SelectItem>
                 <SelectItem value="delegate">Délégué</SelectItem>
-                <SelectItem value="cash_manager">Gestionnaire de caisse</SelectItem>
+                <SelectItem value="executor">Exécuteur</SelectItem>
+                <SelectItem value="cash_manager">Responsable caisse</SelectItem>
               </SelectContent>
             </Select>
           </div>

@@ -117,7 +117,8 @@ export default function UsersDbClient({ initial, currentUser }: { initial: DbUse
         "cashier": "Caissier",
         "auditor": "Auditeur",
         "delegate": "Délégué",
-        "executor": "Exécuteur"
+        "executor": "Exécuteur",
+        "cash_manager": "Responsable caisse"
       }
       
       const res = await fetch("/api/users", {
@@ -335,7 +336,7 @@ function UserDialog({ open, onOpenChange, initial, onSubmit, pending, agencies, 
             <Select value={role} onValueChange={(v: Role)=>setRole(v)} disabled={!hasPermission(currentUser, "edit_users")}>
               <SelectTrigger className="mt-1"><SelectValue placeholder="Choisir un rôle" /></SelectTrigger>
               <SelectContent>
-                {(["super_admin","director","accounting","cashier","auditor","delegate","executor"] as Role[]).map((r)=>(
+                {(["super_admin","director","accounting","cashier","auditor","delegate","executor","cash_manager"] as Role[]).map((r)=>(
                   <SelectItem key={r} value={r}>{getRoleDisplayName(r)}</SelectItem>
                 ))}
               </SelectContent>
