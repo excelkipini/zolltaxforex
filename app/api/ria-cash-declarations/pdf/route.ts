@@ -4,6 +4,9 @@ import { getCashDeclarationById } from "@/lib/ria-cash-declarations-queries"
 import { generateCashDeclarationPDF } from "@/lib/pdf-service"
 import { getUserById } from "@/lib/users-queries"
 
+// Force dynamic rendering since we use cookies for authentication
+export const dynamic = 'force-dynamic'
+
 export async function GET(request: NextRequest) {
   try {
     // Vérifier l'authentification

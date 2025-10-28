@@ -19,6 +19,9 @@ import {
 } from "@/lib/email-service"
 import { ROLE_PERMISSIONS } from "@/lib/rbac"
 
+// Force dynamic rendering since we use cookies for authentication
+export const dynamic = 'force-dynamic'
+
 /**
  * GET /api/ria-cash-declarations
  * Récupérer les arrêtés de caisse selon le rôle de l'utilisateur
