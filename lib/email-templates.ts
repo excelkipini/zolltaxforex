@@ -1,5 +1,8 @@
 import "server-only"
-import { TransactionEmailData, DeletionRequestEmailData, ExpenseEmailData, TransferEmailData, CashSettlementEmailData } from "./email-service"
+import type { TransactionEmailData, DeletionRequestEmailData, ExpenseEmailData, TransferEmailData } from "./email-notifications"
+
+// Type pour CashSettlementEmailData
+type CashSettlementEmailData = any
 
 // Fonctions de traduction
 const translateTransactionType = (type: string): string => {
