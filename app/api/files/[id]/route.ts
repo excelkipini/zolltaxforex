@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { sql } from "@/lib/db"
+import { readFileSync } from "fs"
+import path from "path"
 
 // API route pour servir les fichiers stockés en base de données
 export async function GET(
@@ -37,7 +39,7 @@ export async function GET(
     return new NextResponse(file.file_data, {
       status: 200,
       headers: {
-        'Content-Type': file.content_type,
+        'Content-Type': file.content_type || 'application/octet-stream',
         'Content-Disposition': `inline; filename="${file.filename}"`,
         'Cache-Control': 'public, max-age=31536000', // Cache pour 1 an
       },
@@ -46,9 +48,37 @@ export async function GET(
   } catch (error: any) {
     console.error('Erreur lors de la récupération du fichier:', error)
     
-    return NextResponse.json(
-      { error: error.message || "Erreur interne du serveur" },
-      { status: 500 }
-    )
+    // Essayer de récupérer le fichier depuis le système de fichiers (fallback pour l'environnement local)
+    try {
+      const fileId = params.id
+      const filePath = path.join(process.cwd(), 'public', 'uploads', 'cash-declarations', fileId)
+      const fileData = readFileSync(filePath)
+      
+      // Déterminer le type MIME
+      const ext = path.extname(fileId).toLowerCase()
+      const mimeTypes: { [key: string]: string } = {
+        '.pdf': 'application/pdf',
+        '.csv': 'text/csv',
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.png': 'image/png',
+      }
+      const contentType = mimeTypes[ext] || 'application/octet-stream'
+      
+      return new NextResponse(fileData, {
+        status: 200,
+        headers: {
+          'Content-Type': contentType,
+          'Content-Disposition': `inline; filename="${fileId}"`,
+          'Cache-Control': 'public, max-age=31536000',
+        },
+      })
+    } catch (fsError) {
+      // Si les deux méthodes échouent, retourner une erreur
+      return NextResponse.json(
+        { error: "Fichier non trouvé" },
+        { status: 404 }
+      )
+    }
   }
 }

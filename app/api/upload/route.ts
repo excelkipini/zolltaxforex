@@ -1,8 +1,33 @@
 import { NextRequest, NextResponse } from "next/server"
 import { requireAuth } from "@/lib/auth"
-import { writeFile } from "fs/promises"
+import { sql } from "@/lib/db"
 import path from "path"
 import { v4 as uuidv4 } from "uuid"
+
+// Fonction pour sauvegarder le fichier uploadé en base de données
+async function saveUploadedFile(file: File): Promise<string> {
+  // Convertir le fichier en buffer
+  const bytes = await file.arrayBuffer()
+  const buffer = Buffer.from(bytes)
+  
+  // Générer un nom de fichier unique
+  const fileExtension = path.extname(file.name)
+  const filename = `cash-declaration_${Date.now()}_${uuidv4()}${fileExtension}`
+  
+  // Stocker le fichier en base de données
+  const result = await sql`
+    INSERT INTO uploaded_files (filename, content_type, file_data, created_at)
+    VALUES (${filename}, ${file.type}, ${buffer}, NOW())
+    RETURNING id
+  `
+  
+  if (result.length === 0) {
+    throw new Error('Erreur lors de la sauvegarde du fichier')
+  }
+  
+  // Retourner l'URL pour récupérer le fichier
+  return `/api/files/${result[0].id}`
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -38,40 +63,22 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Créer le répertoire uploads s'il n'existe pas
-    const uploadsDir = path.join(process.cwd(), "public", "uploads", "cash-declarations")
-    try {
-      await writeFile(path.join(uploadsDir, ".gitkeep"), "")
-    } catch {
-      // Le répertoire existe déjà
-    }
+    // Sauvegarder le fichier en base de données
+    const filePath = await saveUploadedFile(file)
 
-    // Générer un nom de fichier unique
-    const fileExtension = file.name.split(".").pop()
-    const fileName = `${uuidv4()}.${fileExtension}`
-    const filePath = path.join(uploadsDir, fileName)
-
-    // Enregistrer le fichier
-    const bytes = await file.arrayBuffer()
-    const buffer = Buffer.from(bytes)
-    await writeFile(filePath, buffer)
-
-    // Retourner le chemin relatif
-    const relativePath = `/uploads/cash-declarations/${fileName}`
-
-    console.log(`Fichier uploadé: ${relativePath}`)
+    console.log(`Fichier uploadé: ${filePath}`)
 
     return NextResponse.json({
       success: true,
-      filePath: relativePath,
+      filePath: filePath,
       fileName: file.name,
       size: file.size,
     })
 
-  } catch (error) {
+  } catch (error: any) {
     console.error("Erreur lors de l'upload:", error)
     return NextResponse.json(
-      { error: "Erreur lors de l'upload du fichier" },
+      { error: error.message || "Erreur lors de l'upload du fichier" },
       { status: 500 }
     )
   }
