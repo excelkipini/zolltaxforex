@@ -3,6 +3,9 @@ import { sql } from "@/lib/db"
 import { readFileSync } from "fs"
 import path from "path"
 
+// Force dynamic rendering for file serving
+export const dynamic = 'force-dynamic'
+
 // API route pour servir les fichiers stockés en base de données
 export async function GET(
   request: NextRequest,
@@ -27,6 +30,7 @@ export async function GET(
     `
 
     if (result.length === 0) {
+      console.error(`❌ Fichier non trouvé dans la BDD: ${fileId}`)
       return NextResponse.json(
         { error: "Fichier non trouvé" },
         { status: 404 }
@@ -34,6 +38,12 @@ export async function GET(
     }
 
     const file = result[0]
+    console.log(`✅ Fichier trouvé:`, {
+      id: fileId,
+      filename: file.filename,
+      contentType: file.content_type,
+      size: file.file_data?.length || 0
+    })
 
     // Retourner le fichier avec les bons headers
     return new NextResponse(file.file_data, {

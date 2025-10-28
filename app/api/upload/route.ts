@@ -4,6 +4,9 @@ import { sql } from "@/lib/db"
 import path from "path"
 import { v4 as uuidv4 } from "uuid"
 
+// Force dynamic rendering since we use cookies for authentication
+export const dynamic = 'force-dynamic'
+
 // Fonction pour sauvegarder le fichier uploadé en base de données
 async function saveUploadedFile(file: File): Promise<string> {
   // Convertir le fichier en buffer
@@ -66,7 +69,13 @@ export async function POST(request: NextRequest) {
     // Sauvegarder le fichier en base de données
     const filePath = await saveUploadedFile(file)
 
-    console.log(`Fichier uploadé: ${filePath}`)
+    console.log(`✅ Fichier uploadé avec succès:`, {
+      filePath,
+      fileName: file.name,
+      size: file.size,
+      type: file.type,
+      environment: process.env.NODE_ENV
+    })
 
     return NextResponse.json({
       success: true,
