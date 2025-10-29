@@ -71,9 +71,16 @@ export async function generateCashDeclarationPDF(
   doc.text('Délestage:', leftColumn, currentY)
   doc.setFont("courier", "bold")
   doc.text(formatAmount(Number(declaration.total_delestage)), leftColumn + 80, currentY)
+  currentY += itemHeight
+
+  // Ligne 3: Excédents
+  doc.setFont("courier", "normal")
+  doc.text('Excédents:', leftColumn, currentY)
+  doc.setFont("courier", "bold")
+  doc.text(formatAmount(Number(declaration.excedents || 0)), leftColumn + 80, currentY)
   currentY += itemHeight * 1.5
 
-  // Ligne 3: Net à verser
+  // Ligne 4: Net à verser
   const netAmount = Number(declaration.montant_brut) - Number(declaration.total_delestage)
   doc.setDrawColor(0, 0, 0)
   doc.setFillColor(240, 249, 255)

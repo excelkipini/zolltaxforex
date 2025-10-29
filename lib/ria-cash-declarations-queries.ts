@@ -11,8 +11,15 @@ export type CashDeclaration = {
   declaration_date: string
   montant_brut: number
   total_delestage: number
+  excedents: number
   delestage_comment?: string
   justificatif_file_path?: string
+  justificatif_files?: Array<{
+    id: string
+    filename: string
+    url: string
+    uploaded_at: string
+  }>
   status: CashDeclarationStatus
   rejection_comment?: string
   validation_comment?: string
@@ -38,8 +45,15 @@ export async function createCashDeclaration(data: {
   declaration_date: string
   montant_brut: number
   total_delestage: number
+  excedents: number
   delestage_comment?: string
   justificatif_file_path?: string
+  justificatif_files?: Array<{
+    id: string
+    filename: string
+    url: string
+    uploaded_at: string
+  }>
   autoSubmit?: boolean
 }): Promise<CashDeclaration> {
   // Si autoSubmit est true, créer directement en statut 'submitted'
@@ -47,13 +61,13 @@ export async function createCashDeclaration(data: {
     const [result] = await sql`
       INSERT INTO ria_cash_declarations (
         user_id, guichetier, declaration_date, montant_brut, 
-        total_delestage, delestage_comment, justificatif_file_path, status,
+        total_delestage, excedents, delestage_comment, justificatif_file_path, justificatif_files, status,
         submitted_at
       )
       VALUES (
         ${data.user_id}, ${data.guichetier}, ${data.declaration_date}, 
-        ${data.montant_brut}, ${data.total_delestage}, ${data.delestage_comment || null}, 
-        ${data.justificatif_file_path || null}, 'submitted',
+        ${data.montant_brut}, ${data.total_delestage}, ${data.excedents}, ${data.delestage_comment || null}, 
+        ${data.justificatif_file_path || null}, ${JSON.stringify(data.justificatif_files || [])}, 'submitted',
         CURRENT_TIMESTAMP
       )
       RETURNING *
@@ -63,12 +77,12 @@ export async function createCashDeclaration(data: {
     const [result] = await sql`
       INSERT INTO ria_cash_declarations (
         user_id, guichetier, declaration_date, montant_brut, 
-        total_delestage, delestage_comment, justificatif_file_path, status
+        total_delestage, excedents, delestage_comment, justificatif_file_path, justificatif_files, status
       )
       VALUES (
         ${data.user_id}, ${data.guichetier}, ${data.declaration_date}, 
-        ${data.montant_brut}, ${data.total_delestage}, ${data.delestage_comment || null}, 
-        ${data.justificatif_file_path || null}, 'pending'
+        ${data.montant_brut}, ${data.total_delestage}, ${data.excedents}, ${data.delestage_comment || null}, 
+        ${data.justificatif_file_path || null}, ${JSON.stringify(data.justificatif_files || [])}, 'pending'
       )
       RETURNING *
     `
@@ -201,41 +215,55 @@ export async function getCashDeclarationsStats(userId?: string): Promise<{
   total_montant_validated: number
   total_montant_rejected: number
   total_delestage: number
+  total_excedents: number
 }> {
-  const today = new Date().toISOString().split('T')[0]
-  
-  // Construire la requête avec ou sans filtre utilisateur
-  const userFilter = userId ? sql`WHERE user_id = ${userId}` : sql``
-  
-  const [result] = await sql`
-    SELECT 
-      COUNT(*) FILTER (WHERE status = 'submitted') as total_pending,
-      COUNT(*) FILTER (WHERE status = 'validated' AND declaration_date = ${today}) as total_validated_today,
-      COALESCE(SUM(total_delestage) FILTER (WHERE declaration_date = ${today}), 0) as total_delestage_today,
-      COALESCE(SUM(montant_brut) FILTER (WHERE declaration_date = ${today} AND status = 'validated'), 0) as total_montant_today,
-      COUNT(*) FILTER (WHERE status = 'submitted') as total_submitted,
-      COUNT(*) FILTER (WHERE status = 'validated') as total_validated,
-      COUNT(*) FILTER (WHERE status = 'rejected') as total_rejected,
-      COALESCE(SUM(montant_brut) FILTER (WHERE status = 'submitted'), 0) as total_montant_submitted,
-      COALESCE(SUM(montant_brut) FILTER (WHERE status = 'validated'), 0) as total_montant_validated,
-      COALESCE(SUM(montant_brut) FILTER (WHERE status = 'rejected'), 0) as total_montant_rejected,
-      COALESCE(SUM(total_delestage), 0) as total_delestage
-    FROM ria_cash_declarations
-    ${userFilter}
-  `
-  
-  return {
-    total_pending: Number(result.total_pending) || 0,
-    total_validated_today: Number(result.total_validated_today) || 0,
-    total_delestage_today: Number(result.total_delestage_today) || 0,
-    total_montant_today: Number(result.total_montant_today) || 0,
-    total_submitted: Number(result.total_submitted) || 0,
-    total_validated: Number(result.total_validated) || 0,
-    total_rejected: Number(result.total_rejected) || 0,
-    total_montant_submitted: Number(result.total_montant_submitted) || 0,
-    total_montant_validated: Number(result.total_montant_validated) || 0,
-    total_montant_rejected: Number(result.total_montant_rejected) || 0,
-    total_delestage: Number(result.total_delestage) || 0,
+  try {
+    console.log('📊 getCashDeclarationsStats appelée avec userId:', userId)
+
+    const today = new Date().toISOString().split('T')[0]
+
+    // Construire la requête avec ou sans filtre utilisateur
+    const userFilter = userId ? sql`WHERE user_id = ${userId}` : sql``
+    console.log('📊 userFilter:', userFilter)
+
+    // Requête complète pour la base de données réelle
+    const [result] = await sql`
+      SELECT
+        COUNT(CASE WHEN status = 'submitted' THEN 1 END) as total_pending,
+        COUNT(CASE WHEN status = 'validated' AND DATE(validated_at) = ${today} THEN 1 END) as total_validated_today,
+        COALESCE(SUM(CASE WHEN status = 'validated' AND DATE(validated_at) = ${today} THEN total_delestage ELSE 0 END), 0) as total_delestage_today,
+        COALESCE(SUM(CASE WHEN status = 'validated' AND DATE(validated_at) = ${today} THEN montant_brut ELSE 0 END), 0) as total_montant_today,
+        COUNT(CASE WHEN status = 'submitted' THEN 1 END) as total_submitted,
+        COUNT(CASE WHEN status = 'validated' THEN 1 END) as total_validated,
+        COUNT(CASE WHEN status = 'rejected' THEN 1 END) as total_rejected,
+        COALESCE(SUM(CASE WHEN status = 'submitted' THEN montant_brut ELSE 0 END), 0) as total_montant_submitted,
+        COALESCE(SUM(CASE WHEN status = 'validated' THEN montant_brut ELSE 0 END), 0) as total_montant_validated,
+        COALESCE(SUM(CASE WHEN status = 'rejected' THEN montant_brut ELSE 0 END), 0) as total_montant_rejected,
+        COALESCE(SUM(total_delestage), 0) as total_delestage,
+        COALESCE(SUM(COALESCE(excedents, 0)), 0) as total_excedents
+      FROM ria_cash_declarations
+      ${userFilter}
+    `
+
+    console.log('📊 Résultat de la requête:', result)
+
+    return {
+      total_pending: Number(result.total_pending) || 0,
+      total_validated_today: Number(result.total_validated_today) || 0,
+      total_delestage_today: Number(result.total_delestage_today) || 0,
+      total_montant_today: Number(result.total_montant_today) || 0,
+      total_submitted: Number(result.total_submitted) || 0,
+      total_validated: Number(result.total_validated) || 0,
+      total_rejected: Number(result.total_rejected) || 0,
+      total_montant_submitted: Number(result.total_montant_submitted) || 0,
+      total_montant_validated: Number(result.total_montant_validated) || 0,
+      total_montant_rejected: Number(result.total_montant_rejected) || 0,
+      total_delestage: Number(result.total_delestage) || 0,
+      total_excedents: Number(result.total_excedents) || 0,
+    }
+  } catch (error) {
+    console.error('❌ Erreur dans getCashDeclarationsStats:', error)
+    throw error
   }
 }
 

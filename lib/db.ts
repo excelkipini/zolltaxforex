@@ -1,7 +1,6 @@
 import { neon } from "@neondatabase/serverless"
 
-// Mode développement : utiliser des données mockées si pas de DATABASE_URL
-const isDevelopment = process.env.NODE_ENV === "development"
+// Utiliser la base de données réelle
 const hasDatabaseUrl = !!process.env.DATABASE_URL
 
 console.log('🔍 Debug DATABASE_URL:', {
@@ -13,110 +12,20 @@ console.log('🔍 Debug DATABASE_URL:', {
 if (hasDatabaseUrl) {
   console.log('✅ UTILISATION DE LA VRAIE BASE DE DONNÉES')
 } else {
-  console.log('❌ UTILISATION DES DONNÉES MOCKÉES')
+  console.log('❌ DATABASE_URL non configurée')
+  throw new Error("DATABASE_URL environment variable is required")
 }
 
-// En production, exiger DATABASE_URL
-if (!hasDatabaseUrl && process.env.NODE_ENV === "production") {
-  throw new Error("DATABASE_URL environment variable is required in production")
-}
-
-// En développement, utiliser mock si pas de DATABASE_URL
-if (!hasDatabaseUrl && isDevelopment) {
-  console.log("🔧 Mode développement: utilisation des données mockées")
-  console.log("💡 Pour utiliser une vraie base de données, définissez DATABASE_URL dans .env.local")
-}
-
-// Mock SQL pour le développement
-const mockSql = (strings: TemplateStringsArray, ...values: any[]) => {
-  // Simuler des données de cartes pour le développement
-  if (strings[0]?.includes('SELECT') && strings[0]?.includes('cards')) {
-    return Promise.resolve([
-      {
-        id: "card-1",
-        cid: "21174132",
-        country: "Mali",
-        last_recharge_date: "2024-01-15",
-        expiration_date: "2025-12-31",
-        status: "active",
-        monthly_limit: 2400000,
-        monthly_used: 500000,
-        recharge_limit: 810000,
-        created_at: "2024-01-01T00:00:00Z",
-        updated_at: "2024-01-15T00:00:00Z"
-      },
-      {
-        id: "card-2",
-        cid: "21174133",
-        country: "RDC",
-        last_recharge_date: "2024-01-10",
-        expiration_date: "2025-11-30",
-        status: "active",
-        monthly_limit: 2500000,
-        monthly_used: 1200000,
-        recharge_limit: 550000,
-        created_at: "2024-01-01T00:00:00Z",
-        updated_at: "2024-01-10T00:00:00Z"
-      },
-      {
-        id: "card-3",
-        cid: "21174134",
-        country: "France",
-        last_recharge_date: null,
-        expiration_date: "2025-10-31",
-        status: "inactive",
-        monthly_limit: 2500000,
-        monthly_used: 0,
-        recharge_limit: 650000,
-        created_at: "2024-01-01T00:00:00Z",
-        updated_at: "2024-01-01T00:00:00Z"
-      }
-    ])
-  }
-  
-  // Simuler des données d'historique de recharge
-  if (strings[0]?.includes('SELECT') && strings[0]?.includes('card_recharges')) {
-    return Promise.resolve([
-      {
-        id: "recharge-1",
-        card_id: "card-1",
-        amount: 100000,
-        recharged_by: "Admin User",
-        recharge_date: "2024-01-15T10:00:00Z",
-        notes: "Recharge initiale",
-        created_at: "2024-01-15T10:00:00Z",
-        card_cid: "21174132",
-        card_country: "Mali"
-      },
-      {
-        id: "recharge-2",
-        card_id: "card-2",
-        amount: 200000,
-        recharged_by: "Admin User",
-        recharge_date: "2024-01-10T14:30:00Z",
-        notes: "Recharge mensuelle",
-        created_at: "2024-01-10T14:30:00Z",
-        card_cid: "21174133",
-        card_country: "RDC"
-      }
-    ])
-  }
-  
-  // Pour les autres requêtes, retourner un tableau vide
-  return Promise.resolve([])
-}
-
-export const sql = hasDatabaseUrl ? neon(process.env.DATABASE_URL) : mockSql
+// Utiliser uniquement la base de données réelle
+export const sql = neon(process.env.DATABASE_URL!)
 
 // Test database connection
 export async function testConnection() {
   try {
-    if (!hasDatabaseUrl) {
-      return true
-    }
     const result = await sql`SELECT 1 as test`
     return true
   } catch (error) {
+    console.error('❌ Erreur de connexion à la base de données:', error)
     return false
   }
 }
@@ -124,9 +33,6 @@ export async function testConnection() {
 // Initialize database with all required tables
 export async function initializeDatabase() {
   try {
-    if (!hasDatabaseUrl) {
-      return true
-    }
 
     // Create users table
     await sql`
@@ -440,9 +346,6 @@ export async function initializeDatabase() {
 // Seed initial data
 export async function seedDatabase() {
   try {
-    if (!hasDatabaseUrl) {
-      return true
-    }
 
     // Insert default settings if not exists
     await sql`

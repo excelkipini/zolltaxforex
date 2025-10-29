@@ -28,11 +28,25 @@ export const dynamic = 'force-dynamic'
  */
 export async function GET(request: NextRequest) {
   try {
-    const session = await requireAuth()
-    const user = session.user
+    console.log('🚀 API GET /api/ria-cash-declarations appelée')
+    
+    // Authentification requise
+    let user
+    try {
+      const session = await requireAuth()
+      user = session.user
+      console.log('✅ Utilisateur authentifié:', user)
+    } catch (authError) {
+      console.log('❌ Erreur d\'authentification:', authError)
+      return NextResponse.json(
+        { error: "Authentification requise" },
+        { status: 401 }
+      )
+    }
     
     // Vérifier les permissions - les caissiers et cash_manager peuvent accéder
     if (!['cashier', 'cash_manager'].includes(user.role)) {
+      console.log('❌ Accès refusé pour le rôle:', user.role)
       return NextResponse.json(
         { error: "Accès non autorisé" },
         { status: 403 }
@@ -55,10 +69,18 @@ export async function GET(request: NextRequest) {
 
     // Statistiques (pour le Responsable caisses ou caissier)
     if (type === 'stats') {
-      // Si le rôle est cashier, on filtre par user_id, sinon on récupère toutes les stats
-      const userId = user.role === 'cashier' ? user.id : undefined
-      const stats = await getCashDeclarationsStats(userId)
-      return NextResponse.json({ data: stats })
+      try {
+        console.log('📊 Récupération des statistiques pour user:', user.id, 'role:', user.role)
+        // Si le rôle est cashier, on filtre par user_id, sinon on récupère toutes les stats
+        const userId = user.role === 'cashier' ? user.id : undefined
+        console.log('📊 userId pour stats:', userId)
+        const stats = await getCashDeclarationsStats(userId)
+        console.log('📊 Stats récupérées:', stats)
+        return NextResponse.json({ data: stats })
+      } catch (error) {
+        console.error('❌ Erreur lors de la récupération des stats:', error)
+        return NextResponse.json({ error: "Erreur lors de la récupération des statistiques" }, { status: 500 })
+      }
     }
 
     // Tous les arrêtés en attente (pour le Responsable caisses)
@@ -120,7 +142,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { guichetier, declaration_date, montant_brut, total_delestage, delestage_comment, justificatif_file_path } = body
+    const { guichetier, declaration_date, montant_brut, total_delestage, excedents, delestage_comment, justificatif_files } = body
 
     // Validation
     if (!guichetier || !declaration_date || !montant_brut) {
@@ -136,8 +158,9 @@ export async function POST(request: NextRequest) {
       declaration_date,
       montant_brut,
       total_delestage: total_delestage || 0,
+      excedents: excedents || 0,
       delestage_comment: delestage_comment || undefined,
-      justificatif_file_path: justificatif_file_path || undefined,
+      justificatif_files: justificatif_files || [],
       autoSubmit: true, // Soumettre automatiquement
     })
     

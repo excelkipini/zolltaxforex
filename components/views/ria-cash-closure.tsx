@@ -32,8 +32,15 @@ type CashDeclaration = {
   declaration_date: string
   montant_brut: number
   total_delestage: number
+  excedents: number
   delestage_comment?: string
   justificatif_file_path?: string
+  justificatif_files?: Array<{
+    id: string
+    filename: string
+    url: string
+    uploaded_at: string
+  }>
   status: CashDeclarationStatus
   rejection_comment?: string
   validation_comment?: string
@@ -73,10 +80,11 @@ export function RiaCashClosure() {
   const [formData, setFormData] = useState({
     guichetier: '',
     declaration_date: new Date().toISOString().split('T')[0],
-    montant_brut: '',
-    total_delestage: '',
+    montant_brut: '0',
+    total_delestage: '0',
+    excedents: '0',
     delestage_comment: '',
-    justificatif_file: null as File | null,
+    justificatif_files: [] as File[],
   })
 
   // État pour la gestion du responsable
@@ -157,7 +165,7 @@ export function RiaCashClosure() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    if (!formData.guichetier || !formData.declaration_date || !formData.montant_brut) {
+    if (!formData.guichetier || !formData.declaration_date || !formData.montant_brut || formData.montant_brut === '0') {
       toast({
         title: "Erreur",
         description: "Veuillez remplir tous les champs obligatoires.",
@@ -169,35 +177,42 @@ export function RiaCashClosure() {
     try {
       setLoading(true)
 
-      // Uploader le fichier si fourni
-      let justificatifPath: string | undefined
-      if (formData.justificatif_file) {
-        try {
-          const formDataToUpload = new FormData()
-          formDataToUpload.append('file', formData.justificatif_file)
-          
-          const uploadResponse = await fetch('/api/upload', {
-            method: 'POST',
-            body: formDataToUpload,
-          })
-          
-          const uploadResult = await uploadResponse.json()
-          
-          if (uploadResponse.ok && uploadResult.filePath) {
-            justificatifPath = uploadResult.filePath
-          } else {
+      // Uploader les fichiers si fournis
+      const justificatifFiles = []
+      if (formData.justificatif_files && formData.justificatif_files.length > 0) {
+        for (const file of formData.justificatif_files) {
+          try {
+            const formDataToUpload = new FormData()
+            formDataToUpload.append('file', file)
+            
+            const uploadResponse = await fetch('/api/upload', {
+              method: 'POST',
+              body: formDataToUpload,
+            })
+            
+            const uploadResult = await uploadResponse.json()
+            
+            if (uploadResponse.ok && uploadResult.filePath) {
+              justificatifFiles.push({
+                id: uploadResult.fileId || Date.now().toString(),
+                filename: file.name,
+                url: uploadResult.filePath,
+                uploaded_at: new Date().toISOString()
+              })
+            } else {
+              toast({
+                title: "Avertissement",
+                description: `Le fichier ${file.name} n'a pas pu être uploadé.`,
+                variant: "default",
+              })
+            }
+          } catch (error) {
             toast({
               title: "Avertissement",
-              description: "Le fichier n'a pas pu être uploadé, mais l'arrêté sera créé quand même.",
+              description: `Le fichier ${file.name} n'a pas pu être uploadé.`,
               variant: "default",
             })
           }
-        } catch (error) {
-          toast({
-            title: "Avertissement",
-            description: "Le fichier n'a pas pu être uploadé, mais l'arrêté sera créé quand même.",
-            variant: "default",
-          })
         }
       }
 
@@ -209,8 +224,9 @@ export function RiaCashClosure() {
           declaration_date: formData.declaration_date,
           montant_brut: parseFloat(formData.montant_brut),
           total_delestage: parseFloat(formData.total_delestage) || 0,
+          excedents: parseFloat(formData.excedents) || 0,
           delestage_comment: formData.delestage_comment || undefined,
-          justificatif_file_path: justificatifPath,
+          justificatif_files: justificatifFiles,
         }),
       })
 
@@ -230,10 +246,11 @@ export function RiaCashClosure() {
       setFormData({
         guichetier: '',
         declaration_date: new Date().toISOString().split('T')[0],
-        montant_brut: '',
-        total_delestage: '',
+        montant_brut: '0',
+        total_delestage: '0',
+        excedents: '0',
         delestage_comment: '',
-        justificatif_file: null,
+        justificatif_files: [],
       })
       
       setIsDialogOpen(false)
@@ -369,10 +386,11 @@ export function RiaCashClosure() {
       setFormData({
         guichetier: '',
         declaration_date: new Date().toISOString().split('T')[0],
-        montant_brut: '',
-        total_delestage: '',
+        montant_brut: '0',
+        total_delestage: '0',
+        excedents: '0',
         delestage_comment: '',
-        justificatif_file: null,
+        justificatif_files: [],
       })
       loadDeclarations()
       
@@ -478,6 +496,7 @@ export function RiaCashClosure() {
       .filter(d => d.status === 'validated')
       .reduce((sum, d) => sum + Number(d.montant_brut || 0), 0)
     const totalDelestage = filteredDeclarations.reduce((sum, d) => sum + Number(d.total_delestage || 0), 0)
+    const totalExcedents = filteredDeclarations.reduce((sum, d) => sum + Number(d.excedents || 0), 0)
     
     return {
       total_submitted: submitted,
@@ -486,11 +505,16 @@ export function RiaCashClosure() {
       total_montant_submitted: totalMontantSubmitted,
       total_montant_validated: totalMontantValidated,
       total_delestage: totalDelestage,
+      total_excedents: totalExcedents,
     }
   }, [filteredDeclarations])
 
   // Utiliser les stats filtrées pour l'affichage
-  const displayStats = { ...stats, ...filteredStats }
+  const displayStats = { 
+    total_excedents: 0, // Valeur par défaut
+    ...stats, 
+    ...filteredStats 
+  }
 
   // Fonction pour télécharger le PDF
   const handleDownloadPDF = async (declaration: CashDeclaration) => {
@@ -600,16 +624,16 @@ export function RiaCashClosure() {
 
       {/* Statistiques montants améliorées */}
       {displayStats && (
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
           <Card className="bg-gradient-to-br from-green-50 to-green-100 border-green-200 hover:shadow-lg transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-green-800">Montant Total Validé</CardTitle>
-              <div className="bg-green-600 p-2 rounded-lg">
-                <DollarSign className="h-4 w-4 text-white" />
+              <CardTitle className="text-xs font-medium text-green-800">Montant Total Validé</CardTitle>
+              <div className="bg-green-600 p-1.5 rounded-lg">
+                <DollarSign className="h-3 w-3 text-white" />
               </div>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-green-700">
+              <div className="text-lg font-bold text-green-700">
                 {formatAmount(displayStats.total_montant_validated)}
               </div>
               <p className="text-xs text-green-600 mt-1">
@@ -620,13 +644,13 @@ export function RiaCashClosure() {
 
           <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200 hover:shadow-lg transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-blue-800">Montant Total Soumis</CardTitle>
-              <div className="bg-blue-600 p-2 rounded-lg">
-                <Clock className="h-4 w-4 text-white" />
+              <CardTitle className="text-xs font-medium text-blue-800">Montant Total Soumis</CardTitle>
+              <div className="bg-blue-600 p-1.5 rounded-lg">
+                <Clock className="h-3 w-3 text-white" />
               </div>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-blue-700">
+              <div className="text-lg font-bold text-blue-700">
                 {formatAmount(displayStats.total_montant_submitted)}
               </div>
               <p className="text-xs text-blue-600 mt-1">
@@ -637,17 +661,34 @@ export function RiaCashClosure() {
 
           <Card className="bg-gradient-to-br from-orange-50 to-orange-100 border-orange-200 hover:shadow-lg transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-orange-800">Total Délestage</CardTitle>
-              <div className="bg-orange-600 p-2 rounded-lg">
-                <AlertCircle className="h-4 w-4 text-white" />
+              <CardTitle className="text-xs font-medium text-orange-800">Total Délestage</CardTitle>
+              <div className="bg-orange-600 p-1.5 rounded-lg">
+                <AlertCircle className="h-3 w-3 text-white" />
               </div>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-orange-700">
+              <div className="text-lg font-bold text-orange-700">
                 {formatAmount(displayStats.total_delestage)}
               </div>
               <p className="text-xs text-orange-600 mt-1">
                 {isCashManager ? 'Tous les délestages' : 'Mes délestages'}
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-gradient-to-br from-green-50 to-green-100 border-green-200 hover:shadow-lg transition-shadow">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-xs font-medium text-green-800">Total Excédents</CardTitle>
+              <div className="bg-green-600 p-1.5 rounded-lg">
+                <DollarSign className="h-3 w-3 text-white" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-lg font-bold text-green-700">
+                {formatAmount(displayStats.total_excedents)}
+              </div>
+              <p className="text-xs text-green-600 mt-1">
+                {isCashManager ? 'Tous les excédents' : 'Mes excédents'}
               </p>
             </CardContent>
           </Card>
@@ -837,6 +878,7 @@ export function RiaCashClosure() {
                   <TableHead className="font-semibold">Guichetier</TableHead>
                   <TableHead className="font-semibold">Montant Brut</TableHead>
                   <TableHead className="font-semibold">Délestage</TableHead>
+                  <TableHead className="font-semibold">Excédents</TableHead>
                   <TableHead className="font-semibold">Montant Net</TableHead>
                   <TableHead className="font-semibold">Statut</TableHead>
                   <TableHead className="font-semibold text-center">Actions</TableHead>
@@ -891,6 +933,11 @@ export function RiaCashClosure() {
                       <TableCell>
                         <div className="text-orange-600 font-semibold">
                           {formatAmount(declaration.total_delestage)}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="text-green-600 font-semibold">
+                          {formatAmount(declaration.excedents || 0)}
                         </div>
                       </TableCell>
                       <TableCell>
@@ -1069,6 +1116,16 @@ export function RiaCashClosure() {
                 />
               </div>
               <div>
+                <Label htmlFor="excedents">Excédents (FCFA)</Label>
+                <Input
+                  id="excedents"
+                  type="number"
+                  value={formData.excedents}
+                  onChange={(e) => setFormData({ ...formData, excedents: e.target.value })}
+                  placeholder="Montant des excédents"
+                />
+              </div>
+              <div>
                 <Label htmlFor="delestage_comment">Commentaire sur le Délestage</Label>
                 <Textarea
                   id="delestage_comment"
@@ -1079,17 +1136,26 @@ export function RiaCashClosure() {
               </div>
               {!editingDeclaration && (
                 <div>
-                  <Label htmlFor="justificatif">Justificatif (PDF/CSV) - Max 10MB</Label>
+                  <Label htmlFor="justificatif">Fichiers Justificatifs (PDF/CSV) - Max 10MB par fichier</Label>
                   <Input
                     id="justificatif"
                     type="file"
                     accept=".pdf,.csv"
-                    onChange={(e) => setFormData({ ...formData, justificatif_file: e.target.files?.[0] || null })}
+                    multiple
+                    onChange={(e) => {
+                      const files = Array.from(e.target.files || [])
+                      setFormData({ ...formData, justificatif_files: files })
+                    }}
                   />
-                  {formData.justificatif_file && (
-                    <p className="text-sm text-muted-foreground mt-1">
-                      Fichier sélectionné: {formData.justificatif_file.name} ({(formData.justificatif_file.size / 1024).toFixed(2)} KB)
-                    </p>
+                  {formData.justificatif_files && formData.justificatif_files.length > 0 && (
+                    <div className="mt-2 space-y-1">
+                      <p className="text-sm font-medium text-muted-foreground">Fichiers sélectionnés:</p>
+                      {formData.justificatif_files.map((file, index) => (
+                        <p key={index} className="text-sm text-muted-foreground">
+                          • {file.name} ({(file.size / 1024).toFixed(2)} KB)
+                        </p>
+                      ))}
+                    </div>
                   )}
                 </div>
               )}
@@ -1217,6 +1283,16 @@ export function RiaCashClosure() {
                     </div>
                   </CardContent>
                 </Card>
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm font-medium text-gray-600">Excédents</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold text-green-600">
+                      {formatAmount(selectedDeclaration.excedents || 0)}
+                    </div>
+                  </CardContent>
+                </Card>
               </div>
 
               {/* Montant net */}
@@ -1245,33 +1321,85 @@ export function RiaCashClosure() {
                 </div>
               )}
 
-              {/* Fichier joint */}
-              {selectedDeclaration.justificatif_file_path && (
+              {/* Fichiers joints */}
+              {(selectedDeclaration.justificatif_file_path || (selectedDeclaration.justificatif_files && selectedDeclaration.justificatif_files.length > 0)) && (
                 <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
                   <h4 className="font-semibold text-sm text-purple-800 mb-3 flex items-center gap-2">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
                     </svg>
-                    Fichier Justificatif
+                    Fichiers Justificatifs
                   </h4>
-                  <div className="flex gap-3">
-                    <a 
-                      href={selectedDeclaration.justificatif_file_path} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 px-4 py-2 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 transition-colors"
-                      onClick={(e) => {
-                        console.log('🔗 Clic sur le fichier:', {
-                          path: selectedDeclaration.justificatif_file_path,
-                          fullUrl: window.location.origin + selectedDeclaration.justificatif_file_path
-                        })
-                      }}
-                    >
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                      </svg>
-                      <span className="font-medium">Ouvrir le justificatif</span>
-                    </a>
+                  
+                  {/* Fichier unique (ancien format) */}
+                  {selectedDeclaration.justificatif_file_path && (
+                    <div className="mb-3">
+                      <div className="flex gap-3">
+                        <a 
+                          href={selectedDeclaration.justificatif_file_path} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-2 px-4 py-2 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 transition-colors"
+                          onClick={(e) => {
+                            console.log('🔗 Clic sur le fichier:', {
+                              path: selectedDeclaration.justificatif_file_path,
+                              fullUrl: window.location.origin + selectedDeclaration.justificatif_file_path
+                            })
+                          }}
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                          </svg>
+                          <span className="font-medium">Ouvrir le justificatif</span>
+                        </a>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Fichiers multiples (nouveau format) */}
+                  {selectedDeclaration.justificatif_files && selectedDeclaration.justificatif_files.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-sm text-gray-600 mb-2">
+                        {selectedDeclaration.justificatif_files.length} fichier(s) joint(s) :
+                      </p>
+                      {selectedDeclaration.justificatif_files.map((file: any, index: number) => (
+                        <div key={file.id || index} className="flex items-center justify-between bg-white rounded-lg p-3 border border-purple-200">
+                          <div className="flex items-center gap-3">
+                            <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                            </svg>
+                            <div>
+                              <p className="font-medium text-sm text-gray-900">{file.filename}</p>
+                              <p className="text-xs text-gray-500">
+                                Ajouté le {new Date(file.uploaded_at).toLocaleDateString('fr-FR')} à {new Date(file.uploaded_at).toLocaleTimeString('fr-FR')}
+                              </p>
+                            </div>
+                          </div>
+                          <a 
+                            href={file.url} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 px-3 py-1 bg-purple-100 text-purple-700 rounded-md hover:bg-purple-200 transition-colors text-sm"
+                            onClick={(e) => {
+                              console.log('🔗 Clic sur le fichier multiple:', {
+                                filename: file.filename,
+                                url: file.url,
+                                fullUrl: window.location.origin + file.url
+                              })
+                            }}
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                            </svg>
+                            Ouvrir
+                          </a>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Bouton de téléchargement PDF */}
+                  <div className="mt-4 pt-3 border-t border-purple-200">
                     <Button
                       onClick={async () => {
                         try {
