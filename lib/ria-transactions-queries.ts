@@ -536,8 +536,8 @@ export async function getDashboardData(filters?: {
       COALESCE(SUM(montant_brut), 0) as montant_brut,
       COALESCE(SUM(frais_client_calculated), 0) as total_frais,
       COALESCE(SUM(CASE WHEN is_remboursement THEN montant_brut ELSE 0 END), 0) as remboursements,
-      -- versement_banque = montant_brut - remboursements - total_delestage
-      COALESCE(SUM(montant_brut) - SUM(CASE WHEN is_remboursement THEN montant_brut ELSE 0 END) - SUM(delestage), 0) as versement_banque,
+      -- versement_banque = montant_brut - remboursements
+      COALESCE(SUM(montant_brut) - SUM(CASE WHEN is_remboursement THEN montant_brut ELSE 0 END), 0) as versement_banque,
       -- montant_a_debiter = Versement banque – (Commissions ZTF + TVA ZTF + CA ZTF + TVA RIA + TTF)
       COALESCE(SUM(montant_brut) - SUM(CASE WHEN is_remboursement THEN montant_brut ELSE 0 END) - 
                SUM(commission_ztf + tva_ztf + ca_ztf + tva_ria + ttf_calculated), 0) as montant_a_debiter,

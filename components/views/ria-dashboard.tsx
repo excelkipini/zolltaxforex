@@ -418,7 +418,7 @@ export function RiaDashboard({ initialData, onImportSuccess }: RiaDashboardProps
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-emerald-900">{formatAmount(dashboardData.versement_banque)}</div>
-            <p className="text-xs text-emerald-700 mt-1">Montant brut – Remboursements – Total Délestage</p>
+            <p className="text-xs text-emerald-700 mt-1">Montant brut – Remboursements</p>
           </CardContent>
         </Card>
 

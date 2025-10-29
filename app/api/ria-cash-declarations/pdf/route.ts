@@ -10,11 +10,14 @@ export const dynamic = 'force-dynamic'
 export async function GET(request: NextRequest) {
   try {
     // Vérifier l'authentification
-    const user = await requireAuth()
+    const session = await requireAuth()
+    const user = session.user
+    console.log('🔐 Utilisateur authentifié:', { id: user.id, role: user.role })
 
     // Récupérer l'ID de l'arrêté
     const searchParams = request.nextUrl.searchParams
     const declarationId = searchParams.get('id')
+    console.log('📋 ID de l\'arrêté demandé:', declarationId)
 
     if (!declarationId) {
       return NextResponse.json(
@@ -31,9 +34,21 @@ export async function GET(request: NextRequest) {
         { status: 404 }
       )
     }
+    console.log('📄 Arrêté trouvé:', { user_id: declaration.user_id })
 
     // Vérifier que l'utilisateur peut accéder à cet arrêté
-    if (declaration.user_id !== user.id && user.role !== 'cash_manager') {
+    // Autoriser : le créateur, le cash_manager, le director, et l'accounting
+    const allowedRoles = ['cash_manager', 'director', 'accounting']
+    const isOwner = declaration.user_id === user.id
+    const hasPermission = allowedRoles.includes(user.role)
+    console.log('🔍 Vérification des permissions:', {
+      isOwner,
+      hasPermission,
+      userRole: user.role
+    })
+    
+    if (!isOwner && !hasPermission) {
+      console.error('❌ Accès refusé:', { declaration_user_id: declaration.user_id, current_user_id: user.id })
       return NextResponse.json(
         { error: "Accès non autorisé" },
         { status: 403 }

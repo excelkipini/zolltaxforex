@@ -916,6 +916,75 @@ export function RiaCashClosure() {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                           </svg>
                         </Button>
+                        <Button
+                          size="default"
+                          variant="default"
+                          className="bg-blue-600 hover:bg-blue-700 text-white"
+                          onClick={async (e) => {
+                            e.stopPropagation()
+                            e.preventDefault()
+                            console.log('📥 Début du téléchargement PDF pour:', declaration.id)
+                            
+                            try {
+                              const pdfUrl = `/api/ria-cash-declarations/pdf?id=${declaration.id}`
+                              console.log('📍 URL de l\'API:', pdfUrl)
+                              
+                              const response = await fetch(pdfUrl)
+                              console.log('📡 Réponse API:', {
+                                ok: response.ok,
+                                status: response.status,
+                                headers: Object.fromEntries(response.headers.entries())
+                              })
+                              
+                              if (response.ok) {
+                                const blob = await response.blob()
+                                console.log('✅ Blob reçu:', {
+                                  type: blob.type,
+                                  size: blob.size
+                                })
+                                
+                                const url = URL.createObjectURL(blob)
+                                const a = document.createElement('a')
+                                a.href = url
+                                const dateStr = new Date(declaration.declaration_date).toISOString().split('T')[0]
+                                a.download = `arrete-caisse-${declaration.guichetier}-${dateStr}.pdf`
+                                console.log('📄 Nom du fichier:', a.download)
+                                
+                                document.body.appendChild(a)
+                                console.log('🔘 Clic sur le lien...')
+                                a.click()
+                                document.body.removeChild(a)
+                                URL.revokeObjectURL(url)
+                                
+                                toast({
+                                  title: "Succès",
+                                  description: "PDF téléchargé avec succès",
+                                })
+                              } else {
+                                const errorText = await response.text()
+                                console.error('❌ Erreur API:', errorText)
+                                toast({
+                                  title: "Erreur",
+                                  description: `Impossible de télécharger le PDF (${response.status})`,
+                                  variant: "destructive",
+                                })
+                              }
+                            } catch (error) {
+                              console.error('❌ Erreur lors du téléchargement du PDF:', error)
+                              toast({
+                                title: "Erreur",
+                                description: `Erreur: ${error instanceof Error ? error.message : 'Erreur inconnue'}`,
+                                variant: "destructive",
+                              })
+                            }
+                          }}
+                          title="Télécharger le PDF"
+                        >
+                          <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                          </svg>
+                          PDF
+                        </Button>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -1185,23 +1254,69 @@ export function RiaCashClosure() {
                     </svg>
                     Fichier Justificatif
                   </h4>
-                  <a 
-                    href={selectedDeclaration.justificatif_file_path} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 transition-colors"
-                    onClick={(e) => {
-                      console.log('🔗 Clic sur le fichier:', {
-                        path: selectedDeclaration.justificatif_file_path,
-                        fullUrl: window.location.origin + selectedDeclaration.justificatif_file_path
-                      })
-                    }}
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                    </svg>
-                    <span className="font-medium">Ouvrir le justificatif</span>
-                  </a>
+                  <div className="flex gap-3">
+                    <a 
+                      href={selectedDeclaration.justificatif_file_path} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 transition-colors"
+                      onClick={(e) => {
+                        console.log('🔗 Clic sur le fichier:', {
+                          path: selectedDeclaration.justificatif_file_path,
+                          fullUrl: window.location.origin + selectedDeclaration.justificatif_file_path
+                        })
+                      }}
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                      </svg>
+                      <span className="font-medium">Ouvrir le justificatif</span>
+                    </a>
+                    <Button
+                      onClick={async () => {
+                        try {
+                          const response = await fetch(`/api/ria-cash-declarations/pdf?id=${selectedDeclaration.id}`)
+                          if (response.ok) {
+                            const blob = await response.blob()
+                            const url = URL.createObjectURL(blob)
+                            const a = document.createElement('a')
+                            a.href = url
+                            const dateStr = new Date(selectedDeclaration.declaration_date).toISOString().split('T')[0]
+                            a.download = `arrete-caisse-${selectedDeclaration.guichetier}-${dateStr}.pdf`
+                            document.body.appendChild(a)
+                            a.click()
+                            document.body.removeChild(a)
+                            URL.revokeObjectURL(url)
+                            toast({
+                              title: "Succès",
+                              description: "PDF téléchargé avec succès",
+                            })
+                          } else {
+                            toast({
+                              title: "Erreur",
+                              description: "Impossible de télécharger le PDF",
+                              variant: "destructive",
+                            })
+                          }
+                        } catch (error) {
+                          console.error('Erreur lors du téléchargement du PDF:', error)
+                          toast({
+                            title: "Erreur",
+                            description: "Erreur lors du téléchargement du PDF",
+                            variant: "destructive",
+                          })
+                        }
+                      }}
+                      variant="default"
+                      className="bg-blue-600 hover:bg-blue-700 text-white"
+                    >
+                      <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v12m0 0l4-4m-4 4L8 11" />
+                      </svg>
+                      Télécharger PDF
+                    </Button>
+                  </div>
                 </div>
               )}
 
