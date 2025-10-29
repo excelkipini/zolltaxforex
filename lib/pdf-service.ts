@@ -77,14 +77,17 @@ export async function generateCashDeclarationPDF(
   const netAmount = Number(declaration.montant_brut) - Number(declaration.total_delestage)
   doc.setDrawColor(0, 0, 0)
   doc.setFillColor(240, 249, 255)
-  doc.rect(leftColumn, currentY - 5, pageWidth - margin * 2, itemHeight * 2, 'FD')
+  // Élargir le bloc pour occuper presque toute la largeur de la page
+  const blockWidth = pageWidth - 20 // Réduire les marges à 10px de chaque côté
+  const blockX = 10
+  doc.rect(blockX, currentY - 5, blockWidth, itemHeight * 2, 'FD')
   doc.setTextColor(0, 0, 0)
   doc.setFont("courier", "bold")
   doc.setFontSize(14)
-  doc.text('MONTANT NET À VERSER:', leftColumn + 5, currentY + 5)
+  doc.text('MONTANT NET À VERSER:', blockX + 5, currentY + 5)
   doc.setFontSize(16)
   // Positionner le montant à l'intérieur du bloc, après le texte
-  const netAmountX = leftColumn + 5 + doc.getTextWidth('MONTANT NET À VERSER: ') + 10
+  const netAmountX = blockX + 5 + doc.getTextWidth('MONTANT NET À VERSER: ') + 10
   doc.text(formatAmount(netAmount), netAmountX, currentY + 5)
   currentY += itemHeight * 2.5
 

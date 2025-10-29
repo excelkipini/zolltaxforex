@@ -305,9 +305,7 @@ export function getRolePrimaryActions(role: Role): Array<{ label: string; href: 
       { label: "Voir opérations", href: "/transactions" },
     ],
     cash_manager: [
-      { label: "Importer CSV RIA", href: "/ria-import" },
-      { label: "Tableau de bord RIA", href: "/ria-dashboard" },
-      { label: "Transactions RIA", href: "/ria-transactions" },
+      { label: "Gestion RIA", href: "/ria" },
     ],
   }
   return actions[role] || []
