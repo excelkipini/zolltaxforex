@@ -136,6 +136,9 @@ export function RiaDashboard({ initialData, onImportSuccess }: RiaDashboardProps
   })
   const [loading, setLoading] = useState(false)
   const [isImportOpen, setIsImportOpen] = useState(false)
+  const [pendingDeclarations, setPendingDeclarations] = useState<any[]>([])
+  const [actionDialog, setActionDialog] = useState<{open: boolean; id: string | null; action: 'validate' | 'reject' | null}>({ open: false, id: null, action: null })
+  const [actionComment, setActionComment] = useState("")
   
   // Filtres de recherche
   const [dateFrom, setDateFrom] = useState("")
@@ -195,11 +198,26 @@ export function RiaDashboard({ initialData, onImportSuccess }: RiaDashboardProps
     }
   }
 
+  // Charger les arrêtés en attente (Responsable caisse)
+  const loadPendingDeclarations = async () => {
+    try {
+      const res = await fetch('/api/ria-cash-declarations?type=pending')
+      const data = await res.json()
+      if (res.ok && data?.data) setPendingDeclarations(data.data)
+    } catch (e) {
+      // ignore
+    }
+  }
+
   useEffect(() => {
     if (!initialData) {
       fetchDashboardData()
     }
   }, [dateFrom, dateTo, selectedAgence, selectedGuichetier])
+
+  useEffect(() => {
+    loadPendingDeclarations()
+  }, [])
 
   const formatCurrency = (amount: number) => {
     return amount.toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + ' XAF'
@@ -247,6 +265,79 @@ export function RiaDashboard({ initialData, onImportSuccess }: RiaDashboardProps
 
   return (
     <div className="space-y-6">
+      {/* Section Arrêtés en Attente de Validation (au-dessus du header) */}
+      {pendingDeclarations.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Arrêtés en Attente de Validation</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {pendingDeclarations.map((decl: any) => (
+                <div key={decl.id} className="p-4 rounded-lg border flex items-center justify-between bg-gray-50">
+                  <div>
+                    <div className="font-semibold">{decl.guichetier}</div>
+                    <div className="text-sm text-muted-foreground">
+                      Date: {new Date(decl.declaration_date).toLocaleDateString('fr-FR')} | Montant brut: {new Intl.NumberFormat('fr-FR').format(decl.montant_brut)} FCFA | Délestage: {new Intl.NumberFormat('fr-FR').format(decl.total_delestage)} FCFA
+                    </div>
+                    {decl.delestage_comment && (
+                      <div className="text-xs text-muted-foreground mt-1">Commentaire délestage: {decl.delestage_comment}</div>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      className="bg-green-600 hover:bg-green-700 text-white"
+                      onClick={async () => {
+                        try {
+                          const r = await fetch('/api/ria-cash-declarations', {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ id: decl.id, action: 'validate', data: { comment: actionComment } })
+                          })
+                          const d = await r.json()
+                          if (!r.ok) throw new Error(d?.error || 'Erreur validation')
+                          toast({ title: 'Succès', description: "Arrêté validé avec succès." })
+                          loadPendingDeclarations()
+                          fetchDashboardData()
+                        } catch (e: any) {
+                          toast({ title: 'Erreur', description: e.message || 'Erreur lors de la validation', variant: 'destructive' })
+                        }
+                      }}
+                    >
+                      Valider
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={async () => {
+                        const comment = prompt('Motif du rejet (obligatoire)') || ''
+                        if (!comment.trim()) return
+                        try {
+                          const r = await fetch('/api/ria-cash-declarations', {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ id: decl.id, action: 'reject', data: { comment } })
+                          })
+                          const d = await r.json()
+                          if (!r.ok) throw new Error(d?.error || 'Erreur rejet')
+                          toast({ title: 'Rejeté', description: "Arrêté rejeté avec succès." })
+                          loadPendingDeclarations()
+                          fetchDashboardData()
+                        } catch (e: any) {
+                          toast({ title: 'Erreur', description: e.message || 'Erreur lors du rejet', variant: 'destructive' })
+                        }
+                      }}
+                    >
+                      Rejeter
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
       <RiaCsvImport
         isOpen={isImportOpen}
         onClose={() => setIsImportOpen(false)}

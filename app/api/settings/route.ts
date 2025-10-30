@@ -2,12 +2,30 @@ import { NextRequest, NextResponse } from "next/server"
 import { requireAuth } from "@/lib/auth"
 import { getSettings, updateSettings, getSettingsHistory } from "@/lib/settings-queries"
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const { user } = await requireAuth()
-  
-  // Seuls les directeurs, admins, auditeurs et comptables peuvent voir les paramètres
+  const searchParams = request.nextUrl.searchParams
+  const type = searchParams.get('type') // 'public' pour accès lecture restreint
+
+  // Accès public (authentifié) aux taux/commissions uniquement
+  if (type === 'public') {
+    try {
+      const settings = await getSettings()
+      // Ne renvoyer que les champs nécessaires aux écrans clients
+      const publicSettings = {
+        usd: settings.usd,
+        eur: settings.eur,
+        gbp: settings.gbp,
+        commission: settings.commission,
+      }
+      return NextResponse.json({ ok: true, data: { settings: publicSettings } })
+    } catch (error: any) {
+      return NextResponse.json({ ok: false, error: error.message }, { status: 500 })
+    }
+  }
+
+  // Accès complet réservé aux rôles autorisés
   const canView = user.role === "director" || user.role === "super_admin" || user.role === "auditor" || user.role === "accounting"
-  
   if (!canView) {
     return NextResponse.json({ ok: false, error: "Non autorisé" }, { status: 403 })
   }
@@ -15,11 +33,7 @@ export async function GET() {
   try {
     const settings = await getSettings()
     const history = await getSettingsHistory()
-    
-    return NextResponse.json({ 
-      ok: true, 
-      data: { settings, history } 
-    })
+    return NextResponse.json({ ok: true, data: { settings, history } })
   } catch (error: any) {
     return NextResponse.json({ ok: false, error: error.message }, { status: 500 })
   }

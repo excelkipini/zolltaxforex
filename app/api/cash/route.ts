@@ -11,7 +11,8 @@ import {
   syncExistingCommissions,
   syncExistingReceiptCommissions,
   reconcileCommissionsBalance,
-  reconcileReceiptCommissionsBalance
+  reconcileReceiptCommissionsBalance,
+  reconcileRiaExcedentsBalance
 } from "@/lib/cash-queries"
 
 // GET - Récupérer les comptes de caisse et leurs soldes
@@ -27,6 +28,8 @@ export async function GET(request: NextRequest) {
         // Réconciliation automatique du solde des commissions (transferts et reçus)
         await reconcileCommissionsBalance('system_auto')
         await reconcileReceiptCommissionsBalance('system_auto')
+        // Réconciliation du solde Excédents RIA
+        await reconcileRiaExcedentsBalance('system_auto')
         const accounts = await getCashAccounts()
         return NextResponse.json({ success: true, accounts })
 
@@ -65,6 +68,8 @@ export async function GET(request: NextRequest) {
         await initializeCashAccounts()
         // Réconciliation automatique du solde des commissions
         await reconcileCommissionsBalance('system_auto')
+        await reconcileReceiptCommissionsBalance('system_auto')
+        await reconcileRiaExcedentsBalance('system_auto')
         const defaultAccounts = await getCashAccounts()
         return NextResponse.json({ success: true, accounts: defaultAccounts })
     }

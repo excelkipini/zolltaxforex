@@ -62,6 +62,7 @@ export function RiaCashClosure() {
   const [user, setUser] = useState<any>(null)
   const [declarations, setDeclarations] = useState<CashDeclaration[]>([])
   const [loading, setLoading] = useState(true)
+  const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingDeclaration, setEditingDeclaration] = useState<CashDeclaration | null>(null)
   const [managerComment, setManagerComment] = useState<string>('')
@@ -113,6 +114,35 @@ export function RiaCashClosure() {
       }
     }
   }, [user])
+
+  // Rafraîchir les stats d'excédents quand une dépense approuvée impacte les excédents
+  useEffect(() => {
+    const handleStorage = () => {
+      try {
+        const raw = localStorage.getItem('maf_notifications')
+        const list = raw ? JSON.parse(raw) : []
+        const remaining = [] as any[]
+        let shouldRefresh = false
+        for (const it of list) {
+          if (it?.type === 'excedents_changed') {
+            shouldRefresh = true
+            continue
+          }
+          remaining.push(it)
+        }
+        if (shouldRefresh) {
+          loadStats()
+        }
+        if (remaining.length !== list.length) {
+          localStorage.setItem('maf_notifications', JSON.stringify(remaining))
+        }
+      } catch {}
+    }
+    window.addEventListener('storage', handleStorage)
+    // Vérification immédiate au montage
+    handleStorage()
+    return () => window.removeEventListener('storage', handleStorage)
+  }, [])
   
   const loadStats = async () => {
     try {
@@ -177,10 +207,13 @@ export function RiaCashClosure() {
     try {
       setLoading(true)
 
-      // Uploader les fichiers si fournis
+      // Uploader les fichiers en parallèle si fournis
       const justificatifFiles = []
       if (formData.justificatif_files && formData.justificatif_files.length > 0) {
-        for (const file of formData.justificatif_files) {
+        console.log(`📤 Upload de ${formData.justificatif_files.length} fichier(s) en parallèle...`)
+        setUploadProgress({ current: 0, total: formData.justificatif_files.length })
+        
+        const uploadPromises = formData.justificatif_files.map(async (file, index) => {
           try {
             const formDataToUpload = new FormData()
             formDataToUpload.append('file', file)
@@ -193,27 +226,44 @@ export function RiaCashClosure() {
             const uploadResult = await uploadResponse.json()
             
             if (uploadResponse.ok && uploadResult.filePath) {
-              justificatifFiles.push({
+              // Mettre à jour le progrès
+              setUploadProgress(prev => prev ? { ...prev, current: prev.current + 1 } : null)
+              return {
                 id: uploadResult.fileId || Date.now().toString(),
                 filename: file.name,
                 url: uploadResult.filePath,
                 uploaded_at: new Date().toISOString()
-              })
+              }
             } else {
-              toast({
-                title: "Avertissement",
-                description: `Le fichier ${file.name} n'a pas pu être uploadé.`,
-                variant: "default",
-              })
+              console.warn(`⚠️ Échec upload: ${file.name}`)
+              setUploadProgress(prev => prev ? { ...prev, current: prev.current + 1 } : null)
+              return null
             }
           } catch (error) {
-            toast({
-              title: "Avertissement",
-              description: `Le fichier ${file.name} n'a pas pu être uploadé.`,
-              variant: "default",
-            })
+            console.error(`❌ Erreur upload ${file.name}:`, error)
+            return null
           }
+        })
+        
+        // Attendre tous les uploads en parallèle
+        const uploadResults = await Promise.all(uploadPromises)
+        
+        // Filtrer les uploads réussis
+        const successfulUploads = uploadResults.filter(result => result !== null)
+        justificatifFiles.push(...successfulUploads)
+        
+        // Afficher un avertissement pour les échecs
+        const failedCount = uploadResults.length - successfulUploads.length
+        if (failedCount > 0) {
+          toast({
+            title: "Avertissement",
+            description: `${failedCount} fichier(s) n'ont pas pu être uploadé(s).`,
+            variant: "default",
+          })
         }
+        
+        console.log(`✅ ${successfulUploads.length}/${formData.justificatif_files.length} fichiers uploadés avec succès`)
+        setUploadProgress(null) // Réinitialiser le progrès
       }
 
       const response = await fetch('/api/ria-cash-declarations', {
@@ -254,8 +304,15 @@ export function RiaCashClosure() {
       })
       
       setIsDialogOpen(false)
-      loadDeclarations()
-      loadPendingDeclarations()
+      
+      // Recharger les données en parallèle
+      console.log('🔄 Rechargement des données en parallèle...')
+      const reloadPromises = [loadDeclarations()]
+      if (user?.role === 'cash_manager') {
+        reloadPromises.push(loadPendingDeclarations())
+      }
+      await Promise.all(reloadPromises)
+      console.log('✅ Données rechargées')
       
     } catch (error: any) {
       console.error('Erreur:', error)
@@ -685,7 +742,7 @@ export function RiaCashClosure() {
             </CardHeader>
             <CardContent>
               <div className="text-lg font-bold text-green-700">
-                {formatAmount(displayStats.total_excedents)}
+                {formatAmount((displayStats.total_excedents_available ?? displayStats.total_excedents) || 0)}
               </div>
               <p className="text-xs text-green-600 mt-1">
                 {isCashManager ? 'Tous les excédents' : 'Mes excédents'}
@@ -1165,7 +1222,19 @@ export function RiaCashClosure() {
                 Annuler
               </Button>
               <Button type="submit" disabled={loading}>
-                {editingDeclaration ? 'Mettre à jour' : 'Créer'}
+                {uploadProgress ? (
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    Upload {uploadProgress.current}/{uploadProgress.total}
+                  </div>
+                ) : loading ? (
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    Enregistrement...
+                  </div>
+                ) : (
+                  editingDeclaration ? 'Mettre à jour' : 'Créer'
+                )}
               </Button>
             </DialogFooter>
           </form>

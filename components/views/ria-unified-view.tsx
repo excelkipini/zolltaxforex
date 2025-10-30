@@ -133,15 +133,6 @@ export function RiaUnifiedView({ initialDashboardData }: RiaUnifiedViewProps) {
                   </svg>
                   <span className="font-medium text-sm">Tableau de bord</span>
                 </TabsTrigger>
-                <TabsTrigger 
-                  value="transactions" 
-                  className="flex items-center justify-center space-x-2 px-6 py-4 rounded-md transition-all duration-200 data-[state=active]:bg-white data-[state=active]:shadow-md data-[state=active]:text-blue-600 data-[state=active]:border data-[state=active]:border-blue-200 hover:bg-white/50 flex-1 bg-yellow-50 hover:bg-yellow-100 text-yellow-600 font-semibold"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
-                  </svg>
-                  <span className="font-medium text-sm">Transactions</span>
-                </TabsTrigger>
               </>
             )}
             <TabsTrigger 
@@ -153,6 +144,17 @@ export function RiaUnifiedView({ initialDashboardData }: RiaUnifiedViewProps) {
               </svg>
               <span className="font-medium text-sm">Clôture de caisse</span>
             </TabsTrigger>
+            {!isCashier && (
+              <TabsTrigger 
+                value="transactions" 
+                className="flex items-center justify-center space-x-2 px-6 py-4 rounded-md transition-all duration-200 data-[state=active]:bg-white data-[state=active]:shadow-md data-[state=active]:text-blue-600 data-[state=active]:border data-[state=active]:border-blue-200 hover:bg-white/50 flex-1 bg-yellow-50 hover:bg-yellow-100 text-yellow-600 font-semibold"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                </svg>
+                <span className="font-medium text-sm">Transactions</span>
+              </TabsTrigger>
+            )}
           </TabsList>
         </div>
 

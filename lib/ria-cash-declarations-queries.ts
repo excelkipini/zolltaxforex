@@ -216,7 +216,8 @@ export async function getCashDeclarationsStats(userId?: string): Promise<{
   total_montant_rejected: number
   total_delestage: number
   total_excedents: number
-}> {
+  total_excedents_available?: number
+}>{
   try {
     console.log('📊 getCashDeclarationsStats appelée avec userId:', userId)
 
@@ -247,6 +248,52 @@ export async function getCashDeclarationsStats(userId?: string): Promise<{
 
     console.log('📊 Résultat de la requête:', result)
 
+    // Calculer les excédents disponibles (déclarés - dépenses approuvées déduites)
+    let total_excedents_available: number | undefined = undefined
+    if (userId) {
+      const [ex] = await sql`
+        WITH declared AS (
+          SELECT COALESCE(SUM(COALESCE(excedents,0)),0) AS total_declared
+          FROM ria_cash_declarations
+          WHERE user_id = ${userId}
+        ),
+        deducted AS (
+          SELECT COALESCE(SUM(amount),0) AS total_deducted
+          FROM expenses
+          WHERE deduct_from_excedents = true
+            AND deducted_cashier_id = ${userId}
+            AND status IN ('accounting_approved','director_approved')
+        )
+        SELECT (COALESCE(d.total_declared,0) - COALESCE(x.total_deducted,0))::bigint AS available
+        FROM declared d, deducted x
+      `
+      total_excedents_available = Number(ex?.available || 0)
+    } else {
+      // Global: somme des excédents disponibles de tous les caissiers
+      const [ex] = await sql`
+        WITH per_user AS (
+          WITH declared AS (
+            SELECT user_id, COALESCE(SUM(COALESCE(excedents,0)),0) AS total_declared
+            FROM ria_cash_declarations
+            GROUP BY user_id
+          ),
+          deducted AS (
+            SELECT deducted_cashier_id AS user_id, COALESCE(SUM(amount),0) AS total_deducted
+            FROM expenses
+            WHERE deduct_from_excedents = true
+              AND deducted_cashier_id IS NOT NULL
+              AND status IN ('accounting_approved','director_approved')
+            GROUP BY deducted_cashier_id
+          )
+          SELECT COALESCE(d.total_declared,0) - COALESCE(x.total_deducted,0) AS available
+          FROM declared d
+          LEFT JOIN deducted x ON x.user_id = d.user_id
+        )
+        SELECT COALESCE(SUM(available),0)::bigint AS available FROM per_user
+      `
+      total_excedents_available = Number(ex?.available || 0)
+    }
+
     return {
       total_pending: Number(result.total_pending) || 0,
       total_validated_today: Number(result.total_validated_today) || 0,
@@ -260,6 +307,7 @@ export async function getCashDeclarationsStats(userId?: string): Promise<{
       total_montant_rejected: Number(result.total_montant_rejected) || 0,
       total_delestage: Number(result.total_delestage) || 0,
       total_excedents: Number(result.total_excedents) || 0,
+      total_excedents_available,
     }
   } catch (error) {
     console.error('❌ Erreur dans getCashDeclarationsStats:', error)

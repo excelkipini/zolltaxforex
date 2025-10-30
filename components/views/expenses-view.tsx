@@ -79,6 +79,29 @@ export function ExpensesView({ user }: ExpensesViewProps) {
   const [newCategory, setNewCategory] = useState("")
   const [newAgency, setNewAgency] = useState(user.agency ?? "Agence Centre")
   const [newComment, setNewComment] = useState("")
+  const [deductFromExcedents, setDeductFromExcedents] = useState(false)
+  const [eligibleCashiers, setEligibleCashiers] = useState<Array<{ id: string; name: string; available_excedents: number }>>([])
+  const [selectedCashierId, setSelectedCashierId] = useState<string>("")
+  const isCashier = user.role === "cashier"
+  const hasOwnExcedents = eligibleCashiers.find((c) => c.name === user.name)
+
+  // Rafraîchir la liste des caissiers avec excédents (utilisée après validations)
+  async function refreshEligibleCashiers() {
+    try {
+      const r = await fetch('/api/ria-cash-declarations?type=cashiers-with-excedents')
+      const d = await r.json()
+      const list = Array.isArray(d?.data) ? d.data : []
+      if (isCashier) {
+        const mine = list.filter((c: any) => c?.name === user.name)
+        setEligibleCashiers(mine)
+        if (mine.length > 0) {
+          setSelectedCashierId((prev) => prev || mine[0].id)
+        }
+      } else {
+        setEligibleCashiers(list)
+      }
+    } catch {}
+  }
   const [selectedExpenseComment, setSelectedExpenseComment] = useState<string | null>(null)
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false)
   const [rejectionReason, setRejectionReason] = useState("")
@@ -475,6 +498,23 @@ export function ExpensesView({ user }: ExpensesViewProps) {
           title: `Dépense ${action}`, 
           description: `"${exp.description}" ${action} par la ${validator}.` 
         })
+
+        // Mise à jour temps réel des excédents après validation directeur/comptable
+        await refreshEligibleCashiers()
+
+        // Signaler aux autres écrans (ex: Clôture de caisse) de rafraîchir les excédents
+        try {
+          const notif = {
+            id: `ex_${Date.now()}`,
+            type: 'excedents_changed',
+            createdAt: Date.now(),
+          }
+          const raw = localStorage.getItem('maf_notifications')
+          const list = raw ? JSON.parse(raw) : []
+          list.push(notif)
+          localStorage.setItem('maf_notifications', JSON.stringify(list))
+          window.dispatchEvent(new StorageEvent('storage', { key: 'maf_notifications', newValue: JSON.stringify(list) }))
+        } catch {}
       } else {
         toast({ 
           title: "Erreur", 
@@ -576,7 +616,31 @@ export function ExpensesView({ user }: ExpensesViewProps) {
     setNewAmount("")
     setNewCategory("")
     setNewAgency(user.agency ?? "Agence Centre")
+    setDeductFromExcedents(false)
+    setSelectedCashierId("")
     setIsDialogOpen(true)
+    // Charger les caissiers éligibles si nécessaire (pré-chargement)
+    fetch('/api/ria-cash-declarations?type=cashiers-with-excedents')
+      .then(r => r.json())
+      .then(d => {
+        console.log('🧮 Caissiers excédents (préchargement):', d)
+        const list = Array.isArray(d?.data) ? d.data : []
+        if (isCashier) {
+          const mine = list.filter((c: any) => c?.name === user.name)
+          setEligibleCashiers(mine)
+          if (mine.length > 0) {
+            setSelectedCashierId(mine[0].id)
+            setDeductFromExcedents(true)
+          } else {
+            // Pas d'excédents: désactiver l'option
+            setDeductFromExcedents(false)
+          }
+        } else {
+          // Directeur / Comptable: voir toute la liste
+          setEligibleCashiers(list)
+        }
+      })
+      .catch(() => {})
   }
 
   async function submitCreate() {
@@ -585,12 +649,25 @@ export function ExpensesView({ user }: ExpensesViewProps) {
       alert("Veuillez saisir une description et un montant valide.")
       return
     }
+    if (deductFromExcedents) {
+      if (!selectedCashierId) {
+        alert("Veuillez sélectionner un caissier pour la déduction dans les excédents.")
+        return
+      }
+      const cashier = eligibleCashiers.find(c => c.id === selectedCashierId)
+      if (cashier && amountNum > cashier.available_excedents) {
+        alert(`Montant supérieur aux excédents disponibles de ${cashier.name} (${cashier.available_excedents} FCFA).`)
+        return
+      }
+    }
     const payload = {
       description: newDesc.trim(),
       amount: amountNum,
       category: newCategory || "Autre",
       agency: newAgency || user.agency || "Agence Centre",
       comment: newComment.trim() || undefined,
+      deduct_from_excedents: deductFromExcedents,
+      deducted_cashier_id: deductFromExcedents ? selectedCashierId : null,
     }
     try {
       const res = await fetch("/api/expenses", {
@@ -1164,6 +1241,9 @@ export function ExpensesView({ user }: ExpensesViewProps) {
           <DialogContent className="max-w-lg">
             <DialogHeader>
               <DialogTitle>Nouvelle dépense</DialogTitle>
+              <DialogDescription>
+                Remplissez les informations ci-dessous pour créer une nouvelle dépense.
+              </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
               <div>
@@ -1195,6 +1275,61 @@ export function ExpensesView({ user }: ExpensesViewProps) {
                   </Select>
                 </div>
               </div>
+
+            {/* Déduction dans les excédents */}
+            <div className="rounded-lg border p-3 bg-gray-50">
+              <div className="flex items-center gap-3">
+                <input
+                  id="deduct-excedents"
+                  type="checkbox"
+                  className="h-4 w-4"
+                  checked={deductFromExcedents}
+                  disabled={isCashier && (!eligibleCashiers || eligibleCashiers.length === 0)}
+                  onChange={(e) => {
+                    const checked = e.target.checked
+                    setDeductFromExcedents(checked)
+                    if (checked && eligibleCashiers.length === 0) {
+                      fetch('/api/ria-cash-declarations?type=cashiers-with-excedents')
+                        .then(r => r.json())
+                        .then(d => {
+                          if (Array.isArray(d?.data)) setEligibleCashiers(d.data)
+                        })
+                        .catch(() => {})
+                    }
+                  }}
+                />
+                <Label htmlFor="deduct-excedents" className="cursor-pointer">Déduire dans les excédents (optionnel)</Label>
+              </div>
+
+              {deductFromExcedents && (
+                <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <Label>Caissier à débiter</Label>
+                    <Select value={selectedCashierId} onValueChange={setSelectedCashierId}>
+                      <SelectTrigger className="mt-1">
+                        <SelectValue placeholder="Sélectionner un caissier" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {eligibleCashiers.map(c => (
+                          <SelectItem key={c.id} value={c.id} disabled={isCashier && c.name !== user.name}>
+                            {c.name} — {(c.available_excedents || 0).toLocaleString()} FCFA
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Excédents disponibles</Label>
+                    <Input
+                      value={(eligibleCashiers.find(c => c.id === selectedCashierId)?.available_excedents || 0).toLocaleString() + ' FCFA'}
+                      disabled
+                      className="mt-1"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
               <div>
                 <Label htmlFor="exp-comment">Commentaire</Label>
                 <Textarea 

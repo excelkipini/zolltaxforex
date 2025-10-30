@@ -25,7 +25,7 @@ export function useExchangeRates() {
         setLoading(true)
         setError(null)
         
-        const response = await fetch('/api/settings')
+        const response = await fetch('/api/settings?type=public')
         const data = await response.json()
         
         if (response.ok && data?.ok && data.data?.settings) {

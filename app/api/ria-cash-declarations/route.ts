@@ -43,18 +43,20 @@ export async function GET(request: NextRequest) {
         { status: 401 }
       )
     }
+    const searchParams = request.nextUrl.searchParams
+    const type = searchParams.get('type') // 'all', 'pending', 'user', 'stats', 'cashiers-with-excedents'
     
-    // Vérifier les permissions - les caissiers et cash_manager peuvent accéder
-    if (!['cashier', 'cash_manager'].includes(user.role)) {
-      console.log('❌ Accès refusé pour le rôle:', user.role)
+    // Vérifier les permissions - étendre l'accès pour certains types
+    const baseAllowed = ['cashier', 'cash_manager']
+    const extendedAllowed = ['cashier', 'cash_manager', 'director', 'accounting']
+    const allowedRoles = (type === 'cashiers-with-excedents') ? extendedAllowed : baseAllowed
+    if (!allowedRoles.includes(user.role)) {
+      console.log('❌ Accès refusé pour le rôle:', user.role, 'type:', type)
       return NextResponse.json(
         { error: "Accès non autorisé" },
         { status: 403 }
       )
     }
-
-    const searchParams = request.nextUrl.searchParams
-    const type = searchParams.get('type') // 'all', 'pending', 'user', 'stats'
     const id = searchParams.get('id')
     const userId = searchParams.get('userId')
 
@@ -80,6 +82,47 @@ export async function GET(request: NextRequest) {
       } catch (error) {
         console.error('❌ Erreur lors de la récupération des stats:', error)
         return NextResponse.json({ error: "Erreur lors de la récupération des statistiques" }, { status: 500 })
+      }
+    }
+
+    // Liste des caissiers avec excédents disponibles (> 0) après déductions approuvées
+    if (type === 'cashiers-with-excedents') {
+      try {
+        console.log('📥 API cashiers-with-excedents appelée')
+        // S'assurer que les colonnes nécessaires existent (idempotent)
+        await sql`ALTER TABLE expenses ADD COLUMN IF NOT EXISTS deduct_from_excedents BOOLEAN NOT NULL DEFAULT false`
+        await sql`ALTER TABLE expenses ADD COLUMN IF NOT EXISTS deducted_cashier_id UUID`
+
+        // Comptabiliser excédents déclarés par caissier - dépenses approuvées déduites des excédents
+        const rows = await sql`
+          WITH declared AS (
+            SELECT user_id, COALESCE(SUM(COALESCE(excedents,0)),0) AS total_declared
+            FROM ria_cash_declarations
+            GROUP BY user_id
+          ),
+          deducted AS (
+            SELECT deducted_cashier_id AS user_id,
+                   COALESCE(SUM(amount),0) AS total_deducted
+            FROM expenses
+            WHERE deduct_from_excedents = true
+              AND deducted_cashier_id IS NOT NULL
+              AND status IN ('accounting_approved','director_approved')
+            GROUP BY deducted_cashier_id
+          )
+          SELECT u.id::text AS id,
+                 u.name AS name,
+                 (COALESCE(d.total_declared,0) - COALESCE(x.total_deducted,0))::bigint AS available_excedents
+          FROM declared d
+          JOIN users u ON u.id = d.user_id AND u.role = 'cashier'
+          LEFT JOIN deducted x ON x.user_id = d.user_id
+          WHERE (COALESCE(d.total_declared,0) - COALESCE(x.total_deducted,0)) > 0
+          ORDER BY u.name
+        `
+        console.log('📊 Caissiers avec excédents:', rows)
+        return NextResponse.json({ data: rows })
+      } catch (err) {
+        console.error('❌ Erreur cashiers-with-excedents:', err)
+        return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 })
       }
     }
 

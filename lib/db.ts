@@ -130,6 +130,8 @@ export async function initializeDatabase() {
         accounting_validated_at TIMESTAMPTZ,
         director_validated_by TEXT,
         director_validated_at TIMESTAMPTZ,
+          deduct_from_excedents BOOLEAN NOT NULL DEFAULT false,
+          deducted_cashier_id UUID,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )
@@ -196,6 +198,14 @@ export async function initializeDatabase() {
     await sql`
       ALTER TABLE expenses ADD COLUMN IF NOT EXISTS director_validated_at TIMESTAMPTZ
     `
+
+      // New columns to support deduction from excedents
+      await sql`
+        ALTER TABLE expenses ADD COLUMN IF NOT EXISTS deduct_from_excedents BOOLEAN NOT NULL DEFAULT false
+      `
+      await sql`
+        ALTER TABLE expenses ADD COLUMN IF NOT EXISTS deducted_cashier_id UUID
+      `
 
     // Update expenses status constraint to include new statuses
     await sql`

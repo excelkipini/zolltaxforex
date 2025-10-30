@@ -1,7 +1,7 @@
 import "server-only"
 import { sql } from "./db"
 import { convertExpenseToEmailData, sendExpenseSubmittedNotification, sendExpenseAccountingValidatedNotification, sendExpenseDirectorValidatedNotification } from "./email-notifications"
-import { deductExpenseFromReceiptCommissions } from "./cash-queries"
+import { deductExpenseFromReceiptCommissions, deductExpenseFromRiaExcedents, reconcileRiaExcedentsBalance } from "./cash-queries"
 
 export type ExpenseStatus = "pending" | "accounting_approved" | "accounting_rejected" | "director_approved" | "director_rejected"
 
@@ -78,10 +78,18 @@ export async function createExpense(input: {
   requested_by: string
   agency: string
   comment?: string
+  deduct_from_excedents?: boolean
+  deducted_cashier_id?: string | null
 }): Promise<Expense> {
   const rows = await sql<Expense[]>`
-    INSERT INTO expenses (description, amount, category, requested_by, agency, comment, rejection_reason)
-    VALUES (${input.description}, ${input.amount}, ${input.category}, ${input.requested_by}, ${input.agency}, ${input.comment || null}, null)
+    INSERT INTO expenses (
+      description, amount, category, requested_by, agency, comment, rejection_reason,
+      deduct_from_excedents, deducted_cashier_id
+    )
+    VALUES (
+      ${input.description}, ${input.amount}, ${input.category}, ${input.requested_by}, ${input.agency}, ${input.comment || null}, null,
+      ${!!input.deduct_from_excedents}, ${input.deducted_cashier_id || null}
+    )
     RETURNING 
       id::text, 
       description, 
@@ -193,6 +201,8 @@ export async function validateExpenseByDirector(
       agency, 
       comment, 
       rejection_reason,
+      deduct_from_excedents,
+      deducted_cashier_id,
       accounting_validated_by,
       accounting_validated_at::text as accounting_validated_at,
       director_validated_by,
@@ -203,19 +213,32 @@ export async function validateExpenseByDirector(
     throw new Error("Dépense non trouvée ou pas encore approuvée par la comptabilité")
   }
   
-  const expense = rows[0]
+  const expense: any = rows[0]
 
-  // Si la dépense est approuvée par le directeur, déduire du compte commissions des reçus
+  // Si la dépense est approuvée par le directeur
   if (approved) {
     try {
-      await deductExpenseFromReceiptCommissions(
-        expense.id,
-        expense.amount,
-        `Dépense approuvée: ${expense.description}`,
-        validatedBy
-      )
+      if (expense.deduct_from_excedents && expense.deducted_cashier_id) {
+        // Déduire de la caisse Excédents RIA, pas des Commissions Reçus
+        await deductExpenseFromRiaExcedents(
+          expense.id,
+          expense.amount,
+          `Dépense approuvée (excédents): ${expense.description}`,
+          validatedBy
+        )
+      } else {
+        // Workflow par défaut: Commissions Reçus
+        await deductExpenseFromReceiptCommissions(
+          expense.id,
+          expense.amount,
+          `Dépense approuvée: ${expense.description}`,
+          validatedBy
+        )
+      }
+      // Réconcilier le solde Excédents RIA après la mise à jour
+      await reconcileRiaExcedentsBalance(validatedBy)
     } catch (error) {
-      console.error('Erreur lors de la déduction de la dépense du compte commissions des reçus:', error)
+      console.error('Erreur lors de la déduction de la dépense après validation directeur:', error)
       // Ne pas faire échouer la validation si la déduction échoue
     }
   }

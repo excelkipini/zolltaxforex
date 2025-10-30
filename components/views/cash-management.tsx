@@ -266,6 +266,16 @@ export function CashManagement({ user }: CashManagementProps) {
       return
     }
 
+    // Empêcher la mise à jour manuelle pour les comptes dérivés
+    if (selectedAccount.account_type === 'commissions' || selectedAccount.account_type === 'receipt_commissions' || selectedAccount.account_type === 'ria_excedents') {
+      toast({
+        title: "Action non autorisée",
+        description: "Ce compte est calculé automatiquement. Utilisez la réconciliation pour mettre à jour le solde.",
+        variant: "destructive"
+      })
+      return
+    }
+
     try {
       setUpdating(true)
 
@@ -544,7 +554,13 @@ export function CashManagement({ user }: CashManagementProps) {
                 placeholder="0"
                 min="0"
                 step="1"
+                disabled={selectedAccount?.account_type === 'commissions' || selectedAccount?.account_type === 'receipt_commissions' || selectedAccount?.account_type === 'ria_excedents'}
               />
+              {(selectedAccount?.account_type === 'commissions' || selectedAccount?.account_type === 'receipt_commissions' || selectedAccount?.account_type === 'ria_excedents') && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Ce compte est calculé automatiquement. Lancez une réconciliation pour le rafraîchir.
+                </p>
+              )}
             </div>
             <div>
               <Label htmlFor="description">Description de la modification</Label>
@@ -553,6 +569,7 @@ export function CashManagement({ user }: CashManagementProps) {
                 value={updateDescription}
                 onChange={(e) => setUpdateDescription(e.target.value)}
                 placeholder="Ex: Ajustement de solde, dépôt initial..."
+                disabled={selectedAccount?.account_type === 'commissions' || selectedAccount?.account_type === 'receipt_commissions' || selectedAccount?.account_type === 'ria_excedents'}
               />
             </div>
           </div>
@@ -562,7 +579,7 @@ export function CashManagement({ user }: CashManagementProps) {
             </Button>
             <Button 
               onClick={confirmUpdateBalance}
-              disabled={updating || !newBalance || !updateDescription.trim()}
+              disabled={updating || !newBalance || !updateDescription.trim() || (selectedAccount?.account_type === 'commissions' || selectedAccount?.account_type === 'receipt_commissions' || selectedAccount?.account_type === 'ria_excedents')}
             >
               {updating ? "Mise à jour..." : "Confirmer"}
             </Button>

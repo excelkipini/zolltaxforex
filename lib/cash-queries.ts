@@ -2,7 +2,7 @@ import { sql } from "./db"
 
 export type CashAccount = {
   id: string
-  account_type: "uba" | "ecobank" | "coffre" | "commissions" | "receipt_commissions"
+  account_type: "uba" | "ecobank" | "coffre" | "commissions" | "receipt_commissions" | "ria_excedents"
   account_name: string
   current_balance: number
   last_updated: string
@@ -12,7 +12,7 @@ export type CashAccount = {
 
 export type CashTransaction = {
   id: string
-  account_type: "uba" | "ecobank" | "coffre" | "commissions" | "receipt_commissions"
+  account_type: "uba" | "ecobank" | "coffre" | "commissions" | "receipt_commissions" | "ria_excedents"
   transaction_type: "deposit" | "withdrawal" | "transfer" | "expense" | "commission"
   amount: number
   description: string
@@ -25,10 +25,11 @@ export type CashTransaction = {
 export async function initializeCashAccounts(): Promise<void> {
   try {
     // Créer les tables si elles n'existent pas
+    // Assurer le schéma et les contraintes (ajout de ria_excedents)
     await sql`
       CREATE TABLE IF NOT EXISTS cash_accounts (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        account_type TEXT NOT NULL CHECK (account_type IN ('uba', 'ecobank', 'coffre', 'commissions', 'receipt_commissions')),
+        account_type TEXT NOT NULL CHECK (account_type IN ('uba', 'ecobank', 'coffre', 'commissions', 'receipt_commissions', 'ria_excedents')),
         account_name TEXT NOT NULL,
         current_balance BIGINT NOT NULL DEFAULT 0,
         last_updated TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -41,7 +42,7 @@ export async function initializeCashAccounts(): Promise<void> {
     await sql`
       CREATE TABLE IF NOT EXISTS cash_transactions (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        account_type TEXT NOT NULL CHECK (account_type IN ('uba', 'ecobank', 'coffre', 'commissions', 'receipt_commissions')),
+        account_type TEXT NOT NULL CHECK (account_type IN ('uba', 'ecobank', 'coffre', 'commissions', 'receipt_commissions', 'ria_excedents')),
         transaction_type TEXT NOT NULL CHECK (transaction_type IN ('deposit', 'withdrawal', 'transfer', 'expense', 'commission')),
         amount BIGINT NOT NULL,
         description TEXT NOT NULL,
@@ -51,13 +52,20 @@ export async function initializeCashAccounts(): Promise<void> {
       )
     `
 
+    // Mettre à jour les contraintes si elles existent déjà (ajouter ria_excedents)
+    await sql`ALTER TABLE cash_accounts DROP CONSTRAINT IF EXISTS cash_accounts_account_type_check`
+    await sql`ALTER TABLE cash_accounts ADD CONSTRAINT cash_accounts_account_type_check CHECK (account_type IN ('uba','ecobank','coffre','commissions','receipt_commissions','ria_excedents'))`
+    await sql`ALTER TABLE cash_transactions DROP CONSTRAINT IF EXISTS cash_transactions_account_type_check`
+    await sql`ALTER TABLE cash_transactions ADD CONSTRAINT cash_transactions_account_type_check CHECK (account_type IN ('uba','ecobank','coffre','commissions','receipt_commissions','ria_excedents'))`
+
     // Créer les comptes par défaut
     const defaultAccounts = [
       { account_type: "uba", account_name: "Compte UBA" },
       { account_type: "ecobank", account_name: "Compte Ecobank" },
       { account_type: "coffre", account_name: "Coffre" },
       { account_type: "commissions", account_name: "Commissions Transferts" },
-      { account_type: "receipt_commissions", account_name: "Commissions Reçus" }
+      { account_type: "receipt_commissions", account_name: "Commissions Reçus" },
+      { account_type: "ria_excedents", account_name: "Excédents RIA" }
     ]
 
     for (const account of defaultAccounts) {
@@ -103,7 +111,7 @@ export async function updateCashAccountBalance(
   description: string
 ): Promise<CashAccount> {
   // Empêcher la modification manuelle des comptes de commissions
-  if (accountType === 'commissions' || accountType === 'receipt_commissions') {
+  if (accountType === 'commissions' || accountType === 'receipt_commissions' || accountType === 'ria_excedents') {
     throw new Error("Le solde des commissions ne peut pas être modifié manuellement. Il est calculé automatiquement à partir des transactions.")
   }
 
@@ -449,6 +457,91 @@ export async function addReceiptCommissionToAccount(
       ${updatedBy}
     )
   `
+}
+
+// Déduire une dépense du compte Excédents RIA
+export async function deductExpenseFromRiaExcedents(
+  expenseId: string,
+  amount: number,
+  description: string,
+  updatedBy: string
+): Promise<void> {
+  // Vérifier existence du compte
+  const exAccount = await sql<CashAccount[]>`
+    SELECT 
+      id::text,
+      account_type,
+      account_name,
+      current_balance::bigint as current_balance,
+      last_updated::text as last_updated,
+      updated_by,
+      created_at::text as created_at
+    FROM cash_accounts 
+    WHERE account_type = 'ria_excedents'
+  `
+
+  if (exAccount.length === 0) {
+    // Créer le compte si manquant
+    await sql`
+      INSERT INTO cash_accounts (account_type, account_name, current_balance, updated_by)
+      VALUES ('ria_excedents', 'Excédents RIA', 0, ${updatedBy})
+      ON CONFLICT DO NOTHING
+    `
+  }
+
+  // Enregistrer la transaction de dépense (le solde de ce compte est dérivé des transactions)
+  await sql`
+    INSERT INTO cash_transactions (
+      account_type, 
+      transaction_type, 
+      amount, 
+      description, 
+      reference_id,
+      created_by
+    )
+    VALUES (
+      'ria_excedents', 
+      'expense', 
+      ${Math.round(amount)}, 
+      ${description}, 
+      ${expenseId},
+      ${updatedBy}
+    )
+  `
+}
+
+// Total Excédents RIA (= somme (dépôts - dépenses) si à l'avenir on crédite ce compte)
+export async function getTotalRiaExcedents(): Promise<number> {
+  // Total théorique = Somme des excédents déclarés (tous caissiers) - dépenses approuvées déduites des excédents
+  const rows = await sql<{ total: number }[]>`
+    WITH declared AS (
+      SELECT COALESCE(SUM(COALESCE(excedents,0)),0) AS total_declared
+      FROM ria_cash_declarations
+    ),
+    deducted AS (
+      SELECT COALESCE(SUM(amount),0) AS total_deducted
+      FROM expenses
+      WHERE deduct_from_excedents = true
+        AND deducted_cashier_id IS NOT NULL
+        AND status IN ('accounting_approved','director_approved')
+    )
+    SELECT (COALESCE(d.total_declared,0) - COALESCE(x.total_deducted,0))::bigint AS total
+    FROM declared d, deducted x
+  `
+  return Number(rows[0]?.total || 0)
+}
+
+export async function reconcileRiaExcedentsBalance(updatedBy: string = 'system'): Promise<number> {
+  const total = await getTotalRiaExcedents()
+  await sql`
+    INSERT INTO cash_accounts (account_type, account_name, current_balance, updated_by)
+    VALUES ('ria_excedents', 'Excédents RIA', ${total}, ${updatedBy})
+    ON CONFLICT (account_type) DO UPDATE SET
+      current_balance = EXCLUDED.current_balance,
+      last_updated = NOW(),
+      updated_by = EXCLUDED.updated_by
+  `
+  return total
 }
 
 // Récupérer l'historique des transactions de caisse

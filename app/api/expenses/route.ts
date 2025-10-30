@@ -41,6 +41,8 @@ export async function POST(request: NextRequest) {
       requested_by: user.name,
       agency: String(body?.agency || user.agency || "Agence Centrale"),
       comment: String(body?.comment || ""),
+      deduct_from_excedents: Boolean(body?.deduct_from_excedents || false),
+      deducted_cashier_id: body?.deducted_cashier_id ? String(body.deducted_cashier_id) : null,
     })
     return NextResponse.json({ ok: true, data: created })
   } catch (e: any) {
