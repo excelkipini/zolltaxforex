@@ -14,6 +14,7 @@ import {
   reconcileReceiptCommissionsBalance,
   reconcileRiaExcedentsBalance
 } from "@/lib/cash-queries"
+import { sql } from "@/lib/db"
 
 // GET - Récupérer les comptes de caisse et leurs soldes
 export async function GET(request: NextRequest) {
@@ -140,6 +141,35 @@ export async function POST(request: NextRequest) {
           success: true,
           message: "Commission ajoutée avec succès"
         })
+
+      case 'adjust-receipt-commissions': {
+        const { amount: adjAmount } = body
+        if (!adjAmount || !description || !updatedBy) {
+          return NextResponse.json(
+            { success: false, error: "Paramètres manquants: amount, description, updatedBy" },
+            { status: 400 }
+          )
+        }
+        // Insérer une transaction de type deposit sur le compte receipt_commissions
+        await sql`
+          INSERT INTO cash_transactions (
+            account_type,
+            transaction_type,
+            amount,
+            description,
+            created_by
+          ) VALUES (
+            'receipt_commissions',
+            'deposit',
+            ${Math.round(adjAmount)},
+            ${description},
+            ${updatedBy}
+          )
+        `
+        // Réconcilier le solde
+        const reconciled = await reconcileReceiptCommissionsBalance(updatedBy)
+        return NextResponse.json({ success: true, reconciled, message: "Ajustement appliqué" })
+      }
 
       default:
         return NextResponse.json(

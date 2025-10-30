@@ -701,6 +701,8 @@ export async function getTotalReceiptCommissions(): Promise<number> {
     SELECT COALESCE(SUM(
       CASE 
         WHEN transaction_type = 'commission' THEN amount
+        WHEN transaction_type = 'deposit' THEN amount
+        WHEN transaction_type = 'withdrawal' THEN -amount
         WHEN transaction_type = 'expense' THEN -amount
         ELSE 0
       END
