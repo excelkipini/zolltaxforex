@@ -7,7 +7,7 @@ export async function POST(request: NextRequest) {
   const { user } = await requireAuth()
   
   // Les directeurs, admins, comptables et caissiers peuvent distribuer
-  const canDistribute = user.role === "director" || user.role === "super_admin" || user.role === "accounting" || user.role === "cashier"
+  const canDistribute = user.role === "director" || user.role === "delegate" || user.role === "super_admin" || user.role === "accounting" || user.role === "cashier"
   
   if (!canDistribute) {
     return NextResponse.json({ ok: false, error: "Non autorisé" }, { status: 403 })

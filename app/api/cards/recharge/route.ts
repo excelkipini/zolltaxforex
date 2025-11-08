@@ -6,7 +6,7 @@ export async function POST(request: NextRequest) {
   const { user } = await requireAuth()
   
   // Les directeurs, admins, comptables et caissiers peuvent recharger
-  const canRecharge = user.role === "director" || user.role === "super_admin" || user.role === "accounting" || user.role === "cashier"
+  const canRecharge = user.role === "director" || user.role === "delegate" || user.role === "super_admin" || user.role === "accounting" || user.role === "cashier"
   
   if (!canRecharge) {
     return NextResponse.json({ ok: false, error: "Non autorisé" }, { status: 403 })

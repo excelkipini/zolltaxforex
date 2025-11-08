@@ -64,7 +64,9 @@ export function AccountingDashboard({ user }: AccountingDashboardProps) {
   const [expenseToReject, setExpenseToReject] = React.useState<any>(null)
 
   // Mettre à jour le titre de la page selon le rôle
-  useDocumentTitle({ title: user.role === "director" ? "Tableau de bord Directeur" : "Tableau de bord Comptable" })
+  const isDirectorDelegate = user.role === "director" || user.role === "delegate"
+
+  useDocumentTitle({ title: isDirectorDelegate ? "Tableau de bord Directeur" : "Tableau de bord Comptable" })
 
   // Charger les statistiques des dépenses
   const loadStats = async () => {
@@ -85,7 +87,7 @@ export function AccountingDashboard({ user }: AccountingDashboardProps) {
           pendingExpenses = expenses.filter((e: any) => e.status === 'pending')
           approvedExpenses = expenses.filter((e: any) => e.status === 'director_approved') // Seulement celles validées par le directeur
           rejectedExpenses = expenses.filter((e: any) => e.status === 'accounting_rejected' || e.status === 'director_rejected')
-        } else if (user.role === "director") {
+        } else if (isDirectorDelegate) {
           // Directeurs voient toutes les dépenses, mais se concentrent sur celles en attente de validation directeur
           pendingExpenses = expenses.filter((e: any) => e.status === 'pending' || e.status === 'accounting_approved') // En attente de validation comptable OU directeur
           approvedExpenses = expenses.filter((e: any) => e.status === 'director_approved') // Seulement celles validées par le directeur
@@ -144,7 +146,7 @@ export function AccountingDashboard({ user }: AccountingDashboardProps) {
   React.useEffect(() => {
     loadStats()
     // Charger les transactions en attente de suppression pour les comptables et directeurs
-    if (user.role === "accounting" || user.role === "director") {
+    if (user.role === "accounting" || isDirectorDelegate) {
       loadPendingDeleteTransactions()
     }
   }, [user.role])
@@ -328,11 +330,11 @@ export function AccountingDashboard({ user }: AccountingDashboardProps) {
 
   const statsCards = [
     { 
-      label: user.role === "director" ? "En attente de validation" : "En attente de validation comptable", 
+      label: isDirectorDelegate ? "En attente de validation" : "En attente de validation comptable", 
       value: stats.pendingExpenses.toString(), 
       icon: Clock, 
       color: "text-yellow-600",
-      description: user.role === "director" ? "Comptable ou directeur" : "En attente de validation"
+      description: isDirectorDelegate ? "Comptable ou directeur" : "En attente de validation"
     },
     { 
       label: "Approuvées par directeur", 
@@ -346,7 +348,7 @@ export function AccountingDashboard({ user }: AccountingDashboardProps) {
       value: stats.rejectedExpenses.toString(), 
       icon: XCircle, 
       color: "text-red-600",
-      description: user.role === "director" ? "Comptable ou directeur" : "Comptable ou directeur"
+      description: isDirectorDelegate ? "Comptable ou directeur" : "Comptable ou directeur"
     },
     { 
       label: "Montant total approuvé", 
@@ -376,7 +378,7 @@ export function AccountingDashboard({ user }: AccountingDashboardProps) {
         <div>
           <h1 className="text-2xl font-bold">Bonjour, {user.name} 👋</h1>
           <p className="text-muted-foreground">
-            {user.role === "director" 
+            {isDirectorDelegate 
               ? "Tableau de bord directeur - Supervision et validation des dépenses" 
               : "Tableau de bord comptable - Gestion des dépenses et validation"
             }
@@ -386,7 +388,7 @@ export function AccountingDashboard({ user }: AccountingDashboardProps) {
           <Button variant="outline" size="sm" asChild>
             <a href="/expenses">
               <Receipt className="h-4 w-4 mr-2" />
-              {user.role === "director" ? "Valider les dépenses" : "Gérer les dépenses"}
+              {isDirectorDelegate ? "Valider les dépenses" : "Gérer les dépenses"}
             </a>
           </Button>
         </div>
@@ -407,7 +409,7 @@ export function AccountingDashboard({ user }: AccountingDashboardProps) {
       )}
 
       {/* Section 2: Notification des transactions en attente de suppression - Pour les comptables et directeurs */}
-      {(user.role === "accounting" || user.role === "director") && pendingDeleteCount > 0 && (
+      {(user.role === "accounting" || isDirectorDelegate) && pendingDeleteCount > 0 && (
         <Alert className="border-orange-200 bg-orange-50">
           <AlertTriangle className="h-4 w-4 text-orange-600" />
           <AlertTitle className="text-orange-800">
@@ -494,7 +496,7 @@ export function AccountingDashboard({ user }: AccountingDashboardProps) {
             <Button variant="outline" className="h-20 flex flex-col gap-2" asChild>
               <a href="/expenses">
                 <Receipt className="h-6 w-6" />
-                <span className="text-sm">{user.role === "director" ? "Valider les dépenses" : "Gérer les dépenses"}</span>
+                <span className="text-sm">{isDirectorDelegate ? "Valider les dépenses" : "Gérer les dépenses"}</span>
               </a>
             </Button>
             
@@ -514,7 +516,7 @@ export function AccountingDashboard({ user }: AccountingDashboardProps) {
           </div>
           
           {/* Raccourcis spécifiques au Directeur */}
-          {user.role === "director" && (
+          {isDirectorDelegate && (
             <div className="mt-6">
               <h4 className="text-sm font-medium text-gray-700 mb-3">Raccourcis Directeur</h4>
               <div className="grid gap-4 md:grid-cols-4">
@@ -559,7 +561,7 @@ export function AccountingDashboard({ user }: AccountingDashboardProps) {
             Dépenses en attente d'approbation
           </CardTitle>
           <CardDescription>
-            {user.role === "director" 
+            {isDirectorDelegate 
               ? "Liste des dépenses validées par la comptabilité et en attente de votre validation" 
               : "Liste des dépenses en attente de validation par la comptabilité"
             }
@@ -663,7 +665,7 @@ export function AccountingDashboard({ user }: AccountingDashboardProps) {
                       )}
                       
                       {/* Boutons pour directeurs - validation directeur */}
-                      {user.role === "director" && expense.status === "accounting_approved" && (
+                      {isDirectorDelegate && expense.status === "accounting_approved" && (
                         <>
                           <div className="flex gap-2">
                             <Button
@@ -701,8 +703,8 @@ export function AccountingDashboard({ user }: AccountingDashboardProps) {
                       
                       {/* Bouton "Voir détails" pour les autres cas */}
                       {((user.role === "accounting" && expense.status !== "pending") || 
-                        (user.role === "director" && expense.status !== "accounting_approved") ||
-                        (user.role !== "accounting" && user.role !== "director")) && (
+                        (isDirectorDelegate && expense.status !== "accounting_approved") ||
+                        (user.role !== "accounting" && !isDirectorDelegate)) && (
                         <div className="flex flex-col gap-2">
                           <Button
                             variant="outline"
@@ -746,7 +748,7 @@ export function AccountingDashboard({ user }: AccountingDashboardProps) {
       </Card>
 
       {/* Section des transactions en attente de suppression - Pour les comptables et directeurs */}
-      {(user.role === "accounting" || user.role === "director") && pendingDeleteReceipts.length > 0 && (
+      {(user.role === "accounting" || isDirectorDelegate) && pendingDeleteReceipts.length > 0 && (
         <Card className="mt-6">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">

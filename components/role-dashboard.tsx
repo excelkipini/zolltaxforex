@@ -44,7 +44,7 @@ export function RoleDashboard({ user }: RoleDashboardProps) {
   }
 
   // Si c'est un comptable ou un directeur, utiliser le composant spécialisé
-  if (user.role === "accounting" || user.role === "director") {
+  if (user.role === "accounting" || user.role === "director" || user.role === "delegate") {
     return <AccountingDashboard user={user} />
   }
 

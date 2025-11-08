@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
   }
 
   // Accès complet réservé aux rôles autorisés
-  const canView = user.role === "director" || user.role === "super_admin" || user.role === "auditor" || user.role === "accounting"
+  const canView = user.role === "director" || user.role === "delegate" || user.role === "super_admin" || user.role === "auditor" || user.role === "accounting"
   if (!canView) {
     return NextResponse.json({ ok: false, error: "Non autorisé" }, { status: 403 })
   }
@@ -43,7 +43,7 @@ export async function PUT(request: NextRequest) {
   const { user } = await requireAuth()
   
   // Seuls les directeurs, admins et comptables peuvent modifier les paramètres
-  const canModify = user.role === "director" || user.role === "super_admin" || user.role === "accounting"
+  const canModify = user.role === "director" || user.role === "delegate" || user.role === "super_admin" || user.role === "accounting"
   
   if (!canModify) {
     return NextResponse.json({ ok: false, error: "Non autorisé" }, { status: 403 })

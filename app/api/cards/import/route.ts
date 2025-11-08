@@ -6,7 +6,7 @@ export async function POST(request: NextRequest) {
   const { user } = await requireAuth()
   
   // Les directeurs, admins, comptables et caissiers peuvent importer des cartes
-  const canImport = user.role === "director" || user.role === "super_admin" || user.role === "accounting" || user.role === "cashier"
+  const canImport = user.role === "director" || user.role === "delegate" || user.role === "super_admin" || user.role === "accounting" || user.role === "cashier"
   
   if (!canImport) {
     return NextResponse.json({ ok: false, error: "Non autorisé" }, { status: 403 })

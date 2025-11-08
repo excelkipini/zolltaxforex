@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
     const { user } = await requireAuth()
     
     // Vérifier les permissions
-    if (user.role !== "cashier" && user.role !== "accounting" && user.role !== "director" && user.role !== "super_admin") {
+    if (user.role !== "cashier" && user.role !== "accounting" && user.role !== "director" && user.role !== "delegate" && user.role !== "super_admin") {
       return NextResponse.json({ error: "Permission refusée" }, { status: 403 })
     }
 

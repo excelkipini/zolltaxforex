@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
   const { user } = await requireAuth()
   
   // Seuls les directeurs, admins, comptables et caissiers peuvent voir les cartes
-  const canView = user.role === "director" || user.role === "super_admin" || user.role === "accounting" || user.role === "cashier"
+  const canView = user.role === "director" || user.role === "delegate" || user.role === "super_admin" || user.role === "accounting" || user.role === "cashier"
   
   if (!canView) {
     return NextResponse.json({ ok: false, error: "Non autorisé" }, { status: 403 })
@@ -82,7 +82,7 @@ export async function POST(request: NextRequest) {
   const { user } = await requireAuth()
   
   // Seuls les directeurs, admins, comptables et caissiers peuvent créer des cartes
-  const canCreate = user.role === "director" || user.role === "super_admin" || user.role === "accounting" || user.role === "cashier"
+  const canCreate = user.role === "director" || user.role === "delegate" || user.role === "super_admin" || user.role === "accounting" || user.role === "cashier"
   
   if (!canCreate) {
     return NextResponse.json({ ok: false, error: "Non autorisé" }, { status: 403 })
@@ -163,7 +163,7 @@ export async function PUT(request: NextRequest) {
   const { user } = await requireAuth()
   
   // Les directeurs, admins, comptables et caissiers peuvent modifier des cartes
-  const canModify = user.role === "director" || user.role === "super_admin" || user.role === "accounting" || user.role === "cashier"
+  const canModify = user.role === "director" || user.role === "delegate" || user.role === "super_admin" || user.role === "accounting" || user.role === "cashier"
   
   if (!canModify) {
     return NextResponse.json({ ok: false, error: "Non autorisé" }, { status: 403 })
@@ -208,7 +208,7 @@ export async function DELETE(request: NextRequest) {
     console.log('👤 Utilisateur authentifié:', user.name, user.role)
     
     // Les directeurs, super admins et comptables peuvent supprimer des cartes
-    const canDelete = user.role === "director" || user.role === "super_admin" || user.role === "accounting"
+    const canDelete = user.role === "director" || user.role === "delegate" || user.role === "super_admin" || user.role === "accounting"
     
     if (!canDelete) {
       console.log('❌ Utilisateur non autorisé pour la suppression')

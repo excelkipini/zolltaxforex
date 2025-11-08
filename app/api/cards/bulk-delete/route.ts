@@ -7,7 +7,7 @@ export async function POST(request: NextRequest) {
   const { user } = await requireAuth()
   
   // Les directeurs, super admins et comptables peuvent supprimer des cartes en masse
-  const canDelete = user.role === "director" || user.role === "super_admin" || user.role === "accounting"
+  const canDelete = user.role === "director" || user.role === "delegate" || user.role === "super_admin" || user.role === "accounting"
   
   if (!canDelete) {
     return NextResponse.json({ ok: false, error: "Non autorisé" }, { status: 403 })

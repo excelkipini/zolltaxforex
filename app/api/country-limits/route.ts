@@ -6,7 +6,7 @@ export async function GET(request: NextRequest) {
   const { user } = await requireAuth()
   
   // Les directeurs, super admins et comptables peuvent voir les plafonds
-  const canView = user.role === "director" || user.role === "super_admin" || user.role === "accounting"
+  const canView = user.role === "director" || user.role === "delegate" || user.role === "super_admin" || user.role === "accounting"
   
   if (!canView) {
     return NextResponse.json({ ok: false, error: "Non autorisé" }, { status: 403 })
@@ -36,7 +36,7 @@ export async function PUT(request: NextRequest) {
   const { user } = await requireAuth()
   
   // Les directeurs, super admins et comptables peuvent modifier les plafonds par pays
-  const canModify = user.role === "director" || user.role === "super_admin" || user.role === "accounting"
+  const canModify = user.role === "director" || user.role === "delegate" || user.role === "super_admin" || user.role === "accounting"
   
   if (!canModify) {
     return NextResponse.json({ 

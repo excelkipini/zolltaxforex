@@ -13,7 +13,7 @@ import {
 export async function getSettingsAction() {
   const { user } = await requireAuth()
   // Vérifier les permissions pour voir les taux (directeurs, super admins, auditeurs et comptables)
-  if (user.role !== "director" && user.role !== "super_admin" && user.role !== "auditor" && user.role !== "accounting") {
+  if (user.role !== "director" && user.role !== "delegate" && user.role !== "super_admin" && user.role !== "auditor" && user.role !== "accounting") {
     throw new Error("Non autorisé")
   }
   
@@ -39,7 +39,7 @@ export async function updateSettingsAction(input: z.infer<typeof updateSchema>):
   try {
     const { user } = await requireAuth()
     // Vérifier les permissions pour modifier les taux
-    if (user.role !== "director" && user.role !== "super_admin" && user.role !== "accounting") {
+    if (user.role !== "director" && user.role !== "delegate" && user.role !== "super_admin" && user.role !== "accounting") {
       return { ok: false, error: "Non autorisé" }
     }
     
@@ -57,7 +57,7 @@ export async function updateSettingsAction(input: z.infer<typeof updateSchema>):
 export async function getAgencyLimitsAction(): Promise<{ items: AgencyLimitEffective[] }> {
   const { user } = await requireAuth()
   // Vérifier les permissions pour voir les plafonds d'agence
-  if (user.role !== "director" && user.role !== "super_admin") {
+  if (user.role !== "director" && user.role !== "delegate" && user.role !== "super_admin") {
     throw new Error("Non autorisé")
   }
   

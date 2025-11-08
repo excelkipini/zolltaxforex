@@ -28,11 +28,11 @@ export async function POST(
 
     const transaction = existingTransaction[0]
 
-    // Vérifier que c'est un comptable ou un directeur
-    if (user.role !== "accounting" && user.role !== "director") {
+    // Vérifier que c'est un comptable ou un membre de la direction
+    if (user.role !== "accounting" && user.role !== "director" && user.role !== "delegate") {
       return NextResponse.json({ 
         ok: false, 
-        error: "Seuls les comptables et directeurs peuvent valider les suppressions" 
+        error: "Seuls les comptables et la direction peuvent valider les suppressions" 
       }, { status: 403 })
     }
 
@@ -58,9 +58,11 @@ export async function POST(
       WHERE id = ${transactionId}
     `
 
+    const roleLabel = user.role === "accounting" ? "le comptable" : "la direction"
+
     return NextResponse.json({ 
       ok: true, 
-      message: `Transaction ${transactionId} supprimée par ${user.role === "director" ? "le directeur" : "le comptable"}`,
+      message: `Transaction ${transactionId} supprimée par ${roleLabel}`,
       deletedBy: user.name,
       deletedAt: new Date().toISOString(),
       transaction: {

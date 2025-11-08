@@ -7,7 +7,7 @@ export async function GET() {
   const { user } = await requireAuth()
   
   // Seuls les directeurs, admins et auditeurs peuvent voir tous les utilisateurs
-  const canViewAll = user.role === "director" || user.role === "super_admin" || user.role === "auditor"
+  const canViewAll = user.role === "director" || user.role === "delegate" || user.role === "super_admin" || user.role === "auditor"
   
   if (!canViewAll) {
     return NextResponse.json({ ok: false, error: "Non autorisé" }, { status: 403 })
@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
   const { user } = await requireAuth()
   
   // Seuls les directeurs et admins peuvent créer des utilisateurs
-  const canCreate = user.role === "director" || user.role === "super_admin"
+  const canCreate = user.role === "director" || user.role === "delegate" || user.role === "super_admin"
   
   if (!canCreate) {
     return NextResponse.json({ ok: false, error: "Non autorisé" }, { status: 403 })
@@ -77,7 +77,7 @@ export async function PUT(request: NextRequest) {
   const { user } = await requireAuth()
   
   // Seuls les directeurs et admins peuvent modifier des utilisateurs
-  const canModify = user.role === "director" || user.role === "super_admin"
+  const canModify = user.role === "director" || user.role === "delegate" || user.role === "super_admin"
   
   if (!canModify) {
     return NextResponse.json({ ok: false, error: "Non autorisé" }, { status: 403 })
@@ -132,7 +132,7 @@ export async function DELETE(request: NextRequest) {
   const { user } = await requireAuth()
   
   // Seuls les directeurs et super admins peuvent supprimer des utilisateurs
-  const canDelete = user.role === "director" || user.role === "super_admin"
+  const canDelete = user.role === "director" || user.role === "delegate" || user.role === "super_admin"
   
   if (!canDelete) {
     return NextResponse.json({ ok: false, error: "Non autorisé" }, { status: 403 })

@@ -7,7 +7,7 @@ export async function POST(request: NextRequest) {
   const { user } = await requireAuth()
   
   // Seuls les directeurs et super admins peuvent réinitialiser l'usage
-  if (!user || !["director", "super_admin"].includes(user.role)) {
+  if (!user || !["director", "delegate", "super_admin"].includes(user.role)) {
     return NextResponse.json({ ok: false, error: "Non autorisé - Seuls les directeurs et super admins peuvent réinitialiser l'usage des cartes" }, { status: 403 })
   }
 

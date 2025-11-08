@@ -6,7 +6,7 @@ export async function GET(request: NextRequest) {
   const { user } = await requireAuth()
   
   // Seuls les directeurs, super admins et comptables peuvent consulter l'historique
-  const canViewHistory = user.role === "director" || user.role === "super_admin" || user.role === "accounting"
+  const canViewHistory = user.role === "director" || user.role === "delegate" || user.role === "super_admin" || user.role === "accounting"
   
   if (!canViewHistory) {
     return NextResponse.json({ ok: false, error: "Non autorisé - Seuls les directeurs, super admins et comptables peuvent consulter l'historique" }, { status: 403 })

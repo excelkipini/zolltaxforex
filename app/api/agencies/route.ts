@@ -6,7 +6,7 @@ export async function GET() {
   const { user } = await requireAuth()
   
   // Seuls les directeurs et admins peuvent voir toutes les agences
-  const canViewAll = user.role === "director" || user.role === "super_admin"
+  const canViewAll = user.role === "director" || user.role === "delegate" || user.role === "super_admin"
   
   if (!canViewAll) {
     return NextResponse.json({ ok: false, error: "Non autorisé" }, { status: 403 })
@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
   const { user } = await requireAuth()
   
   // Seuls les directeurs et admins peuvent créer des agences
-  const canCreate = user.role === "director" || user.role === "super_admin"
+  const canCreate = user.role === "director" || user.role === "delegate" || user.role === "super_admin"
   
   if (!canCreate) {
     return NextResponse.json({ ok: false, error: "Non autorisé" }, { status: 403 })

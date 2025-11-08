@@ -37,8 +37,8 @@ export async function GET(request: NextRequest) {
     console.log('📄 Arrêté trouvé:', { user_id: declaration.user_id })
 
     // Vérifier que l'utilisateur peut accéder à cet arrêté
-    // Autoriser : le créateur, le cash_manager, le director, et l'accounting
-    const allowedRoles = ['cash_manager', 'director', 'accounting']
+    // Autoriser : le créateur, le cash_manager, le directeur/délégué, et l'accounting
+    const allowedRoles = ['cash_manager', 'director', 'delegate', 'accounting']
     const isOwner = declaration.user_id === user.id
     const hasPermission = allowedRoles.includes(user.role)
     console.log('🔍 Vérification des permissions:', {

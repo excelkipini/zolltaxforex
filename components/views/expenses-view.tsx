@@ -134,9 +134,10 @@ export function ExpensesView({ user }: ExpensesViewProps) {
     })()
   }, [])
 
-  // Determine visibility scope: director and accounting see all, others only their own
-  const canModerateAll = user.role === "director"
-  const canViewAll = user.role === "director" || user.role === "accounting"
+  // Determine visibility scope: director/delegate and accounting see all, others only their own
+  const isDirectorDelegate = user.role === "director" || user.role === "delegate"
+  const canModerateAll = isDirectorDelegate
+  const canViewAll = isDirectorDelegate || user.role === "accounting"
 
   const visibleExpenses = useMemo(() => {
     let filtered = expenses
@@ -797,7 +798,7 @@ export function ExpensesView({ user }: ExpensesViewProps) {
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Gestion des Dépenses</h1>
             <p className="text-gray-600 mt-1">
-              {user.role === "director" ? "Validation et suivi des dépenses" : 
+            {isDirectorDelegate ? "Validation et suivi des dépenses" : 
                user.role === "accounting" ? "Suivi et consultation des dépenses" : 
                "Consultation des dépenses"}
             </p>
@@ -810,7 +811,7 @@ export function ExpensesView({ user }: ExpensesViewProps) {
         </div>
 
         {/* Alerts for director role */}
-        {user.role === "director" && stats.pending > 0 && (
+        {isDirectorDelegate && stats.pending > 0 && (
           <Alert className="border-orange-200 bg-orange-50">
             <AlertTriangle className="h-4 w-4" />
             <AlertDescription>
@@ -845,15 +846,15 @@ export function ExpensesView({ user }: ExpensesViewProps) {
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
                 <Clock className="h-4 w-4 text-orange-600" />
-                {user.role === "director" ? "En attente de validation" : "En attente de validation comptable"}
+                {isDirectorDelegate ? "En attente de validation" : "En attente de validation comptable"}
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-orange-600">
-                {user.role === "director" ? stats.pending + stats.accountingApproved : stats.pending}
+                {isDirectorDelegate ? stats.pending + stats.accountingApproved : stats.pending}
               </div>
               <p className="text-xs text-muted-foreground">
-                {user.role === "director" ? "Comptable ou directeur" : "Nécessitent validation comptable"}
+                {isDirectorDelegate ? "Comptable ou directeur" : "Nécessitent validation comptable"}
               </p>
             </CardContent>
           </Card>
@@ -1088,7 +1089,7 @@ export function ExpensesView({ user }: ExpensesViewProps) {
                       )}
                       
                       {/* Boutons pour directeurs - validation directeur */}
-                      {expense.status === "accounting_approved" && user.role === "director" && (
+                      {expense.status === "accounting_approved" && isDirectorDelegate && (
                         <div className="flex gap-2">
                           <Button
                             size="sm"

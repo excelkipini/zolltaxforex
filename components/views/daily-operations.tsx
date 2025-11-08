@@ -593,8 +593,8 @@ export function DailyOperations({ operationType, user, title }: DailyOperationsP
                         </Button>
                       )}
                       
-                      {/* Bouton de validation/suppression pour les comptables et directeurs */}
-                      {(user.role === "accounting" || user.role === "director") && transaction.status === "pending_delete" && (
+                      {/* Bouton de validation/suppression pour les comptables et direction */}
+                      {(user.role === "accounting" || user.role === "director" || user.role === "delegate") && transaction.status === "pending_delete" && (
                         <Button
                           size="sm"
                           variant="outline"

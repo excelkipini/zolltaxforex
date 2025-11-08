@@ -27,7 +27,7 @@ interface PDFReceiptProps {
 export function PDFReceipt({ expense, user }: PDFReceiptProps) {
   const receiptRef = useRef<HTMLDivElement>(null)
 
-  const canDownloadPDF = user.role === "director" || user.role === "accounting"
+  const canDownloadPDF = user.role === "director" || user.role === "delegate" || user.role === "accounting"
 
   const generatePDF = async () => {
     if (!canDownloadPDF) return

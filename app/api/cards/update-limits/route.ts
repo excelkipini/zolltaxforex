@@ -7,7 +7,7 @@ export async function POST(request: NextRequest) {
   const { user } = await requireAuth()
   
   // Les directeurs, super admins et comptables peuvent exécuter cette mise à jour
-  const canUpdate = user.role === "director" || user.role === "super_admin" || user.role === "accounting"
+  const canUpdate = user.role === "director" || user.role === "delegate" || user.role === "super_admin" || user.role === "accounting"
   
   if (!canUpdate) {
     return NextResponse.json({ ok: false, error: "Non autorisé - Seuls les directeurs, comptables et super admins peuvent exécuter cette mise à jour" }, { status: 403 })

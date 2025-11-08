@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
     
     // Vérifier les permissions - étendre l'accès pour certains types
     const baseAllowed = ['cashier', 'cash_manager']
-    const extendedAllowed = ['cashier', 'cash_manager', 'director', 'accounting']
+    const extendedAllowed = ['cashier', 'cash_manager', 'director', 'delegate', 'accounting']
     const allowedRoles = (type === 'cashiers-with-excedents') ? extendedAllowed : baseAllowed
     if (!allowedRoles.includes(user.role)) {
       console.log('❌ Accès refusé pour le rôle:', user.role, 'type:', type)
@@ -215,7 +215,7 @@ export async function POST(request: NextRequest) {
         // Récupérer tous les responsables caisses, directeurs et comptables
         const managers = await sql`
           SELECT email, name, role FROM users 
-          WHERE role IN ('cash_manager', 'director', 'accounting')
+          WHERE role IN ('cash_manager', 'director', 'delegate', 'accounting')
         `
         console.log(`📧 Envoi email à ${managers.length} destinataires`)
         
@@ -310,7 +310,7 @@ export async function PUT(request: NextRequest) {
         try {
           const managers = await sql`
             SELECT email, name, role FROM users 
-            WHERE role IN ('cash_manager', 'director', 'accounting')
+            WHERE role IN ('cash_manager', 'director', 'delegate', 'accounting')
           `
           console.log(`📧 Envoi email à ${managers.length} destinataires`)
           

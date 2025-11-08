@@ -12,8 +12,9 @@ import {
 
 export async function GET() {
   const { user } = await requireAuth()
-  const canModerateAll = user.role === "director"
-  const canViewAll = user.role === "director" || user.role === "accounting"
+  const isDirectorDelegate = user.role === "director" || user.role === "delegate"
+  const canModerateAll = isDirectorDelegate
+  const canViewAll = isDirectorDelegate || user.role === "accounting"
   
   try {
     // Pour les comptables et directeurs, retourner toutes les dépenses avec leurs états
@@ -52,7 +53,7 @@ export async function POST(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   const { user } = await requireAuth()
-  const canModerateAll = user.role === "director"
+  const canModerateAll = user.role === "director" || user.role === "delegate"
   if (!canModerateAll) return NextResponse.json({ ok: false, error: "Non autorisé" }, { status: 403 })
   try {
     const body = await request.json()
