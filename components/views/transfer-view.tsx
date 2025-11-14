@@ -232,16 +232,56 @@ export function TransferView() {
     }
   }
 
+  // Liste complète des pays couverts par Western Union, Ria et MoneyGram
   const countries = [
-    "France", "Belgique", "Suisse", "Canada", "États-Unis", "Royaume-Uni",
-    "Allemagne", "Italie", "Espagne", "Portugal", "Pays-Bas", "Suède",
-    "Norvège", "Danemark", "Finlande", "Pologne", "République Tchèque",
-    "Hongrie", "Roumanie", "Bulgarie", "Grèce", "Turquie", "Maroc",
-    "Tunisie", "Algérie", "Sénégal", "Côte d'Ivoire", "Cameroun", "Gabon",
-    "Congo", "RDC", "Mali", "Burkina Faso", "Niger", "Tchad", "Centrafrique"
-  ]
+    // Afrique
+    "Afrique du Sud", "Algérie", "Angola", "Bénin", "Botswana", "Burkina Faso", "Burundi",
+    "Cameroun", "Cap-Vert", "Centrafrique", "Tchad", "Comores", "Congo", "RDC", "Côte d'Ivoire",
+    "Djibouti", "Égypte", "Érythrée", "Eswatini", "Éthiopie", "Gabon", "Gambie", "Ghana",
+    "Guinée", "Guinée-Bissau", "Guinée équatoriale", "Kenya", "Lesotho", "Liberia", "Libye",
+    "Madagascar", "Malawi", "Mali", "Maroc", "Maurice", "Mauritanie", "Mozambique", "Namibie",
+    "Niger", "Nigeria", "Ouganda", "Rwanda", "São Tomé-et-Príncipe", "Sénégal", "Seychelles",
+    "Sierra Leone", "Somalie", "Soudan", "Soudan du Sud", "Tanzanie", "Togo", "Tunisie",
+    "Zambie", "Zimbabwe",
+    // Amérique du Nord
+    "Canada", "États-Unis", "Mexique", "Guatemala", "Belize", "El Salvador", "Honduras",
+    "Nicaragua", "Costa Rica", "Panama", "Cuba", "Jamaïque", "Haïti", "République dominicaine",
+    "Trinité-et-Tobago", "Barbade", "Bahamas", "Antigua-et-Barbuda", "Dominique", "Grenade",
+    "Saint-Kitts-et-Nevis", "Sainte-Lucie", "Saint-Vincent-et-les-Grenadines",
+    // Amérique du Sud
+    "Argentine", "Bolivie", "Brésil", "Chili", "Colombie", "Équateur", "Guyane", "Guyane française",
+    "Paraguay", "Pérou", "Suriname", "Uruguay", "Venezuela",
+    // Asie
+    "Afghanistan", "Arabie saoudite", "Arménie", "Azerbaïdjan", "Bahreïn", "Bangladesh", "Bhoutan",
+    "Birmanie", "Brunei", "Cambodge", "Chine", "Corée du Nord", "Corée du Sud", "Émirats arabes unis",
+    "Géorgie", "Inde", "Indonésie", "Irak", "Iran", "Israël", "Japon", "Jordanie", "Kazakhstan",
+    "Kirghizistan", "Koweït", "Laos", "Liban", "Malaisie", "Maldives", "Mongolie", "Népal",
+    "Oman", "Ouzbékistan", "Pakistan", "Palestine", "Philippines", "Qatar", "Singapour", "Sri Lanka",
+    "Syrie", "Tadjikistan", "Taïwan", "Thaïlande", "Timor oriental", "Turkménistan", "Turquie",
+    "Viêt Nam", "Yémen",
+    // Europe
+    "Albanie", "Allemagne", "Andorre", "Autriche", "Biélorussie", "Belgique", "Bosnie-Herzégovine",
+    "Bulgarie", "Chypre", "Croatie", "Danemark", "Espagne", "Estonie", "Finlande", "France",
+    "Grèce", "Hongrie", "Irlande", "Islande", "Italie", "Lettonie", "Liechtenstein", "Lituanie",
+    "Luxembourg", "Macédoine du Nord", "Malte", "Moldavie", "Monaco", "Monténégro", "Norvège",
+    "Pays-Bas", "Pologne", "Portugal", "République tchèque", "Roumanie", "Royaume-Uni", "Russie",
+    "Saint-Marin", "Serbie", "Slovaquie", "Slovénie", "Suède", "Suisse", "Ukraine", "Vatican",
+    // Océanie
+    "Australie", "Fidji", "Kiribati", "Marshall", "Micronésie", "Nauru", "Nouvelle-Zélande",
+    "Palaos", "Papouasie-Nouvelle-Guinée", "Samoa", "Salomon", "Tonga", "Tuvalu", "Vanuatu"
+  ].sort()
 
-  const currencies = ["XAF", "USD", "EUR", "GBP"]
+  // Liste complète des devises les plus répandues
+  const currencies = [
+    "XAF", "USD", "EUR", "GBP", "JPY", "CNY", "AUD", "CAD", "CHF", "HKD", "SGD", "NZD",
+    "INR", "BRL", "MXN", "ZAR", "TRY", "RUB", "KRW", "SEK", "NOK", "DKK", "PLN", "THB",
+    "MYR", "PHP", "IDR", "VND", "EGP", "NGN", "KES", "GHS", "ETB", "TZS", "UGX", "MAD",
+    "TND", "DZD", "XOF", "XPF", "ARS", "CLP", "COP", "PEN", "UYU", "PYG", "BOB", "VES",
+    "ILS", "AED", "SAR", "QAR", "KWD", "BHD", "OMR", "JOD", "LBP", "IQD", "IRR", "AFN",
+    "PKR", "BDT", "LKR", "NPR", "MMK", "KHR", "LAK", "MNT", "KZT", "UZS", "TJS", "TMT",
+    "AZN", "AMD", "GEL", "BYN", "MDL", "BGN", "RON", "RSD", "BAM", "MKD", "ALL", "HRK",
+    "ISK", "CZK", "HUF"
+  ].sort()
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
