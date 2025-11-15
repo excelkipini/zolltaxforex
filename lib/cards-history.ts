@@ -152,22 +152,36 @@ export async function getCardsActionHistory(options: {
   
   const total = Number(totalResult[0]?.total || 0)
 
+  // Fonction helper pour parser JSONB (peut être déjà un objet ou une string)
+  const parseJsonb = (value: any): any => {
+    if (value === null || value === undefined) return null
+    if (typeof value === 'object') return value // Déjà un objet
+    if (typeof value === 'string') {
+      try {
+        return JSON.parse(value)
+      } catch {
+        return null
+      }
+    }
+    return value
+  }
+
   return {
     actions: actions.map(action => {
       try {
         return {
           ...action,
-          old_values: action.old_values ? JSON.parse(action.old_values) : null,
-          new_values: action.new_values ? JSON.parse(action.new_values) : null,
-          metadata: action.metadata ? JSON.parse(action.metadata) : null
+          old_values: parseJsonb(action.old_values),
+          new_values: parseJsonb(action.new_values),
+          metadata: parseJsonb(action.metadata)
         }
       } catch (error) {
         console.error('❌ Erreur lors du parsing JSON pour l\'action:', action.id, error)
         return {
           ...action,
-          old_values: null,
-          new_values: null,
-          metadata: null
+          old_values: parseJsonb(action.old_values),
+          new_values: parseJsonb(action.new_values),
+          metadata: parseJsonb(action.metadata)
         }
       }
     }),

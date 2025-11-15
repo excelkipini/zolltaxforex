@@ -24,10 +24,14 @@ import {
   Eye,
   ArrowUpDown,
   ArrowUp,
-  ArrowDown
+  ArrowDown,
+  Copy,
+  Check,
+  FileText
 } from "lucide-react"
 import { format } from "date-fns"
 import { fr } from "date-fns/locale"
+import jsPDF from "jspdf"
 
 interface ActionHistoryEntry {
   id: string
@@ -74,6 +78,10 @@ export default function CardsHistoryPage() {
   const [users, setUsers] = React.useState<Array<{id: string, name: string}>>([])
   const [selectedAction, setSelectedAction] = React.useState<ActionHistoryEntry | null>(null)
   const [detailsOpen, setDetailsOpen] = React.useState(false)
+  const [copiedField, setCopiedField] = React.useState<string | null>(null)
+  const [showJsonMetadata, setShowJsonMetadata] = React.useState(false)
+  const [showJsonOldValues, setShowJsonOldValues] = React.useState(false)
+  const [showJsonNewValues, setShowJsonNewValues] = React.useState(false)
 
   const loadHistory = async (pageNum = 1) => {
     setLoading(true)
@@ -259,6 +267,201 @@ export default function CardsHistoryPage() {
   const handleViewDetails = (action: ActionHistoryEntry) => {
     setSelectedAction(action)
     setDetailsOpen(true)
+    setCopiedField(null)
+    setShowJsonMetadata(false)
+    setShowJsonOldValues(false)
+    setShowJsonNewValues(false)
+  }
+
+  const formatAmount = (amount: number) => {
+    return new Intl.NumberFormat('fr-FR', {
+      style: 'decimal',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(amount)
+  }
+
+  const copyToClipboard = async (text: string, fieldName: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopiedField(fieldName)
+      setTimeout(() => setCopiedField(null), 2000)
+    } catch (error) {
+      console.error('Erreur lors de la copie:', error)
+    }
+  }
+
+  // Fonction pour générer le PDF de distribution
+  const generateDistributionPDF = (action: ActionHistoryEntry) => {
+    const metadata = action.metadata || {}
+    const newValues = action.new_values || {}
+    
+    // Vérifier si les objets ont des propriétés utiles
+    const hasMetadata = metadata && Object.keys(metadata).length > 0
+    const hasNewValues = newValues && Object.keys(newValues).length > 0
+    
+    // Si aucune donnée n'est disponible, essayer d'extraire depuis la description
+    if (!hasMetadata && !hasNewValues && action.action_description) {
+      // Extraire les informations depuis la description : "Distribution de 31,745,000 XAF sur 40 cartes (Mali)"
+      const match = action.action_description.match(/Distribution de ([\d,]+)\s+XAF sur (\d+)\s+cartes?\s*\(([^)]+)\)/)
+      if (match) {
+        const [, amountStr, cardsStr, country] = match
+        const amount = parseInt(amountStr.replace(/,/g, ''))
+        const cards = parseInt(cardsStr)
+        // Créer un objet newValues minimal
+        Object.assign(newValues, {
+          total_distributed: amount,
+          cards_used: cards,
+          country: country,
+          remaining_amount: 0
+        })
+      }
+    }
+    
+    if (!hasMetadata && !hasNewValues && Object.keys(newValues).length === 0) {
+      console.error('Aucune métadonnée disponible pour cette action')
+      alert('Impossible de générer le PDF : données insuffisantes')
+      return
+    }
+
+    const doc = new jsPDF()
+    
+    // Configuration de la page
+    const pageWidth = doc.internal.pageSize.getWidth()
+    const pageHeight = doc.internal.pageSize.getHeight()
+    const margin = 20
+    
+    let yPosition = margin
+    
+    // Formatage des montants
+    const formatCurrency = (amount: number) => {
+      return new Intl.NumberFormat('fr-FR', {
+        style: 'decimal',
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
+      }).format(amount).replace(/\s/g, '.')
+    }
+
+    // Calculer les frais de cartes selon le pays
+    const getCardFees = (country: string, numberOfCards: number): number => {
+      const feesPerCard: Record<string, number> = {
+        'Mali': 10000,
+        'RDC': 10000,
+        'France': 0,
+        'Congo': 0
+      }
+      return numberOfCards * (feesPerCard[country] || 0)
+    }
+
+    // Récupérer les valeurs depuis metadata ou new_values
+    const country = metadata.country || newValues.country || 'Non spécifié'
+    const cardsUsed = newValues.cards_used || metadata.distributions?.length || 0
+    const totalDistributed = newValues.total_distributed || 0
+    const remainingAmount = newValues.remaining_amount || 0
+    const cardFees = metadata.cardFees || getCardFees(country, cardsUsed)
+    
+    // En-tête avec logo et titre
+    doc.setFontSize(20)
+    doc.setFont("helvetica", "bold")
+    doc.text("ZOLL TAX FOREX", margin, yPosition)
+    
+    yPosition += 10
+    doc.setFontSize(16)
+    doc.setFont("helvetica", "normal")
+    doc.text("Distribution en Masse de Cartes", margin, yPosition)
+    
+    yPosition += 15
+    
+    // Informations générales
+    doc.setFontSize(12)
+    doc.setFont("helvetica", "bold")
+    doc.text("Informations de la Distribution", margin, yPosition)
+    
+    yPosition += 8
+    doc.setFont("helvetica", "normal")
+    
+    const infoData = [
+      [`Pays:`, country],
+      [`Montant total distribué:`, `${formatCurrency(totalDistributed)} XAF`],
+      [`Nombre de cartes:`, `${cardsUsed}`],
+      [`Frais cartes:`, `${formatCurrency(cardFees)} XAF`],
+      [`Montant restant:`, `${formatCurrency(remainingAmount)} XAF`],
+      [`Distribué par:`, action.user_name || 'Non spécifié'],
+      [`Date de distribution:`, format(new Date(action.created_at), 'dd/MM/yyyy HH:mm:ss', { locale: fr })]
+    ]
+    
+    infoData.forEach(([label, value]) => {
+      doc.setFont("helvetica", "bold")
+      doc.text(String(label || ''), margin, yPosition)
+      doc.setFont("helvetica", "normal")
+      doc.text(String(value || ''), margin + 60, yPosition)
+      yPosition += 6
+    })
+    
+    yPosition += 10
+    
+    // Tableau des cartes si disponible
+    if (metadata.distributions && Array.isArray(metadata.distributions) && metadata.distributions.length > 0) {
+      doc.setFontSize(12)
+      doc.setFont("helvetica", "bold")
+      doc.text("Détail des Cartes Distribuées", margin, yPosition)
+      
+      yPosition += 15
+      
+      // En-têtes du tableau
+      const tableHeaders = ["N° Carte", "Pays", "Montant Reçu", "Nouveau Solde"]
+      const columnWidths = [40, 30, 50, 50]
+      const tableStartX = margin
+      
+      // Dessiner les en-têtes
+      doc.setFontSize(10)
+      doc.setFont("helvetica", "bold")
+      let xPosition = tableStartX
+      tableHeaders.forEach((header, index) => {
+        doc.rect(xPosition, yPosition - 5, columnWidths[index], 8)
+        doc.text(String(header || ''), xPosition + 2, yPosition + 2)
+        xPosition += columnWidths[index]
+      })
+      
+      yPosition += 8
+      
+      // Données du tableau
+      doc.setFont("helvetica", "normal")
+      metadata.distributions.forEach((card: any) => {
+        // Vérifier si on a besoin d'une nouvelle page
+        if (yPosition > pageHeight - 30) {
+          doc.addPage()
+          yPosition = margin
+        }
+        
+        xPosition = tableStartX
+        const rowData = [
+          card.card_cid || card.cid || card.id || 'N/A',
+          card.country || country || 'N/A',
+          `${formatCurrency(card.amount || 0)} XAF`,
+          `${formatCurrency(card.remaining_limit || card.new_balance || 0)} XAF`
+        ]
+        
+        rowData.forEach((data, index) => {
+          doc.rect(xPosition, yPosition - 5, columnWidths[index], 8)
+          doc.text(String(data || ''), xPosition + 2, yPosition + 2)
+          xPosition += columnWidths[index]
+        })
+        
+        yPosition += 8
+      })
+    }
+    
+    // Pied de page
+    const footerY = pageHeight - 20
+    doc.setFontSize(8)
+    doc.setFont("helvetica", "normal")
+    doc.text(`Généré le ${new Date().toLocaleString('fr-FR')}`, margin, footerY)
+    doc.text(`Action ID: ${action.id}`, pageWidth - margin - 60, footerY)
+    
+    // Sauvegarder le PDF
+    const fileName = `distribution_${country}_${format(new Date(action.created_at), 'yyyy-MM-dd', { locale: fr })}_${action.id.slice(-8)}.pdf`
+    doc.save(fileName)
   }
 
   const handleExport = async () => {
@@ -637,34 +840,215 @@ export default function CardsHistoryPage() {
 
               {selectedAction.metadata && (
                 <div>
-                  <label className="text-sm font-medium">Métadonnées</label>
-                  <div className="mt-1 p-3 bg-gray-50 rounded-md">
-                    <pre className="text-sm overflow-x-auto">
-                      {JSON.stringify(selectedAction.metadata, null, 2)}
-                    </pre>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-sm font-medium">Métadonnées</label>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setShowJsonMetadata(!showJsonMetadata)}
+                        className="h-7 px-2"
+                      >
+                        <FileText className="h-3 w-3 mr-1" />
+                        <span className="text-xs">{showJsonMetadata ? 'Vue structurée' : 'Vue JSON'}</span>
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => copyToClipboard(JSON.stringify(selectedAction.metadata, null, 2), 'metadata')}
+                        className="h-7 px-2"
+                      >
+                        {copiedField === 'metadata' ? (
+                          <>
+                            <Check className="h-3 w-3 mr-1 text-green-600" />
+                            <span className="text-xs text-green-600">Copié</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="h-3 w-3 mr-1" />
+                            <span className="text-xs">Copier</span>
+                          </>
+                        )}
+                      </Button>
+                    </div>
                   </div>
+                  {showJsonMetadata ? (
+                    <div className="mt-1 p-4 bg-gray-50 rounded-md border border-gray-200">
+                      <pre className="text-xs font-mono overflow-x-auto whitespace-pre-wrap break-words" style={{ lineHeight: '1.6', maxHeight: '400px', overflowY: 'auto' }}>
+                        {JSON.stringify(selectedAction.metadata, null, 2)}
+                      </pre>
+                    </div>
+                  ) : (
+                    <div className="mt-1 p-4 bg-gray-50 rounded-md border border-gray-200">
+                      {selectedAction.metadata.country && (
+                        <div className="mb-3">
+                          <span className="text-xs font-medium text-gray-600">Pays:</span>
+                          <Badge variant="outline" className="ml-2">{selectedAction.metadata.country}</Badge>
+                        </div>
+                      )}
+                      {selectedAction.metadata.distributed_at && (
+                        <div className="mb-3">
+                          <span className="text-xs font-medium text-gray-600">Date de distribution:</span>
+                          <span className="ml-2 text-sm">
+                            {format(new Date(selectedAction.metadata.distributed_at), 'dd/MM/yyyy HH:mm:ss', { locale: fr })}
+                          </span>
+                        </div>
+                      )}
+                      {selectedAction.metadata.distributions && Array.isArray(selectedAction.metadata.distributions) && selectedAction.metadata.distributions.length > 0 && (
+                        <div className="mt-4">
+                          <div className="text-xs font-medium text-gray-600 mb-2">
+                            Cartes distribuées ({selectedAction.metadata.distributions.length})
+                          </div>
+                          <div className="max-h-96 overflow-y-auto border rounded-lg">
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead className="text-xs">N° Carte</TableHead>
+                                  <TableHead className="text-xs">Montant</TableHead>
+                                  <TableHead className="text-xs">Limite restante</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {selectedAction.metadata.distributions.map((card: any, index: number) => (
+                                  <TableRow key={index}>
+                                    <TableCell className="text-xs font-mono">{card.card_cid || card.cid || 'N/A'}</TableCell>
+                                    <TableCell className="text-xs">{formatAmount(card.amount || 0)} XAF</TableCell>
+                                    <TableCell className="text-xs">{formatAmount(card.remaining_limit || 0)} XAF</TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        </div>
+                      )}
+                      {!selectedAction.metadata.distributions && (
+                        <div className="text-sm text-gray-600">
+                          {Object.entries(selectedAction.metadata).map(([key, value]) => (
+                            <div key={key} className="mb-2">
+                              <span className="font-medium">{key}:</span>{' '}
+                              <span>{typeof value === 'object' ? JSON.stringify(value) : String(value)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 
               {selectedAction.old_values && (
                 <div>
-                  <label className="text-sm font-medium">Valeurs avant</label>
-                  <div className="mt-1 p-3 bg-red-50 rounded-md">
-                    <pre className="text-sm overflow-x-auto">
-                      {JSON.stringify(selectedAction.old_values, null, 2)}
-                    </pre>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-sm font-medium">Valeurs avant</label>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setShowJsonOldValues(!showJsonOldValues)}
+                        className="h-7 px-2"
+                      >
+                        <FileText className="h-3 w-3 mr-1" />
+                        <span className="text-xs">{showJsonOldValues ? 'Vue structurée' : 'Vue JSON'}</span>
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => copyToClipboard(JSON.stringify(selectedAction.old_values, null, 2), 'old_values')}
+                        className="h-7 px-2"
+                      >
+                        {copiedField === 'old_values' ? (
+                          <>
+                            <Check className="h-3 w-3 mr-1 text-green-600" />
+                            <span className="text-xs text-green-600">Copié</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="h-3 w-3 mr-1" />
+                            <span className="text-xs">Copier</span>
+                          </>
+                        )}
+                      </Button>
+                    </div>
                   </div>
+                  {showJsonOldValues ? (
+                    <div className="mt-1 p-4 bg-red-50 rounded-md border border-red-200">
+                      <pre className="text-xs font-mono overflow-x-auto whitespace-pre-wrap break-words" style={{ lineHeight: '1.6', maxHeight: '400px', overflowY: 'auto' }}>
+                        {JSON.stringify(selectedAction.old_values, null, 2)}
+                      </pre>
+                    </div>
+                  ) : (
+                    <div className="mt-1 p-4 bg-red-50 rounded-md border border-red-200">
+                      <div className="grid grid-cols-2 gap-3">
+                        {Object.entries(selectedAction.old_values).map(([key, value]) => (
+                          <div key={key}>
+                            <span className="text-xs font-medium text-gray-600 capitalize">{key.replace(/_/g, ' ')}:</span>
+                            <div className="text-sm font-medium mt-1">
+                              {typeof value === 'number' ? formatAmount(value) : String(value)}
+                              {typeof value === 'number' && key.includes('amount') && ' XAF'}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
               {selectedAction.new_values && (
                 <div>
-                  <label className="text-sm font-medium">Valeurs après</label>
-                  <div className="mt-1 p-3 bg-green-50 rounded-md">
-                    <pre className="text-sm overflow-x-auto">
-                      {JSON.stringify(selectedAction.new_values, null, 2)}
-                    </pre>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-sm font-medium">Valeurs après</label>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setShowJsonNewValues(!showJsonNewValues)}
+                        className="h-7 px-2"
+                      >
+                        <FileText className="h-3 w-3 mr-1" />
+                        <span className="text-xs">{showJsonNewValues ? 'Vue structurée' : 'Vue JSON'}</span>
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => copyToClipboard(JSON.stringify(selectedAction.new_values, null, 2), 'new_values')}
+                        className="h-7 px-2"
+                      >
+                        {copiedField === 'new_values' ? (
+                          <>
+                            <Check className="h-3 w-3 mr-1 text-green-600" />
+                            <span className="text-xs text-green-600">Copié</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="h-3 w-3 mr-1" />
+                            <span className="text-xs">Copier</span>
+                          </>
+                        )}
+                      </Button>
+                    </div>
                   </div>
+                  {showJsonNewValues ? (
+                    <div className="mt-1 p-4 bg-green-50 rounded-md border border-green-200">
+                      <pre className="text-xs font-mono overflow-x-auto whitespace-pre-wrap break-words" style={{ lineHeight: '1.6', maxHeight: '400px', overflowY: 'auto' }}>
+                        {JSON.stringify(selectedAction.new_values, null, 2)}
+                      </pre>
+                    </div>
+                  ) : (
+                    <div className="mt-1 p-4 bg-green-50 rounded-md border border-green-200">
+                      <div className="grid grid-cols-2 gap-3">
+                        {Object.entries(selectedAction.new_values).map(([key, value]) => (
+                          <div key={key}>
+                            <span className="text-xs font-medium text-gray-600 capitalize">{key.replace(/_/g, ' ')}:</span>
+                            <div className="text-sm font-medium mt-1">
+                              {typeof value === 'number' ? formatAmount(value) : String(value)}
+                              {typeof value === 'number' && (key.includes('amount') || key.includes('distributed') || key.includes('remaining')) && ' XAF'}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -689,6 +1073,40 @@ export default function CardsHistoryPage() {
                   </div>
                 </div>
               </div>
+
+              {/* Bouton de téléchargement PDF pour les actions de distribution */}
+              {selectedAction.action_type === 'distribute' && (
+                <div className="pt-4 border-t mt-4">
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3">
+                    <p className="text-sm text-blue-800 font-medium mb-1">
+                      📄 Rapport PDF disponible
+                    </p>
+                    <p className="text-xs text-blue-600">
+                      Téléchargez le PDF détaillé de cette distribution avec la liste complète des cartes
+                    </p>
+                  </div>
+                  <Button
+                    onClick={() => {
+                      console.log('📄 Génération PDF pour action:', {
+                        id: selectedAction.id,
+                        action_type: selectedAction.action_type,
+                        metadata: selectedAction.metadata,
+                        new_values: selectedAction.new_values,
+                        description: selectedAction.action_description,
+                        hasMetadata: selectedAction.metadata && Object.keys(selectedAction.metadata).length > 0,
+                        hasNewValues: selectedAction.new_values && Object.keys(selectedAction.new_values).length > 0,
+                        distributionsCount: selectedAction.metadata?.distributions?.length || 0
+                      })
+                      generateDistributionPDF(selectedAction)
+                    }}
+                    className="w-full bg-red-600 hover:bg-red-700 text-white"
+                    size="lg"
+                  >
+                    <Download className="h-5 w-5 mr-2" />
+                    Télécharger le PDF de Distribution
+                  </Button>
+                </div>
+              )}
             </div>
           )}
         </DialogContent>
