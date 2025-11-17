@@ -109,7 +109,8 @@ export function RiaCashClosure() {
     if (user) {
       loadDeclarations()
       loadStats()
-      if (user.role === 'cash_manager') {
+      // Charger les arrêtés en attente pour Responsable caisse, Directeur et Comptable
+      if (['cash_manager', 'director', 'delegate', 'accounting'].includes(user.role)) {
         loadPendingDeclarations()
       }
     }
@@ -163,8 +164,8 @@ export function RiaCashClosure() {
 
   const loadDeclarations = async () => {
     try {
-      // Pour le Responsable caisses, charger tous les arrêtés
-      const url = user?.role === 'cash_manager' 
+      // Pour le Responsable caisses, Directeur et Comptable, charger tous les arrêtés
+      const url = ['cash_manager', 'director', 'delegate', 'accounting'].includes(user?.role || '')
         ? '/api/ria-cash-declarations?type=all'
         : '/api/ria-cash-declarations'
       
@@ -308,7 +309,7 @@ export function RiaCashClosure() {
       // Recharger les données en parallèle
       console.log('🔄 Rechargement des données en parallèle...')
       const reloadPromises = [loadDeclarations()]
-      if (user?.role === 'cash_manager') {
+      if (['cash_manager', 'director', 'delegate', 'accounting'].includes(user?.role || '')) {
         reloadPromises.push(loadPendingDeclarations())
       }
       await Promise.all(reloadPromises)
@@ -342,11 +343,11 @@ export function RiaCashClosure() {
 
       toast({
         title: "Succès",
-        description: "Arrêté soumis avec succès. Une notification a été envoyée au Responsable caisses.",
+        description: "Arrêté soumis avec succès. Une notification a été envoyée aux responsables.",
       })
 
       loadDeclarations()
-      if (user?.role === 'cash_manager') {
+      if (['cash_manager', 'director', 'delegate', 'accounting'].includes(user?.role || '')) {
         loadPendingDeclarations()
       }
       
@@ -506,7 +507,8 @@ export function RiaCashClosure() {
     )
   }
 
-  const isCashManager = user?.role === 'cash_manager'
+  // Vérifier si l'utilisateur est un manager (Responsable caisse, Directeur ou Comptable)
+  const isManager = ['cash_manager', 'director', 'delegate', 'accounting'].includes(user?.role || '')
 
   // Filtrer les déclarations
   const filteredDeclarations = declarations.filter(declaration => {
@@ -628,7 +630,7 @@ export function RiaCashClosure() {
         <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200 hover:shadow-lg transition-shadow">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-blue-800">
-              {isCashManager ? 'En Attente' : 'Soumis'}
+              {isManager ? 'En Attente' : 'Soumis'}
             </CardTitle>
             <div className="bg-blue-600 p-2 rounded-lg">
               <Clock className="h-4 w-4 text-white" />
@@ -636,10 +638,10 @@ export function RiaCashClosure() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-blue-700">
-              {isCashManager ? pendingDeclarations.length : (displayStats?.total_submitted || 0)}
+              {isManager ? pendingDeclarations.length : (displayStats?.total_submitted || 0)}
             </div>
             <p className="text-xs text-blue-600 mt-1">
-              {isCashManager ? 'Arrêtés en attente' : 'Arrêtés soumis'}
+              {isManager ? 'Arrêtés en attente' : 'Arrêtés soumis'}
             </p>
           </CardContent>
         </Card>
@@ -656,7 +658,7 @@ export function RiaCashClosure() {
               {displayStats?.total_validated || 0}
             </div>
             <p className="text-xs text-green-600 mt-1">
-              {isCashManager ? 'Arrêtés validés' : 'Mes arrêtés validés'}
+              {isManager ? 'Arrêtés validés' : 'Mes arrêtés validés'}
             </p>
           </CardContent>
         </Card>
@@ -673,7 +675,7 @@ export function RiaCashClosure() {
               {displayStats?.total_rejected || 0}
             </div>
             <p className="text-xs text-red-600 mt-1">
-              {isCashManager ? 'Arrêtés rejetés' : 'Mes arrêtés rejetés'}
+              {isManager ? 'Arrêtés rejetés' : 'Mes arrêtés rejetés'}
             </p>
           </CardContent>
         </Card>
@@ -694,7 +696,7 @@ export function RiaCashClosure() {
                 {formatAmount(displayStats.total_montant_validated)}
               </div>
               <p className="text-xs text-green-600 mt-1">
-                {isCashManager ? 'Tous les arrêtés validés' : 'Mes arrêtés validés'}
+                {isManager ? 'Tous les arrêtés validés' : 'Mes arrêtés validés'}
               </p>
             </CardContent>
           </Card>
@@ -711,7 +713,7 @@ export function RiaCashClosure() {
                 {formatAmount(displayStats.total_montant_submitted)}
               </div>
               <p className="text-xs text-blue-600 mt-1">
-                {isCashManager ? 'Tous les arrêtés soumis' : 'Mes arrêtés soumis'}
+                {isManager ? 'Tous les arrêtés soumis' : 'Mes arrêtés soumis'}
               </p>
             </CardContent>
           </Card>
@@ -728,7 +730,7 @@ export function RiaCashClosure() {
                 {formatAmount(displayStats.total_delestage)}
               </div>
               <p className="text-xs text-orange-600 mt-1">
-                {isCashManager ? 'Tous les délestages' : 'Mes délestages'}
+                {isManager ? 'Tous les délestages' : 'Mes délestages'}
               </p>
             </CardContent>
           </Card>
@@ -745,7 +747,7 @@ export function RiaCashClosure() {
                 {formatAmount((displayStats.total_excedents_available ?? displayStats.total_excedents) || 0)}
               </div>
               <p className="text-xs text-green-600 mt-1">
-                {isCashManager ? 'Tous les excédents' : 'Mes excédents'}
+                {isManager ? 'Tous les excédents' : 'Mes excédents'}
               </p>
             </CardContent>
           </Card>
@@ -753,7 +755,7 @@ export function RiaCashClosure() {
       )}
 
       {/* Bouton pour créer un nouvel arrêté */}
-      {!isCashManager && (
+      {!isManager && (
         <div className="flex justify-end">
           <Button onClick={() => {
             setEditingDeclaration(null)
@@ -773,7 +775,7 @@ export function RiaCashClosure() {
       )}
 
       {/* Liste des arrêtés en attente (Responsable caisses) */}
-      {isCashManager && pendingDeclarations.length > 0 && (
+      {isManager && pendingDeclarations.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle>Arrêtés en Attente de Validation</CardTitle>
@@ -855,7 +857,7 @@ export function RiaCashClosure() {
                 />
               </div>
               
-              {isCashManager && (
+              {isManager && (
                 <div className="w-full md:w-48">
                   <Label htmlFor="guichetier">Guichetier</Label>
                   <Select value={guichetierFilter || 'all'} onValueChange={(value) => setGuichetierFilter(value === 'all' ? '' : value)}>
@@ -917,7 +919,7 @@ export function RiaCashClosure() {
                   setDateFromFilter('')
                   setDateToFilter('')
                   setSearchTerm('')
-                  if (isCashManager) {
+                  if (isManager) {
                     setGuichetierFilter('')
                   }
                 }}

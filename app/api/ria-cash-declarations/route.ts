@@ -49,7 +49,11 @@ export async function GET(request: NextRequest) {
     // Vérifier les permissions - étendre l'accès pour certains types
     const baseAllowed = ['cashier', 'cash_manager']
     const extendedAllowed = ['cashier', 'cash_manager', 'director', 'delegate', 'accounting']
-    const allowedRoles = (type === 'cashiers-with-excedents') ? extendedAllowed : baseAllowed
+    // Pour les types 'all', 'pending', 'stats', permettre aussi director et accounting
+    const managerAllowed = ['cash_manager', 'director', 'delegate', 'accounting']
+    const allowedRoles = (type === 'cashiers-with-excedents' || type === 'all' || type === 'pending' || type === 'stats') 
+      ? extendedAllowed 
+      : baseAllowed
     if (!allowedRoles.includes(user.role)) {
       console.log('❌ Accès refusé pour le rôle:', user.role, 'type:', type)
       return NextResponse.json(
@@ -340,8 +344,8 @@ export async function PUT(request: NextRequest) {
         break
 
       case 'validate':
-        // Seul le Responsable caisses peut valider
-        if (user.role !== 'cash_manager') {
+        // Le Responsable caisses, le Directeur et le Comptable peuvent valider
+        if (!['cash_manager', 'director', 'delegate', 'accounting'].includes(user.role)) {
           return NextResponse.json(
             { error: "Accès non autorisé" },
             { status: 403 }
@@ -373,8 +377,8 @@ export async function PUT(request: NextRequest) {
         break
 
       case 'reject':
-        // Seul le Responsable caisses peut rejeter
-        if (user.role !== 'cash_manager') {
+        // Le Responsable caisses, le Directeur et le Comptable peuvent rejeter
+        if (!['cash_manager', 'director', 'delegate', 'accounting'].includes(user.role)) {
           return NextResponse.json(
             { error: "Accès non autorisé" },
             { status: 403 }

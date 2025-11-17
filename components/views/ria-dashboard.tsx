@@ -198,7 +198,7 @@ export function RiaDashboard({ initialData, onImportSuccess }: RiaDashboardProps
     }
   }
 
-  // Charger les arrêtés en attente (Responsable caisse)
+  // Charger les arrêtés en attente (Responsable caisse, Directeur, Comptable)
   const loadPendingDeclarations = async () => {
     try {
       const res = await fetch('/api/ria-cash-declarations?type=pending')
