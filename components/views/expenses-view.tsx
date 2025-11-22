@@ -7,6 +7,16 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -25,6 +35,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Eye,
+  Trash2,
 } from "lucide-react"
 import { ActionGuard } from "@/components/permission-guard"
 import { PDFReceipt } from "@/components/pdf-receipt"
@@ -106,6 +117,8 @@ export function ExpensesView({ user }: ExpensesViewProps) {
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false)
   const [rejectionReason, setRejectionReason] = useState("")
   const [expenseToReject, setExpenseToReject] = useState<string | number | null>(null)
+  const [deleteConfirmDialogOpen, setDeleteConfirmDialogOpen] = useState(false)
+  const [expenseToDelete, setExpenseToDelete] = useState<{ id: string | number; description: string } | null>(null)
 
   const expenses = items
 
@@ -528,6 +541,67 @@ export function ExpensesView({ user }: ExpensesViewProps) {
         title: "Erreur réseau", 
         description: "Impossible de valider la dépense. Vérifiez votre connexion.",
         variant: "destructive"
+      })
+    }
+  }
+
+  function handleDeleteExpense(id: string | number) {
+    // Vérifier que la dépense n'est pas validée par le directeur
+    const expense = items.find((e) => String(e.id) === String(id))
+    if (!expense) {
+      toast({
+        title: "Erreur",
+        description: "Dépense non trouvée",
+        variant: "destructive",
+      })
+      return
+    }
+
+    // Vérifier que la dépense n'est pas validée par le directeur (nouveau ou ancien format)
+    if (expense.status === "director_approved" || expense.status === "approved") {
+      toast({
+        title: "Suppression impossible",
+        description: "Impossible de supprimer une dépense déjà validée par le directeur",
+        variant: "destructive",
+      })
+      return
+    }
+
+    // Ouvrir le dialogue de confirmation
+    setExpenseToDelete({ id, description: expense.description })
+    setDeleteConfirmDialogOpen(true)
+  }
+
+  async function confirmDeleteExpense() {
+    if (!expenseToDelete) return
+
+    try {
+      const res = await fetch(`/api/expenses?id=${expenseToDelete.id}`, {
+        method: "DELETE",
+      })
+      const data = await res.json()
+
+      if (res.ok && data?.ok) {
+        // Retirer la dépense de la liste
+        setItems((prev) => prev.filter((e) => String(e.id) !== String(expenseToDelete.id)))
+        toast({
+          title: "Dépense supprimée",
+          description: `La dépense "${expenseToDelete.description}" a été supprimée avec succès`,
+        })
+        setDeleteConfirmDialogOpen(false)
+        setExpenseToDelete(null)
+      } else {
+        toast({
+          title: "Erreur",
+          description: data?.error || "Erreur lors de la suppression de la dépense",
+          variant: "destructive",
+        })
+      }
+    } catch (error: any) {
+      toast({
+        title: "Erreur réseau",
+        description: "Impossible de supprimer la dépense. Vérifiez votre connexion.",
+        variant: "destructive",
       })
     }
   }
@@ -1136,6 +1210,19 @@ export function ExpensesView({ user }: ExpensesViewProps) {
                         </div>
                       )}
                       
+                      {/* Bouton de suppression - seulement pour les dépenses non validées par le directeur */}
+                      {expense.status !== "director_approved" && expense.status !== "approved" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-red-600 border-red-600 hover:bg-red-50 bg-transparent"
+                          onClick={() => handleDeleteExpense(expense.id)}
+                        >
+                          <Trash2 className="h-4 w-4 mr-1" />
+                          Supprimer
+                        </Button>
+                      )}
+                      
                       {/* Affichage du PDF pour les dépenses finalement approuvées */}
                       {(expense.status === "director_approved" || expense.status === "approved") && (
                         <PDFReceipt
@@ -1417,6 +1504,40 @@ export function ExpensesView({ user }: ExpensesViewProps) {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* Dialogue de confirmation de suppression */}
+        <AlertDialog open={deleteConfirmDialogOpen} onOpenChange={setDeleteConfirmDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle className="flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-red-600" />
+                Confirmer la suppression
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                Êtes-vous sûr de vouloir supprimer la dépense "{expenseToDelete?.description}" ?
+                <br />
+                <span className="font-medium text-red-600 mt-2 block">
+                  Cette action est irréversible.
+                </span>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => {
+                setDeleteConfirmDialogOpen(false)
+                setExpenseToDelete(null)
+              }}>
+                Annuler
+              </AlertDialogCancel>
+              <AlertDialogAction
+                onClick={confirmDeleteExpense}
+                className="bg-red-600 hover:bg-red-700 text-white"
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Supprimer
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
   )
 }

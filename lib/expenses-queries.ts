@@ -329,4 +329,34 @@ export async function setExpenseStatus(id: string, status: ExpenseStatus, reject
   return rows[0]
 }
 
+// Fonction pour supprimer une dépense (seulement si elle n'est pas validée par le directeur)
+export async function deleteExpense(id: string): Promise<void> {
+  // Vérifier que la dépense existe et qu'elle n'est pas validée par le directeur
+  const checkRows = await sql<Expense[]>`
+    SELECT 
+      id::text, 
+      status,
+      director_validated_by
+    FROM expenses
+    WHERE id = ${id}::uuid
+  `
+  
+  if (checkRows.length === 0) {
+    throw new Error("Dépense non trouvée")
+  }
+  
+  const expense = checkRows[0]
+  
+  // Vérifier que la dépense n'est pas validée par le directeur (nouveau ou ancien format)
+  if (expense.status === "director_approved" || expense.status === "approved") {
+    throw new Error("Impossible de supprimer une dépense déjà validée par le directeur")
+  }
+  
+  // Supprimer la dépense
+  await sql`
+    DELETE FROM expenses
+    WHERE id = ${id}::uuid
+  `
+}
+
 
