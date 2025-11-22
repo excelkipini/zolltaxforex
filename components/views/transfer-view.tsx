@@ -7,9 +7,12 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { QRCodeSVG } from "qrcode.react"
 import { useToast } from "@/hooks/use-toast"
-import { Calculator, Send, CheckCircle, AlertCircle, Upload, FileText, X, Eye, Printer } from "lucide-react"
+import { Calculator, Send, CheckCircle, AlertCircle, Upload, FileText, X, Eye, Printer, ChevronsUpDown, Check } from "lucide-react"
+import { cn } from "@/lib/utils"
 import { CashierPendingTransactionsByType } from "./cashier-pending-transactions-by-type"
 import { DailyOperations } from "./daily-operations"
 import { getSessionClient, SessionUser } from "@/lib/auth-client"
@@ -46,6 +49,7 @@ export function TransferView() {
   const [transferId, setTransferId] = React.useState<string>("")
   const [qrCodeError, setQrCodeError] = React.useState(false)
   const [isPrinting, setIsPrinting] = React.useState(false)
+  const [countryPopoverOpen, setCountryPopoverOpen] = React.useState(false)
   const { toast } = useToast()
   
   // Récupérer l'utilisateur connecté
@@ -270,6 +274,221 @@ export function TransferView() {
     "Australie", "Fidji", "Kiribati", "Marshall", "Micronésie", "Nauru", "Nouvelle-Zélande",
     "Palaos", "Papouasie-Nouvelle-Guinée", "Samoa", "Salomon", "Tonga", "Tuvalu", "Vanuatu"
   ].sort()
+
+  // Mapping pays -> devise principale
+  const countryToCurrency: Record<string, string> = {
+    // Afrique
+    "Afrique du Sud": "ZAR",
+    "Algérie": "DZD",
+    "Angola": "USD",
+    "Bénin": "XOF",
+    "Botswana": "BWP",
+    "Burkina Faso": "XOF",
+    "Burundi": "BIF",
+    "Cameroun": "XAF",
+    "Cap-Vert": "CVE",
+    "Centrafrique": "XAF",
+    "Tchad": "XAF",
+    "Comores": "KMF",
+    "Congo": "XAF",
+    "RDC": "USD",
+    "Côte d'Ivoire": "XOF",
+    "Djibouti": "DJF",
+    "Égypte": "EGP",
+    "Érythrée": "ERN",
+    "Eswatini": "SZL",
+    "Éthiopie": "ETB",
+    "Gabon": "XAF",
+    "Gambie": "GMD",
+    "Ghana": "GHS",
+    "Guinée": "GNF",
+    "Guinée-Bissau": "XOF",
+    "Guinée équatoriale": "XAF",
+    "Kenya": "KES",
+    "Lesotho": "LSL",
+    "Liberia": "LRD",
+    "Libye": "LYD",
+    "Madagascar": "MGA",
+    "Malawi": "MWK",
+    "Mali": "XOF",
+    "Maroc": "MAD",
+    "Maurice": "MUR",
+    "Mauritanie": "MRU",
+    "Mozambique": "MZN",
+    "Namibie": "NAD",
+    "Niger": "XOF",
+    "Nigeria": "NGN",
+    "Ouganda": "UGX",
+    "Rwanda": "RWF",
+    "São Tomé-et-Príncipe": "STN",
+    "Sénégal": "XOF",
+    "Seychelles": "SCR",
+    "Sierra Leone": "SLL",
+    "Somalie": "SOS",
+    "Soudan": "SDG",
+    "Soudan du Sud": "SSP",
+    "Tanzanie": "TZS",
+    "Togo": "XOF",
+    "Tunisie": "TND",
+    "Zambie": "ZMW",
+    "Zimbabwe": "USD",
+    // Amérique du Nord
+    "Canada": "CAD",
+    "États-Unis": "USD",
+    "Mexique": "MXN",
+    "Guatemala": "GTQ",
+    "Belize": "BZD",
+    "El Salvador": "USD",
+    "Honduras": "HNL",
+    "Nicaragua": "NIO",
+    "Costa Rica": "CRC",
+    "Panama": "USD",
+    "Cuba": "CUP",
+    "Jamaïque": "JMD",
+    "Haïti": "HTG",
+    "République dominicaine": "DOP",
+    "Trinité-et-Tobago": "TTD",
+    "Barbade": "BBD",
+    "Bahamas": "BSD",
+    "Antigua-et-Barbuda": "XCD",
+    "Dominique": "XCD",
+    "Grenade": "XCD",
+    "Saint-Kitts-et-Nevis": "XCD",
+    "Sainte-Lucie": "XCD",
+    "Saint-Vincent-et-les-Grenadines": "XCD",
+    // Amérique du Sud
+    "Argentine": "ARS",
+    "Bolivie": "BOB",
+    "Brésil": "BRL",
+    "Chili": "CLP",
+    "Colombie": "COP",
+    "Équateur": "USD",
+    "Guyane": "GYD",
+    "Guyane française": "EUR",
+    "Paraguay": "PYG",
+    "Pérou": "PEN",
+    "Suriname": "SRD",
+    "Uruguay": "UYU",
+    "Venezuela": "VES",
+    // Asie
+    "Afghanistan": "AFN",
+    "Arabie saoudite": "SAR",
+    "Arménie": "AMD",
+    "Azerbaïdjan": "AZN",
+    "Bahreïn": "BHD",
+    "Bangladesh": "BDT",
+    "Bhoutan": "BTN",
+    "Birmanie": "MMK",
+    "Brunei": "BND",
+    "Cambodge": "KHR",
+    "Chine": "CNY",
+    "Corée du Nord": "KPW",
+    "Corée du Sud": "KRW",
+    "Émirats arabes unis": "AED",
+    "Géorgie": "GEL",
+    "Inde": "INR",
+    "Indonésie": "IDR",
+    "Irak": "IQD",
+    "Iran": "IRR",
+    "Israël": "ILS",
+    "Japon": "JPY",
+    "Jordanie": "JOD",
+    "Kazakhstan": "KZT",
+    "Kirghizistan": "KGS",
+    "Koweït": "KWD",
+    "Laos": "LAK",
+    "Liban": "LBP",
+    "Malaisie": "MYR",
+    "Maldives": "MVR",
+    "Mongolie": "MNT",
+    "Népal": "NPR",
+    "Oman": "OMR",
+    "Ouzbékistan": "UZS",
+    "Pakistan": "PKR",
+    "Palestine": "ILS",
+    "Philippines": "PHP",
+    "Qatar": "QAR",
+    "Singapour": "SGD",
+    "Sri Lanka": "LKR",
+    "Syrie": "SYP",
+    "Tadjikistan": "TJS",
+    "Taïwan": "TWD",
+    "Thaïlande": "THB",
+    "Timor oriental": "USD",
+    "Turkménistan": "TMT",
+    "Turquie": "TRY",
+    "Viêt Nam": "VND",
+    "Yémen": "YER",
+    // Europe
+    "Albanie": "ALL",
+    "Allemagne": "EUR",
+    "Andorre": "EUR",
+    "Autriche": "EUR",
+    "Biélorussie": "BYN",
+    "Belgique": "EUR",
+    "Bosnie-Herzégovine": "BAM",
+    "Bulgarie": "BGN",
+    "Chypre": "EUR",
+    "Croatie": "EUR",
+    "Danemark": "DKK",
+    "Espagne": "EUR",
+    "Estonie": "EUR",
+    "Finlande": "EUR",
+    "France": "EUR",
+    "Grèce": "EUR",
+    "Hongrie": "HUF",
+    "Irlande": "EUR",
+    "Islande": "ISK",
+    "Italie": "EUR",
+    "Lettonie": "EUR",
+    "Liechtenstein": "CHF",
+    "Lituanie": "EUR",
+    "Luxembourg": "EUR",
+    "Macédoine du Nord": "MKD",
+    "Malte": "EUR",
+    "Moldavie": "MDL",
+    "Monaco": "EUR",
+    "Monténégro": "EUR",
+    "Norvège": "NOK",
+    "Pays-Bas": "EUR",
+    "Pologne": "PLN",
+    "Portugal": "EUR",
+    "République tchèque": "CZK",
+    "Roumanie": "RON",
+    "Royaume-Uni": "GBP",
+    "Russie": "RUB",
+    "Saint-Marin": "EUR",
+    "Serbie": "RSD",
+    "Slovaquie": "EUR",
+    "Slovénie": "EUR",
+    "Suède": "SEK",
+    "Suisse": "CHF",
+    "Ukraine": "UAH",
+    "Vatican": "EUR",
+    // Océanie
+    "Australie": "AUD",
+    "Fidji": "FJD",
+    "Kiribati": "AUD",
+    "Marshall": "USD",
+    "Micronésie": "USD",
+    "Nauru": "AUD",
+    "Nouvelle-Zélande": "NZD",
+    "Palaos": "USD",
+    "Papouasie-Nouvelle-Guinée": "PGK",
+    "Samoa": "WST",
+    "Salomon": "SBD",
+    "Tonga": "TOP",
+    "Tuvalu": "AUD",
+    "Vanuatu": "VUV"
+  }
+
+  // Sélection automatique de la devise selon le pays
+  React.useEffect(() => {
+    if (transferData.destinationCountry && countryToCurrency[transferData.destinationCountry]) {
+      const currency = countryToCurrency[transferData.destinationCountry]
+      setTransferData(prev => ({ ...prev, sendCurrency: currency }))
+    }
+  }, [transferData.destinationCountry])
 
   // Liste complète des devises les plus répandues
   const currencies = [
@@ -599,19 +818,52 @@ export function TransferView() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="destinationCountry">Pays de destination *</Label>
-                  <Select
-                    value={transferData.destinationCountry}
-                    onValueChange={(value) => setTransferData(prev => ({ ...prev, destinationCountry: value }))}
-                  >
-                    <SelectTrigger className={errors.destinationCountry ? "border-red-500" : ""}>
-                      <SelectValue placeholder="Sélectionner un pays" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {countries.map(country => (
-                        <SelectItem key={country} value={country}>{country}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Popover open={countryPopoverOpen} onOpenChange={setCountryPopoverOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        className={cn(
+                          "w-full justify-between",
+                          !transferData.destinationCountry && "text-muted-foreground",
+                          errors.destinationCountry && "border-red-500"
+                        )}
+                      >
+                        {transferData.destinationCountry
+                          ? countries.find((country) => country === transferData.destinationCountry)
+                          : "Sélectionner un pays"}
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[400px] p-0">
+                      <Command>
+                        <CommandInput placeholder="Rechercher un pays..." />
+                        <CommandList>
+                          <CommandEmpty>Aucun pays trouvé.</CommandEmpty>
+                          <CommandGroup>
+                            {countries.map((country) => (
+                              <CommandItem
+                                key={country}
+                                value={country}
+                                onSelect={() => {
+                                  setTransferData(prev => ({ ...prev, destinationCountry: country }))
+                                  setCountryPopoverOpen(false)
+                                }}
+                              >
+                                <Check
+                                  className={cn(
+                                    "mr-2 h-4 w-4",
+                                    transferData.destinationCountry === country ? "opacity-100" : "opacity-0"
+                                  )}
+                                />
+                                {country}
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
                   {errors.destinationCountry && (
                     <p className="text-sm text-red-600 mt-1">{errors.destinationCountry}</p>
                   )}
