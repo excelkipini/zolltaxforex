@@ -249,7 +249,7 @@ export function AuditorPendingTransactions({ user }: AuditorPendingTransactionsP
     return new Date(dateString).toLocaleString("fr-FR")
   }
 
-  const renderTransactionDetails = (details: any, type: string) => {
+  const renderTransactionDetails = (details: any, type: string, transaction?: any) => {
     if (!details || typeof details !== 'object') {
       return <p className="text-sm text-gray-500 italic">Aucun détail supplémentaire</p>
     }
@@ -278,6 +278,18 @@ export function AuditorPendingTransactions({ user }: AuditorPendingTransactionsP
                 <p className="text-sm text-gray-900">{details.transfer_method || 'Non spécifié'}</p>
               </div>
             </div>
+            {details.fee_mode && (
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <span className="text-xs font-medium text-gray-600 uppercase tracking-wide">Mode de frais</span>
+                  <p className="text-sm text-gray-900">
+                    {details.fee_mode === "with_fees" ? "Avec frais" : 
+                     details.fee_mode === "without_fees" ? "Sans frais" : 
+                     details.fee_mode}
+                  </p>
+                </div>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <span className="text-xs font-medium text-gray-600 uppercase tracking-wide">Mode de retrait</span>
@@ -308,8 +320,34 @@ export function AuditorPendingTransactions({ user }: AuditorPendingTransactionsP
                 </p>
               </div>
             </div>
-            {/* Montant réel et commission si disponibles */}
-            {(transaction.real_amount_eur && transaction.commission_amount) && (
+            {/* Détails de calcul si disponibles */}
+            {(details.fees !== undefined || details.tax !== undefined) && (
+              <div className="mt-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                <h5 className="text-xs font-semibold text-gray-700 mb-2">Détails du calcul</h5>
+                <div className="space-y-1 text-xs">
+                  {details.fees !== undefined && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Frais:</span>
+                      <span className="font-medium">{(details.fees || 0).toLocaleString("fr-FR")} XAF</span>
+                    </div>
+                  )}
+                  {details.tax !== undefined && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Taxe:</span>
+                      <span className="font-medium">{(details.tax || 0).toLocaleString("fr-FR")} XAF</span>
+                    </div>
+                  )}
+                  {details.amount_to_collect !== undefined && (
+                    <div className="flex justify-between pt-1 border-t border-gray-300">
+                      <span className="text-gray-700 font-semibold">Montant à collecter:</span>
+                      <span className="font-semibold">{(details.amount_to_collect || 0).toLocaleString("fr-FR")} {details.received_currency || details.receivedCurrency || 'XAF'}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+            {/* Montant réel et commission si disponibles (pour les transactions validées) */}
+            {transaction && transaction.real_amount_eur && transaction.commission_amount && (
               <div className="grid grid-cols-2 gap-4 bg-blue-50 p-3 rounded-lg border border-blue-200">
                 <div>
                   <span className="text-xs font-medium text-blue-700 uppercase tracking-wide">Montant réel envoyé</span>
@@ -683,7 +721,7 @@ export function AuditorPendingTransactions({ user }: AuditorPendingTransactionsP
                 <div>
                   <Label className="text-sm font-medium text-gray-700">Détails supplémentaires</Label>
                   <div className="mt-1 p-4 bg-gray-50 rounded-lg border">
-                    {renderTransactionDetails(selectedTransaction.details, selectedTransaction.type)}
+                    {renderTransactionDetails(selectedTransaction.details, selectedTransaction.type, selectedTransaction)}
                   </div>
                 </div>
               )}

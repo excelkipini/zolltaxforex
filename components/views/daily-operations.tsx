@@ -804,6 +804,14 @@ export function DailyOperations({ operationType, user, title }: DailyOperationsP
                             <span className="text-sm font-medium text-gray-600">Moyen de transfert:</span>
                             <p className="text-sm">{selectedTransaction.details.transfer_method || "N/A"}</p>
                           </div>
+                          <div>
+                            <span className="text-sm font-medium text-gray-600">Mode de frais:</span>
+                            <p className="text-sm">
+                              {selectedTransaction.details.fee_mode === "with_fees" ? "Avec frais" : 
+                               selectedTransaction.details.fee_mode === "without_fees" ? "Sans frais" : 
+                               "N/A"}
+                            </p>
+                          </div>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                           <div>
@@ -815,6 +823,32 @@ export function DailyOperations({ operationType, user, title }: DailyOperationsP
                             <p className="text-sm">{(selectedTransaction.details.amount_sent || 0).toLocaleString("fr-FR")} {selectedTransaction.details.sent_currency || "XAF"}</p>
                           </div>
                         </div>
+                        {/* Détails de calcul si disponibles */}
+                        {(selectedTransaction.details.fees !== undefined || selectedTransaction.details.tax !== undefined) && (
+                          <div className="mt-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                            <h5 className="text-sm font-semibold text-gray-700 mb-2">Détails du calcul</h5>
+                            <div className="space-y-1 text-xs">
+                              {selectedTransaction.details.fees !== undefined && (
+                                <div className="flex justify-between">
+                                  <span className="text-gray-600">Frais:</span>
+                                  <span className="font-medium">{(selectedTransaction.details.fees || 0).toLocaleString("fr-FR")} XAF</span>
+                                </div>
+                              )}
+                              {selectedTransaction.details.tax !== undefined && (
+                                <div className="flex justify-between">
+                                  <span className="text-gray-600">Taxe:</span>
+                                  <span className="font-medium">{(selectedTransaction.details.tax || 0).toLocaleString("fr-FR")} XAF</span>
+                                </div>
+                              )}
+                              {selectedTransaction.details.amount_to_collect !== undefined && (
+                                <div className="flex justify-between pt-1 border-t border-gray-300">
+                                  <span className="text-gray-700 font-semibold">Montant à collecter:</span>
+                                  <span className="font-semibold">{(selectedTransaction.details.amount_to_collect || 0).toLocaleString("fr-FR")} {selectedTransaction.details.received_currency || "XAF"}</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
                         {/* Montant réel et commission pour les transferts validés */}
                         {(selectedTransaction.status === "validated" || selectedTransaction.status === "executed" || selectedTransaction.status === "completed") && selectedTransaction.real_amount_eur && (
                           <div className="grid grid-cols-2 gap-4 bg-blue-50 p-3 rounded-lg border border-blue-200">

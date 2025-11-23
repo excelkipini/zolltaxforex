@@ -11,6 +11,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { QRCodeSVG } from "qrcode.react"
 import { useToast } from "@/hooks/use-toast"
+import { useExchangeRates } from "@/hooks/use-exchange-rates"
 import { Calculator, Send, CheckCircle, AlertCircle, Upload, FileText, X, Eye, Printer, ChevronsUpDown, Check } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { CashierPendingTransactionsByType } from "./cashier-pending-transactions-by-type"
@@ -50,7 +51,9 @@ export function TransferView() {
   const [qrCodeError, setQrCodeError] = React.useState(false)
   const [isPrinting, setIsPrinting] = React.useState(false)
   const [countryPopoverOpen, setCountryPopoverOpen] = React.useState(false)
+  const [feeMode, setFeeMode] = React.useState<"with_fees" | "without_fees">("with_fees")
   const { toast } = useToast()
+  const { rates } = useExchangeRates()
   
   // Récupérer l'utilisateur connecté
   const [user, setUser] = React.useState<SessionUser | null>(null)
@@ -62,14 +65,6 @@ export function TransferView() {
     }
   }, [])
 
-  // Taux de change simulés
-  const exchangeRates = {
-    XAF: { USD: 0.0017, EUR: 0.0015, GBP: 0.0013 },
-    USD: { XAF: 580, EUR: 0.85, GBP: 0.75 },
-    EUR: { XAF: 650, USD: 1.18, GBP: 0.88 },
-    GBP: { XAF: 750, USD: 1.33, EUR: 1.14 }
-  }
-
   // Moyens de transfert disponibles
   const transferMethods = [
     "MoneyGram",
@@ -78,14 +73,415 @@ export function TransferView() {
     "Autre"
   ]
 
-  // Calcul automatique du montant à envoyer
-  React.useEffect(() => {
-    if (transferData.amountReceived > 0 && transferData.receivedCurrency && transferData.sendCurrency) {
-      const rate = exchangeRates[transferData.receivedCurrency as keyof typeof exchangeRates]?.[transferData.sendCurrency as keyof typeof exchangeRates[typeof transferData.receivedCurrency]] || 1
-      const calculatedAmount = transferData.amountReceived * rate
-      setTransferData(prev => ({ ...prev, amountToSend: Math.round(calculatedAmount * 100) / 100 }))
+  // Mapping pays -> zone géographique pour les grilles tarifaires
+  const countryToZone: Record<string, string> = {
+    // Afrique Centrale
+    "Cameroun": "Afrique Centrale",
+    "Centrafrique": "Afrique Centrale",
+    "Tchad": "Afrique Centrale",
+    "Congo": "Afrique Centrale",
+    "Gabon": "Afrique Centrale",
+    "Guinée équatoriale": "Afrique Centrale",
+    "RDC": "Afrique Centrale",
+    // Afrique de l'Ouest
+    "Bénin": "Afrique de l'Ouest",
+    "Burkina Faso": "Afrique de l'Ouest",
+    "Côte d'Ivoire": "Afrique de l'Ouest",
+    "Gambie": "Afrique de l'Ouest",
+    "Ghana": "Afrique de l'Ouest",
+    "Guinée": "Afrique de l'Ouest",
+    "Guinée-Bissau": "Afrique de l'Ouest",
+    "Mali": "Afrique de l'Ouest",
+    "Niger": "Afrique de l'Ouest",
+    "Nigeria": "Afrique de l'Ouest",
+    "Sénégal": "Afrique de l'Ouest",
+    "Sierra Leone": "Afrique de l'Ouest",
+    "Togo": "Afrique de l'Ouest",
+    // Chine, Turquie, UAE et Liban
+    "Chine": "Chine, Turquie, UAE et Liban",
+    "Turquie": "Chine, Turquie, UAE et Liban",
+    "Émirats arabes unis": "Chine, Turquie, UAE et Liban",
+    "Liban": "Chine, Turquie, UAE et Liban",
+    // Reste de l'Afrique (tous les autres pays d'Afrique)
+    "Afrique du Sud": "Reste de l'Afrique",
+    "Algérie": "Reste de l'Afrique",
+    "Angola": "Reste de l'Afrique",
+    "Botswana": "Reste de l'Afrique",
+    "Burundi": "Reste de l'Afrique",
+    "Cap-Vert": "Reste de l'Afrique",
+    "Comores": "Reste de l'Afrique",
+    "Djibouti": "Reste de l'Afrique",
+    "Égypte": "Reste de l'Afrique",
+    "Érythrée": "Reste de l'Afrique",
+    "Eswatini": "Reste de l'Afrique",
+    "Éthiopie": "Reste de l'Afrique",
+    "Kenya": "Reste de l'Afrique",
+    "Lesotho": "Reste de l'Afrique",
+    "Liberia": "Reste de l'Afrique",
+    "Libye": "Reste de l'Afrique",
+    "Madagascar": "Reste de l'Afrique",
+    "Malawi": "Reste de l'Afrique",
+    "Maroc": "Reste de l'Afrique",
+    "Maurice": "Reste de l'Afrique",
+    "Mauritanie": "Reste de l'Afrique",
+    "Mozambique": "Reste de l'Afrique",
+    "Namibie": "Reste de l'Afrique",
+    "Ouganda": "Reste de l'Afrique",
+    "Rwanda": "Reste de l'Afrique",
+    "São Tomé-et-Príncipe": "Reste de l'Afrique",
+    "Seychelles": "Reste de l'Afrique",
+    "Somalie": "Reste de l'Afrique",
+    "Soudan": "Reste de l'Afrique",
+    "Soudan du Sud": "Reste de l'Afrique",
+    "Tanzanie": "Reste de l'Afrique",
+    "Tunisie": "Reste de l'Afrique",
+    "Zambie": "Reste de l'Afrique",
+    "Zimbabwe": "Reste de l'Afrique",
+    // Europe (tous les pays d'Europe sauf France)
+    "Albanie": "Europe",
+    "Allemagne": "Europe",
+    "Andorre": "Europe",
+    "Autriche": "Europe",
+    "Biélorussie": "Europe",
+    "Belgique": "Europe",
+    "Bosnie-Herzégovine": "Europe",
+    "Bulgarie": "Europe",
+    "Chypre": "Europe",
+    "Croatie": "Europe",
+    "Danemark": "Europe",
+    "Espagne": "Europe",
+    "Estonie": "Europe",
+    "Finlande": "Europe",
+    "Grèce": "Europe",
+    "Hongrie": "Europe",
+    "Irlande": "Europe",
+    "Islande": "Europe",
+    "Italie": "Europe",
+    "Lettonie": "Europe",
+    "Liechtenstein": "Europe",
+    "Lituanie": "Europe",
+    "Luxembourg": "Europe",
+    "Macédoine du Nord": "Europe",
+    "Malte": "Europe",
+    "Moldavie": "Europe",
+    "Monaco": "Europe",
+    "Monténégro": "Europe",
+    "Norvège": "Europe",
+    "Pays-Bas": "Europe",
+    "Pologne": "Europe",
+    "Portugal": "Europe",
+    "République tchèque": "Europe",
+    "Roumanie": "Europe",
+    "Royaume-Uni": "Europe",
+    "Russie": "Europe",
+    "Saint-Marin": "Europe",
+    "Serbie": "Europe",
+    "Slovaquie": "Europe",
+    "Slovénie": "Europe",
+    "Suède": "Europe",
+    "Suisse": "Europe",
+    "Ukraine": "Europe",
+    "Vatican": "Europe",
+    // France (Next Day)
+    "France": "France (Next Day)",
+    // Reste du monde (tous les autres pays)
+    "Canada": "Reste du monde",
+    "États-Unis": "Reste du monde",
+    "Mexique": "Reste du monde",
+    "Guatemala": "Reste du monde",
+    "Belize": "Reste du monde",
+    "El Salvador": "Reste du monde",
+    "Honduras": "Reste du monde",
+    "Nicaragua": "Reste du monde",
+    "Costa Rica": "Reste du monde",
+    "Panama": "Reste du monde",
+    "Cuba": "Reste du monde",
+    "Jamaïque": "Reste du monde",
+    "Haïti": "Reste du monde",
+    "République dominicaine": "Reste du monde",
+    "Trinité-et-Tobago": "Reste du monde",
+    "Barbade": "Reste du monde",
+    "Bahamas": "Reste du monde",
+    "Antigua-et-Barbuda": "Reste du monde",
+    "Dominique": "Reste du monde",
+    "Grenade": "Reste du monde",
+    "Saint-Kitts-et-Nevis": "Reste du monde",
+    "Sainte-Lucie": "Reste du monde",
+    "Saint-Vincent-et-les-Grenadines": "Reste du monde",
+    "Argentine": "Reste du monde",
+    "Bolivie": "Reste du monde",
+    "Brésil": "Reste du monde",
+    "Chili": "Reste du monde",
+    "Colombie": "Reste du monde",
+    "Équateur": "Reste du monde",
+    "Guyane": "Reste du monde",
+    "Guyane française": "Reste du monde",
+    "Paraguay": "Reste du monde",
+    "Pérou": "Reste du monde",
+    "Suriname": "Reste du monde",
+    "Uruguay": "Reste du monde",
+    "Venezuela": "Reste du monde",
+    "Afghanistan": "Reste du monde",
+    "Arabie saoudite": "Reste du monde",
+    "Arménie": "Reste du monde",
+    "Azerbaïdjan": "Reste du monde",
+    "Bahreïn": "Reste du monde",
+    "Bangladesh": "Reste du monde",
+    "Bhoutan": "Reste du monde",
+    "Birmanie": "Reste du monde",
+    "Brunei": "Reste du monde",
+    "Cambodge": "Reste du monde",
+    "Corée du Nord": "Reste du monde",
+    "Corée du Sud": "Reste du monde",
+    "Géorgie": "Reste du monde",
+    "Inde": "Reste du monde",
+    "Indonésie": "Reste du monde",
+    "Irak": "Reste du monde",
+    "Iran": "Reste du monde",
+    "Israël": "Reste du monde",
+    "Japon": "Reste du monde",
+    "Jordanie": "Reste du monde",
+    "Kazakhstan": "Reste du monde",
+    "Kirghizistan": "Reste du monde",
+    "Koweït": "Reste du monde",
+    "Laos": "Reste du monde",
+    "Malaisie": "Reste du monde",
+    "Maldives": "Reste du monde",
+    "Mongolie": "Reste du monde",
+    "Népal": "Reste du monde",
+    "Oman": "Reste du monde",
+    "Ouzbékistan": "Reste du monde",
+    "Pakistan": "Reste du monde",
+    "Palestine": "Reste du monde",
+    "Philippines": "Reste du monde",
+    "Qatar": "Reste du monde",
+    "Singapour": "Reste du monde",
+    "Sri Lanka": "Reste du monde",
+    "Syrie": "Reste du monde",
+    "Tadjikistan": "Reste du monde",
+    "Taïwan": "Reste du monde",
+    "Thaïlande": "Reste du monde",
+    "Timor oriental": "Reste du monde",
+    "Turkménistan": "Reste du monde",
+    "Viêt Nam": "Reste du monde",
+    "Yémen": "Reste du monde",
+    "Australie": "Reste du monde",
+    "Fidji": "Reste du monde",
+    "Kiribati": "Reste du monde",
+    "Marshall": "Reste du monde",
+    "Micronésie": "Reste du monde",
+    "Nauru": "Reste du monde",
+    "Nouvelle-Zélande": "Reste du monde",
+    "Palaos": "Reste du monde",
+    "Papouasie-Nouvelle-Guinée": "Reste du monde",
+    "Samoa": "Reste du monde",
+    "Salomon": "Reste du monde",
+    "Tonga": "Reste du monde",
+    "Tuvalu": "Reste du monde",
+    "Vanuatu": "Reste du monde"
+  }
+
+  // Grilles tarifaires par zone
+  type TariffRule = {
+    min: number
+    max: number
+    feeType: "percentage" | "fixed"
+    feeValue: number // pourcentage ou montant fixe
+    coverageRate: number // taux de couverture (0,50% pour tous)
+  }
+
+  const tariffGrids: Record<string, TariffRule[]> = {
+    "Afrique Centrale": [
+      { min: 0, max: 500000, feeType: "percentage", feeValue: 6, coverageRate: 0.5 },
+      { min: 500001, max: 1000000, feeType: "fixed", feeValue: 45000, coverageRate: 0.5 }
+    ],
+    "Afrique de l'Ouest": [
+      { min: 0, max: 500000, feeType: "percentage", feeValue: 6, coverageRate: 0.5 },
+      { min: 500001, max: 1000000, feeType: "fixed", feeValue: 45000, coverageRate: 0.5 }
+    ],
+    "Chine, Turquie, UAE et Liban": [
+      { min: 0, max: 500000, feeType: "percentage", feeValue: 5, coverageRate: 0.5 },
+      { min: 500001, max: 1000000, feeType: "fixed", feeValue: 32500, coverageRate: 0.5 }
+    ],
+    "Reste de l'Afrique": [
+      { min: 0, max: 500000, feeType: "percentage", feeValue: 4, coverageRate: 0.5 },
+      { min: 500001, max: 1000000, feeType: "fixed", feeValue: 35000, coverageRate: 0.5 }
+    ],
+    "Europe": [
+      { min: 0, max: 500000, feeType: "percentage", feeValue: 6, coverageRate: 0.5 },
+      { min: 500001, max: 1000000, feeType: "fixed", feeValue: 50000, coverageRate: 0.5 }
+    ],
+    "France (Next Day)": [
+      { min: 0, max: 500000, feeType: "fixed", feeValue: 17000, coverageRate: 0.5 },
+      { min: 500001, max: 1000000, feeType: "fixed", feeValue: 24000, coverageRate: 0.5 }
+    ],
+    "Reste du monde": [
+      { min: 0, max: 500000, feeType: "percentage", feeValue: 5, coverageRate: 0.5 },
+      { min: 500001, max: 1000000, feeType: "fixed", feeValue: 35000, coverageRate: 0.5 }
+    ]
+  }
+
+
+  // Type pour les détails de calcul
+  type CalculationDetails = {
+    fees: number
+    vatAmount: number
+    coverageAmount: number
+    tstfAmount: number
+    tax: number
+    amountToCollect: number
+    amountToSendXAF: number
+  }
+
+  // Fonction de calcul avec une règle spécifique - retourne les détails
+  const calculateWithRule = (amountReceived: number, rule: TariffRule, zone: string): CalculationDetails => {
+    // 1. Frais (Commission de Base)
+    let fees: number
+    if (rule.feeType === "percentage") {
+      fees = amountReceived * (rule.feeValue / 100)
+    } else {
+      fees = rule.feeValue
     }
-  }, [transferData.amountReceived, transferData.receivedCurrency, transferData.sendCurrency])
+
+    // 2. Montant de la TVA (18,9% sur les frais)
+    const vatAmount = fees * 0.189
+
+    // 3. Montant RECUP. FRAIS DE COUV. (Taux de Couverture sur montant reçu)
+    const coverageAmount = amountReceived * (rule.coverageRate / 100)
+
+    // 4. Montant TSTF (Taxe Spéciale)
+    let tstfAmount: number
+    if (zone === "Afrique Centrale") {
+      tstfAmount = amountReceived * 0.01 // 1,0%
+    } else {
+      tstfAmount = amountReceived * 0.015 // 1,5%
+    }
+
+    // 5. Taxe (Total des Surcharges)
+    const tax = vatAmount + coverageAmount + tstfAmount
+
+    return {
+      fees: Math.round(fees * 100) / 100,
+      vatAmount: Math.round(vatAmount * 100) / 100,
+      coverageAmount: Math.round(coverageAmount * 100) / 100,
+      tstfAmount: Math.round(tstfAmount * 100) / 100,
+      tax: Math.round(tax * 100) / 100,
+      amountToCollect: 0, // Sera calculé selon le mode
+      amountToSendXAF: 0 // Sera calculé selon le mode
+    }
+  }
+
+  // Fonction de calcul complète avec détails
+  const calculateTransferDetails = (amountReceived: number, destinationCountry: string, mode: "with_fees" | "without_fees"): CalculationDetails | null => {
+    if (amountReceived <= 0 || !destinationCountry) {
+      return null
+    }
+
+    // 1. Déterminer la zone
+    const zone = countryToZone[destinationCountry] || "Reste du monde"
+    const grid = tariffGrids[zone] || tariffGrids["Reste du monde"]
+
+    // 2. Trouver la règle tarifaire applicable
+    const applicableRule = grid.find(rule => amountReceived >= rule.min && amountReceived <= rule.max)
+    if (!applicableRule) {
+      // Si le montant dépasse 1 000 000, utiliser la dernière règle
+      const lastRule = grid[grid.length - 1]
+      const details = calculateWithRule(amountReceived, lastRule, zone)
+      return calculateFinalAmounts(details, amountReceived, mode)
+    }
+
+    const details = calculateWithRule(amountReceived, applicableRule, zone)
+    return calculateFinalAmounts(details, amountReceived, mode)
+  }
+
+  // Calcul des montants finaux selon le mode
+  const calculateFinalAmounts = (details: CalculationDetails, amountReceived: number, mode: "with_fees" | "without_fees"): CalculationDetails => {
+    if (mode === "with_fees") {
+      // Avec frais : Montant à collecter = Montant reçu + Frais + Taxe
+      // Montant à envoyer = Montant reçu
+      details.amountToCollect = Math.round((amountReceived + details.fees + details.tax) * 100) / 100
+      details.amountToSendXAF = amountReceived
+    } else {
+      // Sans frais : Montant à collecter = Montant reçu
+      // Montant à envoyer = Montant reçu - (Frais + Taxe)
+      details.amountToCollect = amountReceived
+      details.amountToSendXAF = Math.max(0, Math.round((amountReceived - details.fees - details.tax) * 100) / 100)
+    }
+    return details
+  }
+
+  // Conversion de devise : Devise source vers XAF
+  const convertToXAF = (amount: number, currency: string): number => {
+    if (currency === "XAF") {
+      return amount
+    }
+
+    // Taux de conversion vers XAF
+    const conversionRates: Record<string, number> = {
+      USD: rates.USD,
+      EUR: rates.EUR,
+      GBP: rates.GBP,
+      // Pour les autres devises, on utilise des taux approximatifs basés sur USD
+      CAD: rates.USD * 1.35,
+      CHF: rates.USD * 0.92,
+      JPY: rates.USD * 0.0067,
+      CNY: rates.USD * 0.14,
+      AUD: rates.USD * 0.65,
+      NZD: rates.USD * 0.60,
+      // Ajoutez d'autres devises si nécessaire
+    }
+
+    const rate = conversionRates[currency] || rates.USD // Par défaut, utiliser USD
+    return Math.round((amount * rate) * 100) / 100
+  }
+
+  // Conversion de devise : XAF vers devise de destination
+  const convertFromXAF = (amountXAF: number, destinationCurrency: string): number => {
+    // Si la devise est XAF, pas de conversion
+    if (destinationCurrency === "XAF") {
+      return amountXAF
+    }
+
+    // Taux de conversion de base (XAF vers autres devises)
+    // On utilise les taux inverses : si 1 USD = 580 XAF, alors 1 XAF = 1/580 USD
+    const conversionRates: Record<string, number> = {
+      USD: 1 / rates.USD,
+      EUR: 1 / rates.EUR,
+      GBP: 1 / rates.GBP,
+      // Pour les autres devises, on utilise des taux approximatifs basés sur USD
+      CAD: 1 / (rates.USD * 1.35),
+      CHF: 1 / (rates.USD * 0.92),
+      JPY: 1 / (rates.USD * 0.0067),
+      CNY: 1 / (rates.USD * 0.14),
+      AUD: 1 / (rates.USD * 0.65),
+      NZD: 1 / (rates.USD * 0.60),
+      // Ajoutez d'autres devises si nécessaire
+    }
+
+    const rate = conversionRates[destinationCurrency] || (1 / rates.USD) // Par défaut, utiliser USD
+    return Math.round((amountXAF * rate) * 100) / 100
+  }
+
+  // État pour stocker les détails de calcul
+  const [calculationDetails, setCalculationDetails] = React.useState<CalculationDetails | null>(null)
+
+  // Calcul automatique selon le mode
+  React.useEffect(() => {
+    if (transferData.amountReceived > 0 && transferData.destinationCountry) {
+      // Convertir le montant reçu en XAF pour les calculs (les grilles tarifaires sont en XAF)
+      const amountReceivedXAF = convertToXAF(transferData.amountReceived, transferData.receivedCurrency)
+      const details = calculateTransferDetails(amountReceivedXAF, transferData.destinationCountry, feeMode)
+      if (details) {
+        setCalculationDetails(details)
+        // Convertir le montant à envoyer dans la devise de destination
+        const convertedAmount = convertFromXAF(details.amountToSendXAF, transferData.sendCurrency)
+        setTransferData(prev => ({ ...prev, amountToSend: convertedAmount }))
+      }
+    } else {
+      setCalculationDetails(null)
+      setTransferData(prev => ({ ...prev, amountToSend: 0 }))
+    }
+  }, [transferData.amountReceived, transferData.receivedCurrency, transferData.destinationCountry, feeMode, transferData.sendCurrency, rates])
 
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {}
@@ -132,15 +528,21 @@ export function TransferView() {
       return
     }
 
+    // Vérifier que les détails de calcul sont disponibles
+    if (!calculationDetails) {
+      toast({
+        title: "Erreur de calcul",
+        description: "Les détails de calcul ne sont pas disponibles. Veuillez vérifier le montant reçu et le pays de destination.",
+        variant: "destructive"
+      })
+      return
+    }
+
     setIsSubmitting(true)
     
     try {
-      // Simulation d'envoi
-      await new Promise(resolve => setTimeout(resolve, 2000))
-      
       // Génération d'un ID de transfert
       const newTransferId = `TRF-${Date.now().toString().slice(-8)}`
-      setTransferId(newTransferId)
       
       // Convertir le fichier IBAN en base64 pour le stockage
       let ibanFileData = null
@@ -155,61 +557,67 @@ export function TransferView() {
             data: base64
           }
         } catch (error) {
+          console.error('Erreur lors de la conversion du fichier IBAN:', error)
         }
       }
 
-       // Sauvegarder dans la base de données via l'API
-       try {
-         const response = await fetch('/api/transactions', {
-           method: 'POST',
-           headers: {
-             'Content-Type': 'application/json',
-           },
-           body: JSON.stringify({
-             type: "transfer",
-             description: `Transfert d'argent vers ${transferData.destinationCountry}`,
-             amount: transferData.amountReceived,
-             currency: transferData.receivedCurrency,
-             details: {
-               beneficiary_name: transferData.beneficiaryName,
-               destination_country: transferData.destinationCountry,
-               destination_city: transferData.destinationCity,
-               transfer_method: transferData.transferMethod,
-               amount_received: transferData.amountReceived,
-               received_currency: transferData.receivedCurrency,
-               amount_sent: transferData.amountToSend,
-               sent_currency: transferData.sendCurrency,
-               withdrawal_mode: transferData.withdrawalMode,
-               iban_file: transferData.ibanFile?.name || null,
-               iban_file_data: ibanFileData
-             }
-           })
-         })
-
-         if (!response.ok) {
-           const errorData = await response.json()
-           throw new Error(errorData.error || 'Erreur lors de la sauvegarde')
-         }
-
-         const result = await response.json()
-         const newTransaction = result.data
-         
-         // Déclencher un événement personnalisé pour notifier les autres composants
-         window.dispatchEvent(new CustomEvent('transferCreated', { detail: newTransaction }))
-         
-       } catch (error) {
-         toast({
-           title: "Erreur",
-           description: `Erreur lors de la sauvegarde: ${error.message}`,
-           variant: "destructive"
-         })
-         return
-       }
-      
-        toast({
-          title: "Transfert soumis avec succès",
-          description: `Le transfert ${newTransferId} a été soumis et est en attente de validation par l'auditeur`,
+      // Sauvegarder dans la base de données via l'API
+      const response = await fetch('/api/transactions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          type: "transfer",
+          description: `Transfert d'argent vers ${transferData.destinationCountry}`,
+          amount: calculationDetails.amountToCollect,
+          currency: transferData.receivedCurrency,
+          details: {
+            beneficiary_name: transferData.beneficiaryName,
+            destination_country: transferData.destinationCountry,
+            destination_city: transferData.destinationCity,
+            transfer_method: transferData.transferMethod,
+            amount_received: transferData.amountReceived,
+            received_currency: transferData.receivedCurrency,
+            amount_sent: transferData.amountToSend,
+            sent_currency: transferData.sendCurrency,
+            withdrawal_mode: transferData.withdrawalMode,
+            iban_file: transferData.ibanFile?.name || null,
+            iban_file_data: ibanFileData,
+            // Nouvelles informations de calcul
+            fee_mode: feeMode,
+            fees: calculationDetails.fees,
+            vat_amount: calculationDetails.vatAmount,
+            coverage_amount: calculationDetails.coverageAmount,
+            tstf_amount: calculationDetails.tstfAmount,
+            tax: calculationDetails.tax,
+            amount_to_collect: calculationDetails.amountToCollect,
+            amount_to_send_xaf: calculationDetails.amountToSendXAF
+          }
         })
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Erreur inconnue' }))
+        throw new Error(errorData.error || 'Erreur lors de la sauvegarde')
+      }
+
+      const result = await response.json()
+      
+      if (!result.ok) {
+        throw new Error(result.error || 'Erreur lors de la sauvegarde')
+      }
+
+      const newTransaction = result.data
+      setTransferId(newTransferId)
+      
+      // Déclencher un événement personnalisé pour notifier les autres composants
+      window.dispatchEvent(new CustomEvent('transferCreated', { detail: newTransaction }))
+      
+      toast({
+        title: "Transfert soumis avec succès",
+        description: `Le transfert ${newTransferId} a été soumis et est en attente de validation par l'auditeur`,
+      })
 
       // Réinitialisation du formulaire
       setTransferData({
@@ -225,10 +633,14 @@ export function TransferView() {
         ibanFile: undefined
       })
       
-    } catch (error) {
+      // Réinitialiser les détails de calcul
+      setCalculationDetails(null)
+      
+    } catch (error: any) {
+      console.error('Erreur lors de la soumission du transfert:', error)
       toast({
         title: "Erreur",
-        description: "Une erreur est survenue lors de l'envoi du transfert",
+        description: error.message || "Une erreur est survenue lors de l'envoi du transfert",
         variant: "destructive"
       })
     } finally {
@@ -694,21 +1106,19 @@ export function TransferView() {
                 <span>Moyen de transfert:</span>
                 <span>${transferData.transferMethod || "-"}</span>
               </div>
+              ${calculationDetails ? `
               <div class="row">
-                <span>Montant reçu:</span>
-                <span>${transferData.amountReceived.toLocaleString("fr-FR")} ${transferData.receivedCurrency}</span>
+                <span>Montant à collecter:</span>
+                <span>${calculationDetails.amountToCollect.toLocaleString("fr-FR")} ${transferData.receivedCurrency}</span>
               </div>
-              <div class="row">
-                <span>Montant envoyé:</span>
-                <span>${transferData.amountToSend.toLocaleString("fr-FR")} ${transferData.sendCurrency}</span>
-              </div>
+              ` : ''}
               <div class="row">
                 <span>Mode de retrait:</span>
                 <span>${transferData.withdrawalMode === "cash" ? "Espèces" : "Virement bancaire"}</span>
               </div>
               <div class="row total">
-                <span>Montant total:</span>
-                <span>${transferData.amountReceived.toLocaleString("fr-FR")} ${transferData.receivedCurrency}</span>
+                <span>Montant envoyé:</span>
+                <span>${transferData.amountToSend.toLocaleString("fr-FR")} ${transferData.sendCurrency}</span>
               </div>
             </div>
             
@@ -910,6 +1320,26 @@ export function TransferView() {
             <div className="space-y-4">
               <h3 className="text-lg font-medium text-gray-700">Montants</h3>
               
+              {/* Boutons Avec frais / Sans frais */}
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant={feeMode === "with_fees" ? "default" : "outline"}
+                  onClick={() => setFeeMode("with_fees")}
+                  className="flex-1"
+                >
+                  Avec frais
+                </Button>
+                <Button
+                  type="button"
+                  variant={feeMode === "without_fees" ? "default" : "outline"}
+                  onClick={() => setFeeMode("without_fees")}
+                  className="flex-1"
+                >
+                  Sans frais
+                </Button>
+              </div>
+              
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="amountReceived">Montant reçu *</Label>
@@ -948,9 +1378,12 @@ export function TransferView() {
                       id="amountToSend"
                       type="number"
                       value={transferData.amountToSend || ""}
-                      onChange={(e) => setTransferData(prev => ({ ...prev, amountToSend: Number(e.target.value) || 0 }))}
+                      readOnly
                       placeholder="0"
-                      className={errors.amountToSend ? "border-red-500" : ""}
+                      className={cn(
+                        "bg-gray-50 cursor-not-allowed",
+                        errors.amountToSend ? "border-red-500" : ""
+                      )}
                     />
                     <Select
                       value={transferData.sendCurrency}
@@ -971,6 +1404,44 @@ export function TransferView() {
                   )}
                 </div>
               </div>
+
+              {/* Section d'affichage des détails */}
+              {calculationDetails && transferData.amountReceived > 0 && transferData.destinationCountry && (
+                <div className="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                  <h4 className="text-sm font-semibold text-gray-700 mb-3">Détails du calcul</h4>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Frais (Commission de Base):</span>
+                      <span className="font-medium">{calculationDetails.fees.toLocaleString("fr-FR")} XAF</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">TVA (18,9%):</span>
+                      <span className="font-medium">{calculationDetails.vatAmount.toLocaleString("fr-FR")} XAF</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Frais de couverture (0,50%):</span>
+                      <span className="font-medium">{calculationDetails.coverageAmount.toLocaleString("fr-FR")} XAF</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">TSTF:</span>
+                      <span className="font-medium">{calculationDetails.tstfAmount.toLocaleString("fr-FR")} XAF</span>
+                    </div>
+                    <div className="flex justify-between pt-2 border-t border-gray-300">
+                      <span className="text-gray-700 font-semibold">Taxe (Total):</span>
+                      <span className="font-semibold">{calculationDetails.tax.toLocaleString("fr-FR")} XAF</span>
+                    </div>
+                    <div className="flex justify-between pt-2 border-t-2 border-gray-400">
+                      <span className="text-gray-900 font-bold">Montant à collecter:</span>
+                      <span className="font-bold text-lg">
+                        {transferData.receivedCurrency !== "XAF" 
+                          ? `${convertFromXAF(calculationDetails.amountToCollect, transferData.receivedCurrency).toLocaleString("fr-FR")} ${transferData.receivedCurrency}`
+                          : `${calculationDetails.amountToCollect.toLocaleString("fr-FR")} XAF`
+                        }
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Mode de retrait */}
@@ -1105,12 +1576,14 @@ export function TransferView() {
                   <span className="text-gray-600">Moyen de transfert:</span>
                   <span>{transferData.transferMethod || "-"}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Montant reçu:</span>
-                  <span>{transferData.amountReceived > 0 
-                    ? `${transferData.amountReceived.toLocaleString("fr-FR")} ${transferData.receivedCurrency}`
-                    : "-"}</span>
-                </div>
+                {calculationDetails && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Montant à collecter:</span>
+                    <span className="font-semibold">
+                      {calculationDetails.amountToCollect.toLocaleString("fr-FR")} {transferData.receivedCurrency}
+                    </span>
+                  </div>
+                )}
                 <div className="flex justify-between">
                   <span className="text-gray-600">Montant envoyé:</span>
                   <span>{transferData.amountToSend > 0 

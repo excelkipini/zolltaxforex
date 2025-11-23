@@ -1,0 +1,44 @@
+-- Documentation de la structure des données de calcul pour les transferts d'argent
+-- La table transactions utilise déjà JSONB pour le champ 'details', donc pas besoin de migration
+-- Ce script documente la nouvelle structure des données de transfert
+
+-- Structure JSONB attendue dans details pour les transferts (type = 'transfer'):
+-- {
+--   "beneficiary_name": string,
+--   "destination_country": string,
+--   "destination_city": string,
+--   "transfer_method": string,
+--   "amount_received": number,
+--   "received_currency": string,
+--   "amount_sent": number,
+--   "sent_currency": string,
+--   "withdrawal_mode": "cash" | "bank_transfer",
+--   "iban_file": string | null,
+--   "iban_file_data": object | null,
+--   "fee_mode": "with_fees" | "without_fees",  -- NOUVEAU
+--   "fees": number,                            -- NOUVEAU: Frais (Commission de Base) en XAF
+--   "vat_amount": number,                      -- NOUVEAU: Montant de la TVA (18,9% sur les frais) en XAF
+--   "coverage_amount": number,                 -- NOUVEAU: RECUP. FRAIS DE COUV. (0,50% sur montant reçu) en XAF
+--   "tstf_amount": number,                     -- NOUVEAU: TSTF (1,0% ou 1,5% selon zone) en XAF
+--   "tax": number,                            -- NOUVEAU: Taxe totale (TVA + Couverture + TSTF) en XAF
+--   "amount_to_collect": number,              -- NOUVEAU: Montant à collecter auprès du client
+--   "amount_to_send_xaf": number              -- NOUVEAU: Montant à envoyer en XAF (avant conversion devise)
+-- }
+
+-- Note: Le champ 'amount' de la table transactions contient maintenant 'amount_to_collect'
+-- au lieu de 'amount_received' pour les nouveaux transferts
+
+-- Exemple de requête pour récupérer les détails de calcul d'un transfert:
+-- SELECT 
+--   id,
+--   type,
+--   amount,
+--   currency,
+--   details->>'fee_mode' as fee_mode,
+--   (details->>'fees')::numeric as fees,
+--   (details->>'tax')::numeric as tax,
+--   (details->>'amount_to_collect')::numeric as amount_to_collect,
+--   (details->>'amount_to_send_xaf')::numeric as amount_to_send_xaf
+-- FROM transactions
+-- WHERE type = 'transfer' AND details->>'fee_mode' IS NOT NULL;
+
