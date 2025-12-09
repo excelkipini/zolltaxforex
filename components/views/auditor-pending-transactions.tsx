@@ -136,8 +136,8 @@ export function AuditorPendingTransactions({ user }: AuditorPendingTransactionsP
       setTransactions(prev => prev.filter(t => t.id !== transactionToValidate))
       
       toast({
-        title: result.message.includes('validée') ? "Transaction validée" : "Transaction rejetée",
-        description: result.message,
+        title: "Transaction validée",
+        description: result.message || "La transaction a été validée avec succès",
       })
       
       // Déclencher un événement personnalisé pour notifier les autres composants
@@ -765,7 +765,7 @@ export function AuditorPendingTransactions({ user }: AuditorPendingTransactionsP
                   className="mt-1"
                 />
                 <p className="text-xs text-gray-500 mt-1">
-                  Le système calculera automatiquement la commission et validera/rejettera selon le seuil de 10000 XAF
+                  Le système calculera automatiquement la commission et validera la transaction
                 </p>
               </div>
             </div>

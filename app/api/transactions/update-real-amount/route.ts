@@ -30,9 +30,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       transaction: updatedTransaction,
-      message: updatedTransaction.status === 'validated' 
-        ? 'Transaction validée automatiquement - Commission suffisante'
-        : 'Transaction rejetée automatiquement - Commission insuffisante'
+      message: 'Transaction validée automatiquement'
     })
 
   } catch (error: any) {

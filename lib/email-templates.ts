@@ -629,8 +629,7 @@ export function generateTransferCreatedEmail(data: TransferEmailData): { subject
         <li>Connectez-vous au système ZOLL TAX FOREX</li>
         <li>Accédez à la section "Opérations"</li>
         <li>Saisissez le montant réel envoyé en EUR</li>
-        <li>Le système calculera automatiquement la commission</li>
-        <li>Validez ou rejetez selon le seuil de 10000 XAF</li>
+        <li>Le système calculera automatiquement la commission et validera la transaction</li>
     </ul>
   `
   
@@ -668,7 +667,7 @@ export function generateTransferValidatedEmail(data: TransferEmailData): { subje
   }
 }
 
-// 2bis. Template pour transfert rejeté (commission insuffisante ou autre raison)
+// 2bis. Template pour transfert rejeté (rejet manuel par l'auditeur)
 export function generateTransferRejectedEmail(data: TransferEmailData): { subject: string; html: string } {
   const subject = `[ZOLL TAX FOREX] Transfert rejeté - ${data.transactionId}`
 
@@ -682,7 +681,7 @@ export function generateTransferRejectedEmail(data: TransferEmailData): { subjec
     
     ${TRANSFER_DETAILS_TEMPLATE(data)}
     
-    <p><strong>Information:</strong> Ce rejet peut provenir d'une commission insuffisante ou d'une validation négative.</p>
+    <p><strong>Information:</strong> Ce rejet a été effectué manuellement par l'auditeur.</p>
   `
 
   return {

@@ -402,26 +402,18 @@ export async function updateTransactionRealAmount(
     eurToXAFRate
   )
 
-  // Déterminer le nouveau statut basé sur la commission
-  let newStatus: Transaction["status"]
+  // Validation automatique peu importe le montant de la commission
+  const newStatus: Transaction["status"] = "validated"
+  
+  // Assigner un exécuteur disponible
   let executorId: string | null = null
-
-  if (commissionAmount >= 10000) {
-    // Commission >= 10000 XAF : validation automatique et assignation à un exécuteur
-    newStatus = "validated"
-    
-    // Assigner un exécuteur disponible
-    const executorRows = await sql`
-      SELECT id::text FROM users 
-      WHERE role = 'executor' 
-      ORDER BY created_at ASC 
-      LIMIT 1
-    `
-    executorId = executorRows[0]?.id || null
-  } else {
-    // Commission < 10000 XAF : rejet automatique
-    newStatus = "rejected"
-  }
+  const executorRows = await sql`
+    SELECT id::text FROM users 
+    WHERE role = 'executor' 
+    ORDER BY created_at ASC 
+    LIMIT 1
+  `
+  executorId = executorRows[0]?.id || null
 
   // Mettre à jour la transaction
   const updatedRows = await sql`
