@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
+import { requireAuth } from "@/lib/auth"
+import { hasPermission } from "@/lib/rbac"
 import { executeTransaction } from "@/lib/transactions-queries"
 import { sql } from "@/lib/db"
 import path from "path"
@@ -30,22 +32,36 @@ async function saveUploadedFile(file: File): Promise<string> {
   return `/api/files/${result[0].id}`
 }
 
-// API route pour exécuter une transaction (par l'exécuteur)
+// API route pour exécuter une transaction (par l'exécuteur ou l'auditeur)
 export async function POST(request: NextRequest) {
   try {
+    // Vérifier l'authentification
+    const { user } = await requireAuth()
+    
+    // Vérifier les permissions
+    if (!hasPermission(user, "execute_transactions")) {
+      return NextResponse.json(
+        { error: "Vous n'avez pas la permission d'exécuter des transactions" },
+        { status: 403 }
+      )
+    }
+
     const formData = await request.formData()
     
     const transactionId = formData.get('transactionId') as string
-    const executorId = formData.get('executorId') as string
     const executorComment = formData.get('executorComment') as string
     const receiptFile = formData.get('receiptFile') as File
 
-    if (!transactionId || !executorId || !receiptFile) {
+    if (!transactionId || !receiptFile) {
       return NextResponse.json(
-        { error: "transactionId, executorId et fichier de reçu sont requis" },
+        { error: "transactionId et fichier de reçu sont requis" },
         { status: 400 }
       )
     }
+
+    // Utiliser l'ID de l'utilisateur authentifié (sécurité)
+    const executorId = user.id
+    const isAuditor = user.role === 'auditor'
 
     // Vérifier la taille du fichier
     if (receiptFile.size > 10 * 1024 * 1024) {
@@ -74,24 +90,6 @@ export async function POST(request: NextRequest) {
 
     // Sauvegarder le fichier uploadé
     const receiptUrl = await saveUploadedFile(receiptFile)
-
-    // Vérifier si l'utilisateur est un auditeur (via le nom ou l'ID)
-    // Pour les auditeurs, on utilise le nom comme identifiant
-    // On vérifie si l'utilisateur existe et a le rôle auditor
-    let isAuditor = false
-    try {
-      const userRows = await sql`
-        SELECT role FROM users 
-        WHERE name = ${executorId} OR id::text = ${executorId}
-        LIMIT 1
-      `
-      if (userRows.length > 0 && userRows[0].role === 'auditor') {
-        isAuditor = true
-      }
-    } catch (error) {
-      // Si on ne peut pas vérifier, on assume que ce n'est pas un auditeur
-      console.error('Erreur lors de la vérification du rôle:', error)
-    }
 
     const executedTransaction = await executeTransaction(
       transactionId,

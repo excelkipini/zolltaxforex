@@ -209,9 +209,9 @@ export function AuditorPendingTransactions({ user }: AuditorPendingTransactionsP
       setExecutingTransaction(transactionToExecute)
       
       // Créer un FormData pour l'upload du fichier
+      // Note: executorId n'est plus nécessaire car l'API utilise l'utilisateur authentifié
       const formData = new FormData()
       formData.append('transactionId', transactionToExecute)
-      formData.append('executorId', user.name) // Utiliser le nom de l'auditeur comme identifiant
       formData.append('receiptFile', receiptFile)
       if (executorComment.trim()) {
         formData.append('executorComment', executorComment.trim())

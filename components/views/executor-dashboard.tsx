@@ -62,7 +62,14 @@ export default function ExecutorDashboard({ user }: ExecutorDashboardProps) {
     try {
       const response = await fetch(`/api/transactions/update-real-amount?executorId=${user.id}`)
       const data = await response.json()
-      setTransactions(data.transactions || [])
+      // S'assurer que les montants sont des nombres (évite la concaténation de chaînes)
+      // Utiliser Number() au lieu de parseInt() pour préserver les valeurs décimales
+      const transactions = (data.transactions || []).map((t: any) => ({
+        ...t,
+        amount: typeof t.amount === 'string' ? Number(t.amount) : Number(t.amount || 0),
+        commission_amount: t.commission_amount != null ? (typeof t.commission_amount === 'string' ? Number(t.commission_amount) : Number(t.commission_amount)) : undefined
+      }))
+      setTransactions(transactions)
     } catch (error) {
       console.error('Erreur lors du chargement des transactions:', error)
     } finally {
@@ -84,9 +91,9 @@ export default function ExecutorDashboard({ user }: ExecutorDashboardProps) {
       setExecutingTransaction(transactionId)
       
       // Créer un FormData pour l'upload du fichier
+      // Note: executorId n'est plus nécessaire car l'API utilise l'utilisateur authentifié
       const formData = new FormData()
       formData.append('transactionId', transactionId)
-      formData.append('executorId', user.id)
       formData.append('receiptFile', receiptFile)
       if (executorComment.trim()) {
         formData.append('executorComment', executorComment.trim())
@@ -168,7 +175,7 @@ export default function ExecutorDashboard({ user }: ExecutorDashboardProps) {
     executed: transactions.filter(t => t.status === 'executed').length,
     totalAmount: transactions
       .filter(t => t.status === 'executed')
-      .reduce((sum, t) => sum + t.amount, 0)
+      .reduce((sum, t) => sum + Number(t.amount || 0), 0)
   }
 
   if (loading) {
