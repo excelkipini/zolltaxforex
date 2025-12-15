@@ -503,48 +503,86 @@ export async function updateTransactionRealAmount(
 }
 
 /**
- * Exécute une transaction (assignée à un exécuteur)
+ * Exécute une transaction (par un exécuteur ou un auditeur)
  */
 export async function executeTransaction(
   transactionId: string,
   executorId: string,
   receiptUrl: string,
-  executorComment?: string
+  executorComment?: string,
+  isAuditor: boolean = false
 ): Promise<Transaction> {
-  const updatedRows = await sql`
-    UPDATE transactions 
-    SET 
-      status = 'executed',
-      executed_at = NOW(),
-      receipt_url = ${receiptUrl},
-      executor_comment = ${executorComment || null},
-      updated_at = NOW()
-    WHERE id = ${transactionId} AND executor_id = ${executorId}
-    RETURNING 
-      id::text,
-      type,
-      status,
-      description,
-      amount::bigint as amount,
-      currency,
-      created_by,
-      agency,
-      details,
-      rejection_reason,
-      delete_validated_by,
-      delete_validated_at,
-      real_amount_eur,
-      commission_amount,
-      executor_id,
-      executed_at,
-      receipt_url,
-      executor_comment,
-      created_at::text as created_at,
-      updated_at::text as updated_at
-  `
+  // Si c'est un auditeur, on ne vérifie pas executor_id
+  const updatedRows = isAuditor
+    ? await sql`
+        UPDATE transactions 
+        SET 
+          status = 'executed',
+          executed_at = NOW(),
+          receipt_url = ${receiptUrl},
+          executor_comment = ${executorComment || null},
+          updated_at = NOW()
+        WHERE id = ${transactionId} AND status = 'validated'
+        RETURNING 
+          id::text,
+          type,
+          status,
+          description,
+          amount::bigint as amount,
+          currency,
+          created_by,
+          agency,
+          details,
+          rejection_reason,
+          delete_validated_by,
+          delete_validated_at,
+          real_amount_eur,
+          commission_amount,
+          executor_id,
+          executed_at,
+          receipt_url,
+          executor_comment,
+          created_at::text as created_at,
+          updated_at::text as updated_at
+      `
+    : await sql`
+        UPDATE transactions 
+        SET 
+          status = 'executed',
+          executed_at = NOW(),
+          receipt_url = ${receiptUrl},
+          executor_comment = ${executorComment || null},
+          updated_at = NOW()
+        WHERE id = ${transactionId} AND executor_id = ${executorId}
+        RETURNING 
+          id::text,
+          type,
+          status,
+          description,
+          amount::bigint as amount,
+          currency,
+          created_by,
+          agency,
+          details,
+          rejection_reason,
+          delete_validated_by,
+          delete_validated_at,
+          real_amount_eur,
+          commission_amount,
+          executor_id,
+          executed_at,
+          receipt_url,
+          executor_comment,
+          created_at::text as created_at,
+          updated_at::text as updated_at
+      `
 
   if (updatedRows.length === 0) {
-    throw new Error('Transaction non trouvée ou non assignée à cet exécuteur')
+    throw new Error(
+      isAuditor 
+        ? 'Transaction non trouvée ou non validée' 
+        : 'Transaction non trouvée ou non assignée à cet exécuteur'
+    )
   }
 
   const executedTransaction = updatedRows[0]

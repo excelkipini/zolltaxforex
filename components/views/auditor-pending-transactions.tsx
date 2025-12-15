@@ -8,8 +8,9 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Input } from "@/components/ui/input"
-import { CheckCircle, Eye, X, AlertTriangle, Info } from "lucide-react"
+import { CheckCircle, Eye, X, AlertTriangle, Info, Upload, Play, FileUp } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 type Transaction = {
   id: string
@@ -17,12 +18,18 @@ type Transaction = {
   description: string
   amount: number
   currency: string
-  status: "completed" | "pending" | "validated" | "rejected" | "cancelled"
+  status: "completed" | "pending" | "validated" | "rejected" | "cancelled" | "executed"
   created_by: string
   agency: string
   created_at: string
   details?: any
   rejection_reason?: string
+  real_amount_eur?: number
+  commission_amount?: number
+  executor_id?: string
+  executed_at?: string
+  receipt_url?: string
+  executor_comment?: string
 }
 
 // Transactions mock pour les tests - SUPPRIMÉES
@@ -33,6 +40,7 @@ interface AuditorPendingTransactionsProps {
 
 export function AuditorPendingTransactions({ user }: AuditorPendingTransactionsProps) {
   const [transactions, setTransactions] = React.useState<Transaction[]>([])
+  const [pendingExecutionTransactions, setPendingExecutionTransactions] = React.useState<Transaction[]>([])
   const [rejectDialogOpen, setRejectDialogOpen] = React.useState(false)
   const [rejectionReason, setRejectionReason] = React.useState("")
   const [transactionToReject, setTransactionToReject] = React.useState<string | null>(null)
@@ -41,9 +49,14 @@ export function AuditorPendingTransactions({ user }: AuditorPendingTransactionsP
   const [validateDialogOpen, setValidateDialogOpen] = React.useState(false)
   const [transactionToValidate, setTransactionToValidate] = React.useState<string | null>(null)
   const [realAmountEUR, setRealAmountEUR] = React.useState("")
+  const [executeDialogOpen, setExecuteDialogOpen] = React.useState(false)
+  const [transactionToExecute, setTransactionToExecute] = React.useState<string | null>(null)
+  const [receiptFile, setReceiptFile] = React.useState<File | null>(null)
+  const [executorComment, setExecutorComment] = React.useState("")
+  const [executingTransaction, setExecutingTransaction] = React.useState<string | null>(null)
   const { toast } = useToast()
 
-  // Charger les transactions depuis localStorage
+  // Charger les transactions depuis l'API
   React.useEffect(() => {
     const loadTransactions = async () => {
       try {
@@ -55,14 +68,20 @@ export function AuditorPendingTransactions({ user }: AuditorPendingTransactionsP
             details: typeof item.details === 'string' ? JSON.parse(item.details) : item.details
           }))
           
-          // Filtrer les transactions en attente
+          // Filtrer les transactions en attente de validation
           const pendingTransactions = apiTransactions.filter(t => t.status === "pending")
           setTransactions(pendingTransactions)
+          
+          // Filtrer les transactions en attente d'exécution
+          const pendingExecution = apiTransactions.filter(t => t.status === "validated")
+          setPendingExecutionTransactions(pendingExecution)
         } else {
           setTransactions([])
+          setPendingExecutionTransactions([])
         }
       } catch (error) {
         setTransactions([])
+        setPendingExecutionTransactions([])
       }
     }
 
@@ -167,6 +186,75 @@ export function AuditorPendingTransactions({ user }: AuditorPendingTransactionsP
   const handleViewDetails = (transaction: Transaction) => {
     setSelectedTransaction(transaction)
     setDetailsDialogOpen(true)
+  }
+
+  const handleExecuteTransaction = (transactionId: string) => {
+    setTransactionToExecute(transactionId)
+    setReceiptFile(null)
+    setExecutorComment("")
+    setExecuteDialogOpen(true)
+  }
+
+  const confirmExecuteTransaction = async () => {
+    if (!transactionToExecute || !receiptFile) {
+      toast({
+        title: "Erreur",
+        description: "Veuillez sélectionner un fichier de reçu",
+        variant: "destructive"
+      })
+      return
+    }
+
+    try {
+      setExecutingTransaction(transactionToExecute)
+      
+      // Créer un FormData pour l'upload du fichier
+      const formData = new FormData()
+      formData.append('transactionId', transactionToExecute)
+      formData.append('executorId', user.name) // Utiliser le nom de l'auditeur comme identifiant
+      formData.append('receiptFile', receiptFile)
+      if (executorComment.trim()) {
+        formData.append('executorComment', executorComment.trim())
+      }
+      
+      const response = await fetch('/api/transactions/execute', {
+        method: 'POST',
+        body: formData
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Erreur lors de l\'exécution')
+      }
+
+      // Mettre à jour l'état local
+      setPendingExecutionTransactions(prev => prev.filter(t => t.id !== transactionToExecute))
+      
+      toast({
+        title: "Transaction exécutée",
+        description: result.message || "La transaction a été exécutée avec succès",
+      })
+      
+      // Déclencher un événement personnalisé pour notifier les autres composants
+      window.dispatchEvent(new CustomEvent('transactionStatusChanged', { 
+        detail: { transactionId: transactionToExecute, status: 'executed' } 
+      }))
+      
+      setExecuteDialogOpen(false)
+      setTransactionToExecute(null)
+      setReceiptFile(null)
+      setExecutorComment("")
+      
+    } catch (error: any) {
+      toast({
+        title: "Erreur",
+        description: `Erreur lors de l'exécution: ${error.message}`,
+        variant: "destructive"
+      })
+    } finally {
+      setExecutingTransaction(null)
+    }
   }
 
 
@@ -531,35 +619,33 @@ export function AuditorPendingTransactions({ user }: AuditorPendingTransactionsP
     }
   }
 
-  if (transactions.length === 0) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg font-semibold text-gray-800">
-            Transactions en Attente de Validation
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="text-center py-8">
-            <p className="text-gray-500">Aucune transaction en attente de validation</p>
-          </div>
-        </CardContent>
-      </Card>
-    )
-  }
-
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-lg font-semibold text-gray-800">
-            Transactions en Attente de Validation ({transactions.length})
-          </CardTitle>
-        </div>
+        <CardTitle className="text-lg font-semibold text-gray-800">
+          Gestion des Transactions
+        </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="space-y-3">
-          {transactions.map((transaction) => (
+        <Tabs defaultValue="validation" className="w-full">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="validation">
+              Validation ({transactions.length})
+            </TabsTrigger>
+            <TabsTrigger value="execution">
+              Exécution ({pendingExecutionTransactions.length})
+            </TabsTrigger>
+          </TabsList>
+          
+          <TabsContent value="validation" className="space-y-4 mt-4">
+            {transactions.length === 0 ? (
+              <div className="text-center py-8">
+                <p className="text-gray-500">Aucune transaction en attente de validation</p>
+              </div>
+            ) : (
+              <>
+                <div className="space-y-3">
+                  {transactions.map((transaction) => (
             <div key={transaction.id} className="flex items-center justify-between p-3 border rounded-lg bg-yellow-50">
               <div className="flex-1">
                 <div className="flex items-center gap-3">
@@ -608,14 +694,80 @@ export function AuditorPendingTransactions({ user }: AuditorPendingTransactionsP
               </div>
             </div>
           ))}
-        </div>
-        
-        <div className="mt-4 p-3 bg-green-50 rounded-lg">
-          <p className="text-sm text-green-800">
-            <strong>Note :</strong> Validez les transactions pour permettre aux caissiers de les clôturer. 
-            Une fois validées, elles apparaîtront comme "Validé" dans l'onglet "Opérations".
-          </p>
-        </div>
+                </div>
+                
+                <div className="mt-4 p-3 bg-green-50 rounded-lg">
+                  <p className="text-sm text-green-800">
+                    <strong>Note :</strong> Validez les transactions pour permettre aux caissiers de les clôturer. 
+                    Une fois validées, elles apparaîtront dans l'onglet "Exécution".
+                  </p>
+                </div>
+              </>
+            )}
+          </TabsContent>
+          
+          <TabsContent value="execution" className="space-y-4 mt-4">
+            {pendingExecutionTransactions.length === 0 ? (
+              <div className="text-center py-8">
+                <p className="text-gray-500">Aucune transaction en attente d'exécution</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {pendingExecutionTransactions.map((transaction) => (
+                  <div key={transaction.id} className="flex items-center justify-between p-3 border rounded-lg bg-blue-50">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3">
+                        <Badge variant="outline" className="text-xs">
+                          {getTypeLabel(transaction.type)}
+                        </Badge>
+                        <span className="font-medium text-sm">{transaction.id}</span>
+                        <span className="text-sm text-gray-600">{transaction.description}</span>
+                      </div>
+                      <div className="mt-1 text-sm text-gray-500">
+                        {formatAmount(transaction.amount, transaction.currency)} • {formatDate(transaction.created_at)}
+                      </div>
+                      <div className="mt-1 text-xs text-gray-400">
+                        Créé par: {transaction.created_by} • Agence: {transaction.agency}
+                      </div>
+                      {transaction.real_amount_eur && (
+                        <div className="mt-1 text-xs text-gray-400">
+                          Montant réel: {transaction.real_amount_eur} EUR
+                        </div>
+                      )}
+                      {transaction.commission_amount && (
+                        <div className="mt-1 text-xs text-green-600 font-medium">
+                          Commission: {formatAmount(transaction.commission_amount, 'XAF')}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge className="bg-blue-100 text-blue-800">Validée</Badge>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-gray-600 border-gray-600 hover:bg-gray-50"
+                        onClick={() => handleViewDetails(transaction)}
+                      >
+                        <Info className="h-4 w-4 mr-1" />
+                        Détails
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-green-600 border-green-600 hover:bg-green-50"
+                        onClick={() => handleExecuteTransaction(transaction.id)}
+                        disabled={executingTransaction === transaction.id}
+                      >
+                        <Play className="h-4 w-4 mr-1" />
+                        {executingTransaction === transaction.id ? 'Exécution...' : 'Exécuter'}
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
       </CardContent>
 
       {/* Dialogue de rejet avec motif */}
@@ -783,6 +935,74 @@ export function AuditorPendingTransactions({ user }: AuditorPendingTransactionsP
               Valider avec montant réel
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialogue d'exécution avec upload de fichier */}
+      <Dialog open={executeDialogOpen} onOpenChange={setExecuteDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Play className="h-5 w-5 text-green-600" />
+              Exécuter la transaction
+            </DialogTitle>
+            <DialogDescription>
+              Veuillez uploader le fichier de reçu pour confirmer l'exécution de la transaction.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm font-medium">Fichier du reçu *</label>
+              <div className="mt-1">
+                <input
+                  type="file"
+                  accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                  onChange={(e) => setReceiptFile(e.target.files?.[0] || null)}
+                  className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                />
+                {receiptFile && (
+                  <div className="mt-2 flex items-center gap-2 text-sm text-green-600">
+                    <FileUp className="h-4 w-4" />
+                    <span>{receiptFile.name}</span>
+                    <span className="text-gray-500">({(receiptFile.size / 1024).toFixed(1)} KB)</span>
+                  </div>
+                )}
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                Formats acceptés: PDF, JPG, PNG, DOC, DOCX (max 10MB)
+              </p>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Commentaire (optionnel)</label>
+              <Textarea
+                placeholder="Commentaire sur l'exécution..."
+                value={executorComment}
+                onChange={(e) => setExecutorComment(e.target.value)}
+                rows={3}
+                className="mt-1"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setExecuteDialogOpen(false)
+                  setReceiptFile(null)
+                  setExecutorComment("")
+                }}
+              >
+                Annuler
+              </Button>
+              <Button
+                onClick={confirmExecuteTransaction}
+                disabled={!receiptFile || executingTransaction === transactionToExecute}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                <Upload className="h-4 w-4 mr-2" />
+                Confirmer l'exécution
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </Card>

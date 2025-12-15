@@ -75,11 +75,30 @@ export async function POST(request: NextRequest) {
     // Sauvegarder le fichier uploadé
     const receiptUrl = await saveUploadedFile(receiptFile)
 
+    // Vérifier si l'utilisateur est un auditeur (via le nom ou l'ID)
+    // Pour les auditeurs, on utilise le nom comme identifiant
+    // On vérifie si l'utilisateur existe et a le rôle auditor
+    let isAuditor = false
+    try {
+      const userRows = await sql`
+        SELECT role FROM users 
+        WHERE name = ${executorId} OR id::text = ${executorId}
+        LIMIT 1
+      `
+      if (userRows.length > 0 && userRows[0].role === 'auditor') {
+        isAuditor = true
+      }
+    } catch (error) {
+      // Si on ne peut pas vérifier, on assume que ce n'est pas un auditeur
+      console.error('Erreur lors de la vérification du rôle:', error)
+    }
+
     const executedTransaction = await executeTransaction(
       transactionId,
       executorId,
       receiptUrl,
-      executorComment
+      executorComment,
+      isAuditor
     )
 
     return NextResponse.json({

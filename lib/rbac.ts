@@ -195,6 +195,7 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "view_users", // Consultation seule - pas de create/edit/delete
     "view_transactions",
     "edit_transactions", // Pour valider/rejeter les transactions
+    "execute_transactions", // Pour exécuter les transactions validées
     "view_rates", // Consultation seule - pas d'edit
     "view_expenses",
     "view_reports",
