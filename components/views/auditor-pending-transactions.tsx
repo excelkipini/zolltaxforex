@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Input } from "@/components/ui/input"
 import { CheckCircle, Eye, X, AlertTriangle, Info, Upload, Play, FileUp } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { useExchangeRates } from "@/hooks/use-exchange-rates"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 type Transaction = {
@@ -55,6 +56,7 @@ export function AuditorPendingTransactions({ user }: AuditorPendingTransactionsP
   const [executorComment, setExecutorComment] = React.useState("")
   const [executingTransaction, setExecutingTransaction] = React.useState<string | null>(null)
   const { toast } = useToast()
+  const { rates } = useExchangeRates()
 
   // Charger les transactions depuis l'API
   React.useEffect(() => {
@@ -337,6 +339,63 @@ export function AuditorPendingTransactions({ user }: AuditorPendingTransactionsP
     return new Date(dateString).toLocaleString("fr-FR")
   }
 
+  const handleDownloadIBAN = (transaction: Transaction) => {
+    const ibanFileData = transaction.details?.iban_file_data
+    
+    if (!ibanFileData) {
+      toast({
+        title: "Erreur",
+        description: "Aucun fichier IBAN disponible pour cette transaction",
+        variant: "destructive"
+      })
+      return
+    }
+
+    toast({
+      title: "Téléchargement en cours",
+      description: `Téléchargement du fichier ${ibanFileData.name}...`,
+    })
+    
+    try {
+      // Convertir le base64 en fichier binaire
+      const binaryString = atob(ibanFileData.data)
+      const bytes = new Uint8Array(binaryString.length)
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i)
+      }
+      
+      // Créer le blob avec le type MIME correct
+      const blob = new Blob([bytes], { type: ibanFileData.type })
+      
+      // Créer le lien de téléchargement
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = ibanFileData.name
+      link.style.display = 'none'
+      document.body.appendChild(link)
+      
+      link.click()
+      
+      // Nettoyer après un court délai
+      setTimeout(() => {
+        document.body.removeChild(link)
+        window.URL.revokeObjectURL(url)
+      }, 100)
+      
+      toast({
+        title: "Téléchargement terminé",
+        description: `Le fichier ${ibanFileData.name} a été téléchargé`,
+      })
+    } catch (error: any) {
+      toast({
+        title: "Erreur",
+        description: `Erreur lors du téléchargement: ${error.message}`,
+        variant: "destructive"
+      })
+    }
+  }
+
   const renderTransactionDetails = (details: any, type: string, transaction?: any) => {
     if (!details || typeof details !== 'object') {
       return <p className="text-sm text-gray-500 italic">Aucun détail supplémentaire</p>
@@ -366,7 +425,8 @@ export function AuditorPendingTransactions({ user }: AuditorPendingTransactionsP
                 <p className="text-sm text-gray-900">{details.transfer_method || 'Non spécifié'}</p>
               </div>
             </div>
-            {details.fee_mode && (
+            {/* DÉSACTIVÉ: Mode de frais (peut être réactivé plus tard) */}
+            {/* {details.fee_mode && (
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <span className="text-xs font-medium text-gray-600 uppercase tracking-wide">Mode de frais</span>
@@ -377,7 +437,7 @@ export function AuditorPendingTransactions({ user }: AuditorPendingTransactionsP
                   </p>
                 </div>
               </div>
-            )}
+            )} */}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <span className="text-xs font-medium text-gray-600 uppercase tracking-wide">Mode de retrait</span>
@@ -408,8 +468,8 @@ export function AuditorPendingTransactions({ user }: AuditorPendingTransactionsP
                 </p>
               </div>
             </div>
-            {/* Détails de calcul si disponibles */}
-            {(details.fees !== undefined || details.tax !== undefined) && (
+            {/* DÉSACTIVÉ: Détails de calcul si disponibles (peut être réactivé plus tard) */}
+            {/* {(details.fees !== undefined || details.tax !== undefined) && (
               <div className="mt-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
                 <h5 className="text-xs font-semibold text-gray-700 mb-2">Détails du calcul</h5>
                 <div className="space-y-1 text-xs">
@@ -433,7 +493,7 @@ export function AuditorPendingTransactions({ user }: AuditorPendingTransactionsP
                   )}
                 </div>
               </div>
-            )}
+            )} */}
             {/* Montant réel et commission si disponibles (pour les transactions validées) */}
             {transaction && transaction.real_amount_eur && transaction.commission_amount && (
               <div className="grid grid-cols-2 gap-4 bg-blue-50 p-3 rounded-lg border border-blue-200">
@@ -447,10 +507,16 @@ export function AuditorPendingTransactions({ user }: AuditorPendingTransactionsP
                 </div>
               </div>
             )}
-            {(details.iban_file || details.ibanFile) && (
+            {(details.iban_file || details.ibanFile) && transaction && (
               <div>
                 <span className="text-xs font-medium text-gray-600 uppercase tracking-wide">Fichier IBAN</span>
-                <p className="text-sm text-blue-600 font-medium">📎 Fichier IBAN joint</p>
+                <button
+                  onClick={() => handleDownloadIBAN(transaction)}
+                  className="text-sm text-blue-600 font-medium hover:text-blue-800 hover:underline cursor-pointer flex items-center gap-1 transition-colors"
+                  title="Cliquez pour télécharger le fichier IBAN"
+                >
+                  📎 Fichier IBAN joint
+                </button>
               </div>
             )}
           </div>
@@ -919,6 +985,15 @@ export function AuditorPendingTransactions({ user }: AuditorPendingTransactionsP
                 <p className="text-xs text-gray-500 mt-1">
                   Le système calculera automatiquement la commission et validera la transaction
                 </p>
+                <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                  <p className="text-xs font-medium text-blue-900 mb-1">Taux de change appliqué :</p>
+                  <p className="text-sm text-blue-800">
+                    1 EUR = {rates.EUR.toLocaleString("fr-FR")} XAF
+                  </p>
+                  <p className="text-xs text-blue-600 mt-1">
+                    Le montant réel en EUR sera converti en XAF à ce taux pour calculer la commission.
+                  </p>
+                </div>
               </div>
             </div>
           </div>

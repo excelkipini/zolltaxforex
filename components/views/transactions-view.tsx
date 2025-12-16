@@ -947,7 +947,8 @@ export function TransactionsView({ user }: TransactionsViewProps = {}) {
                     <span>Pays:</span>
                     <span>${details.beneficiary_country || details.destination_country || "-"}</span>
                   </div>
-                  ${details.fee_mode ? `
+                  <!-- DÉSACTIVÉ: Mode de frais et détails de calcul (peut être réactivé plus tard) -->
+                  <!-- ${details.fee_mode ? `
                     <div class="row">
                       <span>Mode de frais:</span>
                       <span>${details.fee_mode === "with_fees" ? "Avec frais" : "Sans frais"}</span>
@@ -970,7 +971,7 @@ export function TransactionsView({ user }: TransactionsViewProps = {}) {
                       <span>Montant à collecter:</span>
                       <span>${(details.amount_to_collect || 0).toLocaleString("fr-FR")} ${details.received_currency || transaction.currency}</span>
                     </div>
-                  ` : ""}
+                  ` : ""} -->
                 ` : details.operation_type === "exchange" ? `
                   <div class="row">
                     <span>Montant échangé:</span>
@@ -2404,14 +2405,15 @@ export function TransactionsView({ user }: TransactionsViewProps = {}) {
                                     <span className="text-sm font-medium text-gray-600">Moyen de transfert:</span>
                                     <p className="text-sm">{selectedTransaction.details.transfer_method || "N/A"}</p>
                                   </div>
-                                  <div>
+                                  {/* DÉSACTIVÉ: Mode de frais (peut être réactivé plus tard) */}
+                                  {/* <div>
                                     <span className="text-sm font-medium text-gray-600">Mode de frais:</span>
                                     <p className="text-sm">
                                       {selectedTransaction.details.fee_mode === "with_fees" ? "Avec frais" : 
                                        selectedTransaction.details.fee_mode === "without_fees" ? "Sans frais" : 
                                        "N/A"}
                                     </p>
-                                  </div>
+                                  </div> */}
                                 </div>
                                 <div className="grid grid-cols-2 gap-4">
                                   <div>
@@ -2423,8 +2425,8 @@ export function TransactionsView({ user }: TransactionsViewProps = {}) {
                                     <p className="text-sm">{(selectedTransaction.details.amount_sent || 0).toLocaleString("fr-FR")} {selectedTransaction.details.sent_currency || "XAF"}</p>
                                   </div>
                                 </div>
-                                {/* Détails de calcul si disponibles */}
-                                {(selectedTransaction.details.fees !== undefined || selectedTransaction.details.tax !== undefined) && (
+                                {/* DÉSACTIVÉ: Détails de calcul si disponibles (peut être réactivé plus tard) */}
+                                {/* {(selectedTransaction.details.fees !== undefined || selectedTransaction.details.tax !== undefined) && (
                                   <div className="mt-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
                                     <h5 className="text-sm font-semibold text-gray-700 mb-2">Détails du calcul</h5>
                                     <div className="space-y-1 text-xs">
@@ -2448,7 +2450,7 @@ export function TransactionsView({ user }: TransactionsViewProps = {}) {
                                       )}
                                     </div>
                                   </div>
-                                )}
+                                )} */}
                                 {/* Montant réel et commission pour les transferts validés */}
                                 {(selectedTransaction.status === "validated" || selectedTransaction.status === "executed" || selectedTransaction.status === "completed") && selectedTransaction.real_amount_eur && (
                                   <div className="grid grid-cols-2 gap-4 bg-blue-50 p-3 rounded-lg border border-blue-200">

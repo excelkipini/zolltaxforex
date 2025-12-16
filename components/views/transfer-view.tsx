@@ -51,7 +51,8 @@ export function TransferView() {
   const [qrCodeError, setQrCodeError] = React.useState(false)
   const [isPrinting, setIsPrinting] = React.useState(false)
   const [countryPopoverOpen, setCountryPopoverOpen] = React.useState(false)
-  const [feeMode, setFeeMode] = React.useState<"with_fees" | "without_fees">("with_fees")
+  // DÉSACTIVÉ: Calcul automatique des frais (peut être réactivé plus tard)
+  // const [feeMode, setFeeMode] = React.useState<"with_fees" | "without_fees">("with_fees")
   const { toast } = useToast()
   const { rates } = useExchangeRates()
   
@@ -462,26 +463,26 @@ export function TransferView() {
     return Math.round((amountXAF * rate) * 100) / 100
   }
 
-  // État pour stocker les détails de calcul
-  const [calculationDetails, setCalculationDetails] = React.useState<CalculationDetails | null>(null)
+  // DÉSACTIVÉ: État pour stocker les détails de calcul (peut être réactivé plus tard)
+  // const [calculationDetails, setCalculationDetails] = React.useState<CalculationDetails | null>(null)
 
-  // Calcul automatique selon le mode
-  React.useEffect(() => {
-    if (transferData.amountReceived > 0 && transferData.destinationCountry) {
-      // Convertir le montant reçu en XAF pour les calculs (les grilles tarifaires sont en XAF)
-      const amountReceivedXAF = convertToXAF(transferData.amountReceived, transferData.receivedCurrency)
-      const details = calculateTransferDetails(amountReceivedXAF, transferData.destinationCountry, feeMode)
-      if (details) {
-        setCalculationDetails(details)
-        // Convertir le montant à envoyer dans la devise de destination
-        const convertedAmount = convertFromXAF(details.amountToSendXAF, transferData.sendCurrency)
-        setTransferData(prev => ({ ...prev, amountToSend: convertedAmount }))
-      }
-    } else {
-      setCalculationDetails(null)
-      setTransferData(prev => ({ ...prev, amountToSend: 0 }))
-    }
-  }, [transferData.amountReceived, transferData.receivedCurrency, transferData.destinationCountry, feeMode, transferData.sendCurrency, rates])
+  // DÉSACTIVÉ: Calcul automatique selon le mode (peut être réactivé plus tard)
+  // React.useEffect(() => {
+  //   if (transferData.amountReceived > 0 && transferData.destinationCountry) {
+  //     // Convertir le montant reçu en XAF pour les calculs (les grilles tarifaires sont en XAF)
+  //     const amountReceivedXAF = convertToXAF(transferData.amountReceived, transferData.receivedCurrency)
+  //     const details = calculateTransferDetails(amountReceivedXAF, transferData.destinationCountry, feeMode)
+  //     if (details) {
+  //       setCalculationDetails(details)
+  //       // Convertir le montant à envoyer dans la devise de destination
+  //       const convertedAmount = convertFromXAF(details.amountToSendXAF, transferData.sendCurrency)
+  //       setTransferData(prev => ({ ...prev, amountToSend: convertedAmount }))
+  //     }
+  //   } else {
+  //     setCalculationDetails(null)
+  //     setTransferData(prev => ({ ...prev, amountToSend: 0 }))
+  //   }
+  // }, [transferData.amountReceived, transferData.receivedCurrency, transferData.destinationCountry, feeMode, transferData.sendCurrency, rates])
 
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {}
@@ -528,15 +529,15 @@ export function TransferView() {
       return
     }
 
-    // Vérifier que les détails de calcul sont disponibles
-    if (!calculationDetails) {
-      toast({
-        title: "Erreur de calcul",
-        description: "Les détails de calcul ne sont pas disponibles. Veuillez vérifier le montant reçu et le pays de destination.",
-        variant: "destructive"
-      })
-      return
-    }
+    // DÉSACTIVÉ: Vérification des détails de calcul (peut être réactivé plus tard)
+    // if (!calculationDetails) {
+    //   toast({
+    //     title: "Erreur de calcul",
+    //     description: "Les détails de calcul ne sont pas disponibles. Veuillez vérifier le montant reçu et le pays de destination.",
+    //     variant: "destructive"
+    //   })
+    //   return
+    // }
 
     setIsSubmitting(true)
     
@@ -561,63 +562,63 @@ export function TransferView() {
         }
       }
 
-      // Sauvegarder dans la base de données via l'API
-      const response = await fetch('/api/transactions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          type: "transfer",
-          description: `Transfert d'argent vers ${transferData.destinationCountry}`,
-          amount: calculationDetails.amountToCollect,
-          currency: transferData.receivedCurrency,
-          details: {
-            beneficiary_name: transferData.beneficiaryName,
-            destination_country: transferData.destinationCountry,
-            destination_city: transferData.destinationCity,
-            transfer_method: transferData.transferMethod,
-            amount_received: transferData.amountReceived,
-            received_currency: transferData.receivedCurrency,
-            amount_sent: transferData.amountToSend,
-            sent_currency: transferData.sendCurrency,
-            withdrawal_mode: transferData.withdrawalMode,
-            iban_file: transferData.ibanFile?.name || null,
-            iban_file_data: ibanFileData,
-            // Nouvelles informations de calcul
-            fee_mode: feeMode,
-            fees: calculationDetails.fees,
-            vat_amount: calculationDetails.vatAmount,
-            coverage_amount: calculationDetails.coverageAmount,
-            tstf_amount: calculationDetails.tstfAmount,
-            tax: calculationDetails.tax,
-            amount_to_collect: calculationDetails.amountToCollect,
-            amount_to_send_xaf: calculationDetails.amountToSendXAF
-          }
-        })
-      })
+       // Sauvegarder dans la base de données via l'API
+         const response = await fetch('/api/transactions', {
+           method: 'POST',
+           headers: {
+             'Content-Type': 'application/json',
+           },
+           body: JSON.stringify({
+             type: "transfer",
+             description: `Transfert d'argent vers ${transferData.destinationCountry}`,
+          amount: transferData.amountReceived, // Utiliser directement le montant reçu
+             currency: transferData.receivedCurrency,
+             details: {
+               beneficiary_name: transferData.beneficiaryName,
+               destination_country: transferData.destinationCountry,
+               destination_city: transferData.destinationCity,
+               transfer_method: transferData.transferMethod,
+               amount_received: transferData.amountReceived,
+               received_currency: transferData.receivedCurrency,
+               amount_sent: transferData.amountToSend,
+               sent_currency: transferData.sendCurrency,
+               withdrawal_mode: transferData.withdrawalMode,
+               iban_file: transferData.ibanFile?.name || null,
+               iban_file_data: ibanFileData
+            // DÉSACTIVÉ: Informations de calcul (peut être réactivé plus tard)
+            // fee_mode: feeMode,
+            // fees: calculationDetails.fees,
+            // vat_amount: calculationDetails.vatAmount,
+            // coverage_amount: calculationDetails.coverageAmount,
+            // tstf_amount: calculationDetails.tstfAmount,
+            // tax: calculationDetails.tax,
+            // amount_to_collect: calculationDetails.amountToCollect,
+            // amount_to_send_xaf: calculationDetails.amountToSendXAF
+             }
+           })
+         })
 
-      if (!response.ok) {
+         if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: 'Erreur inconnue' }))
-        throw new Error(errorData.error || 'Erreur lors de la sauvegarde')
-      }
+           throw new Error(errorData.error || 'Erreur lors de la sauvegarde')
+         }
 
-      const result = await response.json()
+         const result = await response.json()
       
       if (!result.ok) {
         throw new Error(result.error || 'Erreur lors de la sauvegarde')
       }
 
-      const newTransaction = result.data
+         const newTransaction = result.data
       setTransferId(newTransferId)
+         
+         // Déclencher un événement personnalisé pour notifier les autres composants
+         window.dispatchEvent(new CustomEvent('transferCreated', { detail: newTransaction }))
       
-      // Déclencher un événement personnalisé pour notifier les autres composants
-      window.dispatchEvent(new CustomEvent('transferCreated', { detail: newTransaction }))
-      
-      toast({
-        title: "Transfert soumis avec succès",
-        description: `Le transfert ${newTransferId} a été soumis et est en attente de validation par l'auditeur`,
-      })
+        toast({
+          title: "Transfert soumis avec succès",
+          description: `Le transfert ${newTransferId} a été soumis et est en attente de validation par l'auditeur`,
+        })
 
       // Réinitialisation du formulaire
       setTransferData({
@@ -633,8 +634,8 @@ export function TransferView() {
         ibanFile: undefined
       })
       
-      // Réinitialiser les détails de calcul
-      setCalculationDetails(null)
+      // DÉSACTIVÉ: Réinitialiser les détails de calcul (peut être réactivé plus tard)
+      // setCalculationDetails(null)
       
     } catch (error: any) {
       console.error('Erreur lors de la soumission du transfert:', error)
@@ -939,7 +940,11 @@ export function TransferView() {
       }
       
       setTransferData(prev => ({ ...prev, ibanFile: file }))
-      setErrors(prev => ({ ...prev, ibanFile: undefined }))
+      setErrors(prev => {
+        const newErrors = { ...prev }
+        delete newErrors.ibanFile
+        return newErrors
+      })
     }
   }
 
@@ -1106,12 +1111,7 @@ export function TransferView() {
                 <span>Moyen de transfert:</span>
                 <span>${transferData.transferMethod || "-"}</span>
               </div>
-              ${calculationDetails ? `
-              <div class="row">
-                <span>Montant à collecter:</span>
-                <span>${calculationDetails.amountToCollect.toLocaleString("fr-FR")} ${transferData.receivedCurrency}</span>
-              </div>
-              ` : ''}
+              <!-- DÉSACTIVÉ: Montant à collecter (peut être réactivé plus tard) -->
               <div class="row">
                 <span>Mode de retrait:</span>
                 <span>${transferData.withdrawalMode === "cash" ? "Espèces" : "Virement bancaire"}</span>
@@ -1320,8 +1320,8 @@ export function TransferView() {
             <div className="space-y-4">
               <h3 className="text-lg font-medium text-gray-700">Montants</h3>
               
-              {/* Boutons Avec frais / Sans frais */}
-              <div className="flex gap-2">
+              {/* DÉSACTIVÉ: Boutons Avec frais / Sans frais (peut être réactivé plus tard) */}
+              {/* <div className="flex gap-2">
                 <Button
                   type="button"
                   variant={feeMode === "with_fees" ? "default" : "outline"}
@@ -1338,7 +1338,7 @@ export function TransferView() {
                 >
                   Sans frais
                 </Button>
-              </div>
+              </div> */}
               
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -1378,12 +1378,9 @@ export function TransferView() {
                       id="amountToSend"
                       type="number"
                       value={transferData.amountToSend || ""}
-                      readOnly
+                      onChange={(e) => setTransferData(prev => ({ ...prev, amountToSend: Number(e.target.value) || 0 }))}
                       placeholder="0"
-                      className={cn(
-                        "bg-gray-50 cursor-not-allowed",
-                        errors.amountToSend ? "border-red-500" : ""
-                      )}
+                      className={errors.amountToSend ? "border-red-500" : ""}
                     />
                     <Select
                       value={transferData.sendCurrency}
@@ -1405,8 +1402,8 @@ export function TransferView() {
                 </div>
               </div>
 
-              {/* Section d'affichage des détails */}
-              {calculationDetails && transferData.amountReceived > 0 && transferData.destinationCountry && (
+              {/* DÉSACTIVÉ: Section d'affichage des détails (peut être réactivé plus tard) */}
+              {/* {calculationDetails && transferData.amountReceived > 0 && transferData.destinationCountry && (
                 <div className="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
                   <h4 className="text-sm font-semibold text-gray-700 mb-3">Détails du calcul</h4>
                   <div className="space-y-2 text-sm">
@@ -1441,7 +1438,7 @@ export function TransferView() {
                     </div>
                   </div>
                 </div>
-              )}
+              )} */}
             </div>
 
             {/* Mode de retrait */}
@@ -1576,14 +1573,15 @@ export function TransferView() {
                   <span className="text-gray-600">Moyen de transfert:</span>
                   <span>{transferData.transferMethod || "-"}</span>
                 </div>
-                {calculationDetails && (
-                  <div className="flex justify-between">
+                {/* DÉSACTIVÉ: Montant à collecter (peut être réactivé plus tard) */}
+                {/* {calculationDetails && (
+                <div className="flex justify-between">
                     <span className="text-gray-600">Montant à collecter:</span>
                     <span className="font-semibold">
                       {calculationDetails.amountToCollect.toLocaleString("fr-FR")} {transferData.receivedCurrency}
                     </span>
-                  </div>
-                )}
+                </div>
+                )} */}
                 <div className="flex justify-between">
                   <span className="text-gray-600">Montant envoyé:</span>
                   <span>{transferData.amountToSend > 0 
