@@ -402,8 +402,16 @@ export async function updateTransactionRealAmount(
     eurToXAFRate
   )
 
-  // Validation automatique peu importe le montant de la commission
-  const newStatus: Transaction["status"] = "validated"
+  // Règle de validation :
+  // - Si la commission est strictement > 0 XAF → transaction VALIDÉE
+  // - Sinon (commission ≤ 0 XAF) → transaction REJETÉE automatiquement
+  const hasPositiveCommission = commissionAmount > 0
+  const newStatus: Transaction["status"] = hasPositiveCommission ? "validated" : "rejected"
+
+  // Motif standardisé en cas de rejet automatique
+  const rejectionReason = hasPositiveCommission
+    ? null
+    : 'Commission nulle ou négative : montant reçu ≤ montant réel converti en XAF'
   
   // Assigner un exécuteur disponible
   let executorId: string | null = null
@@ -414,6 +422,7 @@ export async function updateTransactionRealAmount(
     LIMIT 1
   `
   executorId = executorRows[0]?.id || null
+  const assignedExecutorId = hasPositiveCommission ? executorId : null
 
   // Mettre à jour la transaction
   const updatedRows = await sql`
@@ -422,7 +431,8 @@ export async function updateTransactionRealAmount(
       real_amount_eur = ${realAmountEUR},
       commission_amount = ${commissionAmount},
       status = ${newStatus},
-      executor_id = ${executorId},
+      executor_id = ${assignedExecutorId},
+      rejection_reason = ${rejectionReason},
       updated_at = NOW()
     WHERE id = ${transactionId}
     RETURNING 

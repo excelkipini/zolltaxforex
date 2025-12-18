@@ -27,10 +27,18 @@ export async function POST(request: NextRequest) {
       validatedBy
     )
 
+    const status = updatedTransaction.status
+    const message =
+      status === "validated"
+        ? "Transaction validée automatiquement"
+        : status === "rejected"
+        ? "Transaction rejetée automatiquement car la commission est inférieure ou égale à 0 XAF"
+        : "Transaction mise à jour"
+
     return NextResponse.json({
       success: true,
       transaction: updatedTransaction,
-      message: 'Transaction validée automatiquement'
+      message
     })
 
   } catch (error: any) {

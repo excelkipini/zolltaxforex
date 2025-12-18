@@ -153,12 +153,26 @@ export function AuditorPendingTransactions({ user }: AuditorPendingTransactionsP
         throw new Error(result.error || 'Erreur lors de la validation')
       }
 
+      const status = result.transaction?.status
+      const isValidated = status === "validated"
+      const isRejected = status === "rejected"
+
       // Mettre à jour l'état local
       setTransactions(prev => prev.filter(t => t.id !== transactionToValidate))
       
       toast({
-        title: "Transaction validée",
-        description: result.message || "La transaction a été validée avec succès",
+        title: isValidated
+          ? "Transaction validée"
+          : isRejected
+          ? "Transaction rejetée"
+          : "Transaction mise à jour",
+        description:
+          result.message ||
+          (isValidated
+            ? "La transaction a été validée avec succès"
+            : isRejected
+            ? "La transaction a été rejetée automatiquement car la commission est inférieure ou égale à 0 XAF"
+            : "La transaction a été mise à jour"),
       })
       
       // Déclencher un événement personnalisé pour notifier les autres composants
