@@ -41,8 +41,8 @@ export function PDFDistribution({ distributionData, onClose }: PDFDistributionPr
   // Calculer les frais de cartes selon le pays
   const getCardFees = (country: string, numberOfCards: number): number => {
     const feesPerCard: Record<string, number> = {
-      'Mali': 10000,
-      'RDC': 10000,
+      'Mali': 13500,
+      'RDC': 13500,
       'France': 0,
       'Congo': 0
     }
