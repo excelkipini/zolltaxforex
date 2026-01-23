@@ -699,14 +699,14 @@ export function AuditorPendingTransactions({ user }: AuditorPendingTransactionsP
     }
   }
 
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-lg font-semibold text-gray-800">
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg font-semibold text-gray-800">
           Gestion des Transactions
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
         <Tabs defaultValue="validation" className="w-full">
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="validation">
@@ -719,13 +719,13 @@ export function AuditorPendingTransactions({ user }: AuditorPendingTransactionsP
           
           <TabsContent value="validation" className="space-y-4 mt-4">
             {transactions.length === 0 ? (
-              <div className="text-center py-8">
-                <p className="text-gray-500">Aucune transaction en attente de validation</p>
-              </div>
+          <div className="text-center py-8">
+            <p className="text-gray-500">Aucune transaction en attente de validation</p>
+          </div>
             ) : (
               <>
-                <div className="space-y-3">
-                  {transactions.map((transaction) => (
+        <div className="space-y-3">
+          {transactions.map((transaction) => (
             <div key={transaction.id} className="flex items-center justify-between p-3 border rounded-lg bg-yellow-50">
               <div className="flex-1">
                 <div className="flex items-center gap-3">
@@ -774,14 +774,14 @@ export function AuditorPendingTransactions({ user }: AuditorPendingTransactionsP
               </div>
             </div>
           ))}
-                </div>
-                
-                <div className="mt-4 p-3 bg-green-50 rounded-lg">
-                  <p className="text-sm text-green-800">
-                    <strong>Note :</strong> Validez les transactions pour permettre aux caissiers de les clôturer. 
+        </div>
+        
+        <div className="mt-4 p-3 bg-green-50 rounded-lg">
+          <p className="text-sm text-green-800">
+            <strong>Note :</strong> Validez les transactions pour permettre aux caissiers de les clôturer. 
                     Une fois validées, elles apparaîtront dans l'onglet "Exécution".
-                  </p>
-                </div>
+          </p>
+        </div>
               </>
             )}
           </TabsContent>
@@ -1006,7 +1006,7 @@ export function AuditorPendingTransactions({ user }: AuditorPendingTransactionsP
                   </p>
                   <p className="text-xs text-blue-600 mt-1">
                     Le montant réel en EUR sera converti en XAF à ce taux pour calculer la commission.
-                  </p>
+                </p>
                 </div>
               </div>
             </div>

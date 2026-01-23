@@ -415,13 +415,13 @@ export async function updateTransactionRealAmount(
   
   // Assigner un exécuteur disponible
   let executorId: string | null = null
-  const executorRows = await sql`
-    SELECT id::text FROM users 
-    WHERE role = 'executor' 
-    ORDER BY created_at ASC 
-    LIMIT 1
-  `
-  executorId = executorRows[0]?.id || null
+    const executorRows = await sql`
+      SELECT id::text FROM users 
+      WHERE role = 'executor' 
+      ORDER BY created_at ASC 
+      LIMIT 1
+    `
+    executorId = executorRows[0]?.id || null
   const assignedExecutorId = hasPositiveCommission ? executorId : null
 
   // Mettre à jour la transaction
@@ -556,36 +556,36 @@ export async function executeTransaction(
           updated_at::text as updated_at
       `
     : await sql`
-        UPDATE transactions 
-        SET 
-          status = 'executed',
-          executed_at = NOW(),
-          receipt_url = ${receiptUrl},
-          executor_comment = ${executorComment || null},
-          updated_at = NOW()
-        WHERE id = ${transactionId} AND executor_id = ${executorId}
-        RETURNING 
-          id::text,
-          type,
-          status,
-          description,
-          amount::bigint as amount,
-          currency,
-          created_by,
-          agency,
-          details,
-          rejection_reason,
-          delete_validated_by,
-          delete_validated_at,
-          real_amount_eur,
-          commission_amount,
-          executor_id,
-          executed_at,
-          receipt_url,
-          executor_comment,
-          created_at::text as created_at,
-          updated_at::text as updated_at
-      `
+    UPDATE transactions 
+    SET 
+      status = 'executed',
+      executed_at = NOW(),
+      receipt_url = ${receiptUrl},
+      executor_comment = ${executorComment || null},
+      updated_at = NOW()
+    WHERE id = ${transactionId} AND executor_id = ${executorId}
+    RETURNING 
+      id::text,
+      type,
+      status,
+      description,
+      amount::bigint as amount,
+      currency,
+      created_by,
+      agency,
+      details,
+      rejection_reason,
+      delete_validated_by,
+      delete_validated_at,
+      real_amount_eur,
+      commission_amount,
+      executor_id,
+      executed_at,
+      receipt_url,
+      executor_comment,
+      created_at::text as created_at,
+      updated_at::text as updated_at
+  `
 
   if (updatedRows.length === 0) {
     throw new Error(

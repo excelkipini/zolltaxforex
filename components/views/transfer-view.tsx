@@ -1268,7 +1268,7 @@ export function TransferView() {
                                 />
                                 {country}
                               </CommandItem>
-                            ))}
+                      ))}
                           </CommandGroup>
                         </CommandList>
                       </Command>
