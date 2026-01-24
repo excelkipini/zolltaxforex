@@ -45,7 +45,7 @@ export function TransactionsView({ user }: TransactionsViewProps = {}) {
   const [filteredTransactions, setFilteredTransactions] = React.useState<Transaction[]>([])
   const [searchTerm, setSearchTerm] = React.useState("")
   const [periodFilter, setPeriodFilter] = React.useState<string>("all")
-  const [dateFilter, setDateFilter] = React.useState<Date | null>(null)
+  const [dateFilter, setDateFilter] = React.useState<{ from?: Date; to?: Date } | null>(null)
   const [statusFilter, setStatusFilter] = React.useState<string>("all")
   const [typeFilter, setTypeFilter] = React.useState<string>("all")
   const [cashierFilter, setCashierFilter] = React.useState<string>("all")
@@ -171,8 +171,26 @@ export function TransactionsView({ user }: TransactionsViewProps = {}) {
 
     // Filtre par date calendrier (prioritaire sur periodFilter)
     if (dateFilter) {
-      const selectedDateStr = format(dateFilter, 'yyyy-MM-dd')
-      filtered = filtered.filter(t => t.created_at.startsWith(selectedDateStr))
+      const dateFrom = dateFilter.from ? new Date(dateFilter.from) : null
+      const dateTo = dateFilter.to ? new Date(dateFilter.to) : null
+      
+      filtered = filtered.filter(t => {
+        const transDate = new Date(t.created_at)
+        
+        // Comparer avec la date de début
+        if (dateFrom) {
+          dateFrom.setHours(0, 0, 0, 0)
+          if (transDate < dateFrom) return false
+        }
+        
+        // Comparer avec la date de fin
+        if (dateTo) {
+          dateTo.setHours(23, 59, 59, 999)
+          if (transDate > dateTo) return false
+        }
+        
+        return true
+      })
     } else if (periodFilter !== "all") {
       // Filtre par période (si pas de date calendrier sélectionnée)
       const now = new Date()
@@ -1905,16 +1923,34 @@ export function TransactionsView({ user }: TransactionsViewProps = {}) {
               <PopoverTrigger asChild>
                 <Button variant="outline" className="w-[180px] gap-2">
                   <CalendarIcon className="h-4 w-4" />
-                  {dateFilter ? format(dateFilter, 'dd/MM/yyyy', { locale: fr }) : 'Sélectionner date'}
+                  {dateFilter?.from && dateFilter?.to
+                    ? `${format(dateFilter.from, 'dd/MM', { locale: fr })} - ${format(dateFilter.to, 'dd/MM', { locale: fr })}`
+                    : dateFilter?.from
+                    ? `À partir du ${format(dateFilter.from, 'dd/MM/yyyy', { locale: fr })}`
+                    : 'Sélectionner plage'}
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0" align="start">
                 <Calendar
-                  mode="single"
-                  selected={dateFilter || undefined}
-                  onSelect={(date) => {
-                    setDateFilter(date || null)
-                    if (date) {
+                  mode="range"
+                  selected={
+                    dateFilter
+                      ? {
+                          from: dateFilter.from,
+                          to: dateFilter.to,
+                        }
+                      : undefined
+                  }
+                  onSelect={(range) => {
+                    setDateFilter(
+                      range && (range.from || range.to)
+                        ? {
+                            from: range.from,
+                            to: range.to,
+                          }
+                        : null
+                    )
+                    if (range) {
                       setPeriodFilter("all")
                     }
                   }}
@@ -1922,17 +1958,18 @@ export function TransactionsView({ user }: TransactionsViewProps = {}) {
                   disabled={(date) =>
                     date > new Date() || date < new Date('2020-01-01')
                   }
+                  captionLayout="dropdown"
                 />
               </PopoverContent>
             </Popover>
-            {dateFilter && (
+            {(dateFilter?.from || dateFilter?.to) && (
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => setDateFilter(null)}
                 className="text-xs"
               >
-                Réinitialiser date
+                Réinitialiser plage
               </Button>
             )}
             <Select value={statusFilter} onValueChange={setStatusFilter}>
