@@ -44,7 +44,6 @@ export function TransactionsView({ user }: TransactionsViewProps = {}) {
   const [transactions, setTransactions] = React.useState<Transaction[]>([])
   const [filteredTransactions, setFilteredTransactions] = React.useState<Transaction[]>([])
   const [searchTerm, setSearchTerm] = React.useState("")
-  const [periodFilter, setPeriodFilter] = React.useState<string>("all")
   const [dateFilter, setDateFilter] = React.useState<{ from?: Date; to?: Date } | null>(null)
   const [statusFilter, setStatusFilter] = React.useState<string>("all")
   const [typeFilter, setTypeFilter] = React.useState<string>("all")
@@ -169,7 +168,7 @@ export function TransactionsView({ user }: TransactionsViewProps = {}) {
       filtered = filtered.filter(t => t.created_by === cashierFilter)
     }
 
-    // Filtre par date calendrier (prioritaire sur periodFilter)
+    // Filtre par date calendrier
     if (dateFilter) {
       const dateFrom = dateFilter.from ? new Date(dateFilter.from) : null
       const dateTo = dateFilter.to ? new Date(dateFilter.to) : null
@@ -190,34 +189,6 @@ export function TransactionsView({ user }: TransactionsViewProps = {}) {
         }
         
         return true
-      })
-    } else if (periodFilter !== "all") {
-      // Filtre par période (si pas de date calendrier sélectionnée)
-      const now = new Date()
-      const transactionDate = new Date()
-      
-      filtered = filtered.filter(t => {
-        transactionDate.setTime(new Date(t.created_at).getTime())
-        
-        switch (periodFilter) {
-          case "today":
-            return transactionDate.toDateString() === now.toDateString()
-          case "week":
-            const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
-            return transactionDate >= weekAgo
-          case "month":
-            const monthAgo = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate())
-            return transactionDate >= monthAgo
-          case "year":
-            const yearAgo = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate())
-            return transactionDate >= yearAgo
-          case "last_year":
-            const lastYearStart = new Date(now.getFullYear() - 1, 0, 1)
-            const lastYearEnd = new Date(now.getFullYear() - 1, 11, 31, 23, 59, 59)
-            return transactionDate >= lastYearStart && transactionDate <= lastYearEnd
-          default:
-            return true
-        }
       })
     }
 
@@ -273,7 +244,7 @@ export function TransactionsView({ user }: TransactionsViewProps = {}) {
     if (currentPage > totalPages && totalPages > 0) {
       setCurrentPage(1)
     }
-  }, [transactions, searchTerm, periodFilter, dateFilter, statusFilter, typeFilter, cashierFilter, sortField, sortDirection, itemsPerPage, currentPage])
+  }, [transactions, searchTerm, dateFilter, statusFilter, typeFilter, cashierFilter, sortField, sortDirection, itemsPerPage, currentPage])
 
   // Obtenir la liste des caissiers uniques
   const uniqueCashiers = React.useMemo(() => {
@@ -1906,19 +1877,6 @@ export function TransactionsView({ user }: TransactionsViewProps = {}) {
                 />
               </div>
             </div>
-            <Select value={periodFilter} onValueChange={setPeriodFilter}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Période" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Toutes</SelectItem>
-                <SelectItem value="today">Aujourd'hui</SelectItem>
-                <SelectItem value="week">Cette semaine</SelectItem>
-                <SelectItem value="month">Ce mois</SelectItem>
-                <SelectItem value="year">Cette année</SelectItem>
-                <SelectItem value="last_year">L'année dernière</SelectItem>
-              </SelectContent>
-            </Select>
             <Popover>
               <PopoverTrigger asChild>
                 <Button variant="outline" className="w-[180px] gap-2">
@@ -1950,9 +1908,6 @@ export function TransactionsView({ user }: TransactionsViewProps = {}) {
                           }
                         : null
                     )
-                    if (range) {
-                      setPeriodFilter("all")
-                    }
                   }}
                   locale={fr}
                   disabled={(date) =>
