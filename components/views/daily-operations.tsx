@@ -8,8 +8,12 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { CheckCircle, Eye, X, AlertTriangle, Clock, FileDown, Edit, Trash2, CheckCircle2 } from "lucide-react"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Calendar } from "@/components/ui/calendar"
+import { CheckCircle, Eye, X, AlertTriangle, Clock, FileDown, Edit, Trash2, CheckCircle2, Calendar as CalendarIcon } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { format } from "date-fns"
+import { fr } from "date-fns/locale"
 
 type Transaction = {
   id: string
@@ -43,14 +47,14 @@ export function DailyOperations({ operationType, user, title }: DailyOperationsP
   const [validateDialogOpen, setValidateDialogOpen] = React.useState(false)
   const [transactionToValidate, setTransactionToValidate] = React.useState<string | null>(null)
   const [realAmountEUR, setRealAmountEUR] = React.useState("")
+  const [selectedDate, setSelectedDate] = React.useState<Date | null>(new Date())
+  const [allTransactions, setAllTransactions] = React.useState<Transaction[]>([])
   const { toast } = useToast()
 
   // Charger les transactions du jour depuis l'API
   React.useEffect(() => {
     const loadDailyTransactions = async () => {
       try {
-        const today = new Date().toISOString().split('T')[0] // Format YYYY-MM-DD
-        
         // Charger toutes les transactions depuis l'API
         const res = await fetch("/api/transactions")
         const data = await res.json()
@@ -67,25 +71,11 @@ export function DailyOperations({ operationType, user, title }: DailyOperationsP
             }
           }))
 
-          // Filtrer les transactions du jour et du type correspondant
-          let todayTransactions = apiTransactions.filter(t => {
-            const isToday = t.created_at.startsWith(today)
-            const isCorrectType = operationType === "receipt" ? t.type === "receipt" : t.type === operationType
-            
-            // Pour les reçus, inclure tous les statuts (completed, pending_delete)
-            if (operationType === "receipt" && t.type === "receipt") {
-              return isToday && (t.status === "completed" || t.status === "pending_delete")
-            }
-            
-            return isToday && isCorrectType
-          })
+          // Stocker toutes les transactions
+          setAllTransactions(apiTransactions)
           
-          // Filtrer par utilisateur pour les caissiers
-          if (user.role === "cashier") {
-            todayTransactions = todayTransactions.filter(t => t.created_by === user.name)
-          }
-          
-          setTransactions(todayTransactions)
+          // Filtrer selon la date sélectionnée
+          filterTransactionsByDate(apiTransactions)
         } else {
           setTransactions([])
         }
@@ -109,6 +99,40 @@ export function DailyOperations({ operationType, user, title }: DailyOperationsP
       window.removeEventListener('transactionStatusChanged', handleTransactionStatusChanged as EventListener)
     }
   }, [operationType])
+
+  // Filtrer les transactions selon la date sélectionnée
+  const filterTransactionsByDate = (transactionsToFilter: Transaction[]) => {
+    if (!selectedDate) {
+      setTransactions([])
+      return
+    }
+
+    const selectedDateStr = format(selectedDate, 'yyyy-MM-dd')
+    
+    let filteredTransactions = transactionsToFilter.filter(t => {
+      const isSelectedDate = t.created_at.startsWith(selectedDateStr)
+      const isCorrectType = operationType === "receipt" ? t.type === "receipt" : t.type === operationType
+      
+      // Pour les reçus, inclure tous les statuts (completed, pending_delete)
+      if (operationType === "receipt" && t.type === "receipt") {
+        return isSelectedDate && (t.status === "completed" || t.status === "pending_delete")
+      }
+      
+      return isSelectedDate && isCorrectType
+    })
+    
+    // Filtrer par utilisateur pour les caissiers
+    if (user.role === "cashier") {
+      filteredTransactions = filteredTransactions.filter(t => t.created_by === user.name)
+    }
+    
+    setTransactions(filteredTransactions)
+  }
+
+  // Réappliquer le filtre quand la date change
+  React.useEffect(() => {
+    filterTransactionsByDate(allTransactions)
+  }, [selectedDate])
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -530,16 +554,37 @@ export function DailyOperations({ operationType, user, title }: DailyOperationsP
     <div className="space-y-4">
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Clock className="h-5 w-5" />
-            {title || `Opérations du jour - ${getOperationTypeLabel(operationType)}`}
-          </CardTitle>
+          <div className="flex items-center justify-between gap-4">
+            <CardTitle className="flex items-center gap-2">
+              <Clock className="h-5 w-5" />
+              {title || `Opérations du jour - ${getOperationTypeLabel(operationType)}`}
+            </CardTitle>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" className="w-auto gap-2">
+                  <CalendarIcon className="h-4 w-4" />
+                  {selectedDate ? format(selectedDate, 'dd/MM/yyyy', { locale: fr }) : 'Sélectionner une date'}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="end">
+                <Calendar
+                  mode="single"
+                  selected={selectedDate || undefined}
+                  onSelect={(date) => setSelectedDate(date || new Date())}
+                  locale={fr}
+                  disabled={(date) =>
+                    date > new Date() || date < new Date('2020-01-01')
+                  }
+                />
+              </PopoverContent>
+            </Popover>
+          </div>
         </CardHeader>
         <CardContent>
           {transactions.length === 0 ? (
             <div className="text-center py-8 text-gray-500">
               <Clock className="h-12 w-12 mx-auto mb-4 text-gray-300" />
-              <p>Aucune opération {getOperationTypeLabel(operationType).toLowerCase()} effectuée aujourd'hui</p>
+              <p>Aucune opération {getOperationTypeLabel(operationType).toLowerCase()} effectuée le {selectedDate ? format(selectedDate, 'dd/MM/yyyy', { locale: fr }) : 'cette date'}</p>
             </div>
           ) : (
             <div className="space-y-3">
