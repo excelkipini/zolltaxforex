@@ -252,6 +252,24 @@ export function TransactionsView({ user }: TransactionsViewProps = {}) {
     return cashiers
   }, [transactions])
 
+  // Obtenir la liste des statuts uniques disponibles
+  const uniqueStatuses = React.useMemo(() => {
+    const statuses = [...new Set(transactions.map(t => t.status))]
+    return statuses.sort()
+  }, [transactions])
+
+  // Mappage des statuts vers les labels français
+  const statusLabels: Record<string, string> = {
+    pending: "En attente",
+    validated: "Validé",
+    completed: "Terminé",
+    rejected: "Rejeté",
+    cancelled: "Annulé",
+    exception: "Exceptionnel",
+    executed: "Exécuté",
+    pending_delete: "Suppression"
+  }
+
   // Calculer les transactions paginées
   const totalPages = Math.ceil(filteredTransactions.length / itemsPerPage)
   const startIndex = (currentPage - 1) * itemsPerPage
@@ -1933,11 +1951,11 @@ export function TransactionsView({ user }: TransactionsViewProps = {}) {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Tous les statuts</SelectItem>
-                <SelectItem value="completed">Terminé</SelectItem>
-                <SelectItem value="validated">Validé</SelectItem>
-                <SelectItem value="pending">En attente</SelectItem>
-                <SelectItem value="rejected">Rejeté</SelectItem>
-                <SelectItem value="cancelled">Annulé</SelectItem>
+                {uniqueStatuses.map(status => (
+                  <SelectItem key={status} value={status}>
+                    {statusLabels[status] || status}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
             <Select value={typeFilter} onValueChange={setTypeFilter}>
