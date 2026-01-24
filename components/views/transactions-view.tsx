@@ -7,10 +7,14 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Calendar } from "@/components/ui/calendar"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Search, Filter, Eye, Download, FileDown, CheckCircle, Check, X, AlertTriangle, ArrowUpDown, ArrowUp, ArrowDown, ChevronLeft, ChevronRight, Printer, Trash2, Clock, Play, FileUp, Upload } from "lucide-react"
+import { Search, Filter, Eye, Download, FileDown, CheckCircle, Check, X, AlertTriangle, ArrowUpDown, ArrowUp, ArrowDown, ChevronLeft, ChevronRight, Printer, Trash2, Clock, Play, FileUp, Upload, Calendar as CalendarIcon } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { format } from "date-fns"
+import { fr } from "date-fns/locale"
 
 // Types pour les transactions
 type Transaction = {
@@ -41,6 +45,7 @@ export function TransactionsView({ user }: TransactionsViewProps = {}) {
   const [filteredTransactions, setFilteredTransactions] = React.useState<Transaction[]>([])
   const [searchTerm, setSearchTerm] = React.useState("")
   const [periodFilter, setPeriodFilter] = React.useState<string>("all")
+  const [dateFilter, setDateFilter] = React.useState<Date | null>(null)
   const [statusFilter, setStatusFilter] = React.useState<string>("all")
   const [typeFilter, setTypeFilter] = React.useState<string>("all")
   const [cashierFilter, setCashierFilter] = React.useState<string>("all")
@@ -164,8 +169,12 @@ export function TransactionsView({ user }: TransactionsViewProps = {}) {
       filtered = filtered.filter(t => t.created_by === cashierFilter)
     }
 
-    // Filtre par période
-    if (periodFilter !== "all") {
+    // Filtre par date calendrier (prioritaire sur periodFilter)
+    if (dateFilter) {
+      const selectedDateStr = format(dateFilter, 'yyyy-MM-dd')
+      filtered = filtered.filter(t => t.created_at.startsWith(selectedDateStr))
+    } else if (periodFilter !== "all") {
+      // Filtre par période (si pas de date calendrier sélectionnée)
       const now = new Date()
       const transactionDate = new Date()
       
@@ -246,7 +255,7 @@ export function TransactionsView({ user }: TransactionsViewProps = {}) {
     if (currentPage > totalPages && totalPages > 0) {
       setCurrentPage(1)
     }
-  }, [transactions, searchTerm, periodFilter, statusFilter, typeFilter, cashierFilter, sortField, sortDirection, itemsPerPage, currentPage])
+  }, [transactions, searchTerm, periodFilter, dateFilter, statusFilter, typeFilter, cashierFilter, sortField, sortDirection, itemsPerPage, currentPage])
 
   // Obtenir la liste des caissiers uniques
   const uniqueCashiers = React.useMemo(() => {
@@ -1892,6 +1901,40 @@ export function TransactionsView({ user }: TransactionsViewProps = {}) {
                 <SelectItem value="last_year">L'année dernière</SelectItem>
               </SelectContent>
             </Select>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" className="w-[180px] gap-2">
+                  <CalendarIcon className="h-4 w-4" />
+                  {dateFilter ? format(dateFilter, 'dd/MM/yyyy', { locale: fr }) : 'Sélectionner date'}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  mode="single"
+                  selected={dateFilter || undefined}
+                  onSelect={(date) => {
+                    setDateFilter(date || null)
+                    if (date) {
+                      setPeriodFilter("all")
+                    }
+                  }}
+                  locale={fr}
+                  disabled={(date) =>
+                    date > new Date() || date < new Date('2020-01-01')
+                  }
+                />
+              </PopoverContent>
+            </Popover>
+            {dateFilter && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setDateFilter(null)}
+                className="text-xs"
+              >
+                Réinitialiser date
+              </Button>
+            )}
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="w-[180px]">
                 <SelectValue placeholder="Statut" />
