@@ -345,8 +345,8 @@ export default function CardsHistoryPage() {
     // Calculer les frais de cartes selon le pays
     const getCardFees = (country: string, numberOfCards: number): number => {
       const feesPerCard: Record<string, number> = {
-        'Mali': 14000,
-        'RDC': 14000,
+        'Mali': 11000,
+        'RDC': 11000,
         'France': 0,
         'Congo': 0
       }
