@@ -671,8 +671,8 @@ export default function CardsClient({
       // Calculer les frais de cartes
       const getCardFees = (country: "Mali" | "RDC" | "France" | "Congo", numberOfCards: number) => {
         const feesPerCard: Record<string, number> = {
-          'Mali': 13500,
-          'RDC': 13500,
+          'Mali': 14000,
+          'RDC': 14000,
           'France': 0,
           'Congo': 0
         }
@@ -1466,8 +1466,8 @@ function DistributionDialog({
   // Calculer les frais de cartes selon le pays
   const getCardFees = (country: "Mali" | "RDC" | "France" | "Congo", numberOfCards: number) => {
     const feesPerCard: Record<string, number> = {
-      'Mali': 13500,
-      'RDC': 13500,
+      'Mali': 14000,
+      'RDC': 14000,
       'France': 0,
       'Congo': 0
     }

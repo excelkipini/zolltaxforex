@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic'
 // Fonction pour calculer les frais de cartes
 function calculateCardFees(amountSent: number): { numberOfCards: number; cardFees: number } {
   const numberOfCards = Math.ceil(amountSent / 800000) // Arrondi supérieur
-  const cardFees = numberOfCards * 13500 // 13,500 XAF par carte
+  const cardFees = numberOfCards * 14000 // 14,000 XAF par carte
   return { numberOfCards, cardFees }
 }
 

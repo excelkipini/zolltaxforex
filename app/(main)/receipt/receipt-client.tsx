@@ -57,7 +57,7 @@ export default function ReceiptClient() {
     amountReceived: 0,
     amountSent: 0,
     commission: 0,
-    commissionRate: 3.85,
+    commissionRate: 3.6,
     currency: "XAF",
     notes: "",
     receiptNumber: ""
@@ -200,7 +200,7 @@ export default function ReceiptClient() {
         amountReceived: 0,
         amountSent: 0,
         commission: 0,
-        commissionRate: 3.85,
+        commissionRate: 3.6,
         currency: "XAF",
         notes: "",
         receiptNumber: ""
