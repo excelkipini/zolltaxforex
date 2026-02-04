@@ -165,17 +165,14 @@ export function PDFReceipt({ expense, user }: PDFReceiptProps) {
   }
 
   return (
-    <div>
-      <Button
-        onClick={generatePDF}
-        variant="outline"
-        size="sm"
-        className="text-blue-600 border-blue-600 hover:bg-blue-50"
-      >
-        <Download className="h-4 w-4 mr-2" />
-        Télécharger PDF
-      </Button>
-
-    </div>
+    <Button
+      onClick={generatePDF}
+      variant="outline"
+      size="sm"
+      className="h-9 gap-1.5 rounded-lg border-2 border-violet-500/70 bg-violet-500/5 font-medium text-violet-700 shadow-sm transition-all hover:bg-violet-500/15 hover:border-violet-500 dark:border-violet-400/70 dark:bg-violet-500/10 dark:text-violet-300 dark:hover:bg-violet-500/20"
+    >
+      <Download className="h-4 w-4" />
+      <span className="hidden sm:inline">Télécharger PDF</span>
+    </Button>
   )
 }

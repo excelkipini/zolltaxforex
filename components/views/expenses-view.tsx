@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -38,6 +39,7 @@ import {
   Eye,
   Trash2,
   Receipt,
+  Pencil,
 } from "lucide-react"
 import { ActionGuard } from "@/components/permission-guard"
 import { PDFReceipt } from "@/components/pdf-receipt"
@@ -68,6 +70,7 @@ export function ExpensesView({ user }: ExpensesViewProps) {
     "Équipement",
     "Maintenance",
     "Marketing",
+    "Autre",
     "Autres"
   ]
 
@@ -116,15 +119,18 @@ export function ExpensesView({ user }: ExpensesViewProps) {
       }
     } catch {}
   }
-  const [selectedExpenseComment, setSelectedExpenseComment] = useState<string | null>(null)
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false)
   const [rejectionReason, setRejectionReason] = useState("")
   const [expenseToReject, setExpenseToReject] = useState<string | number | null>(null)
   const [deleteConfirmDialogOpen, setDeleteConfirmDialogOpen] = useState(false)
   const [expenseToDelete, setExpenseToDelete] = useState<{ id: string | number; description: string } | null>(null)
-  const [approveAccountingDialogOpen, setApproveAccountingDialogOpen] = useState(false)
-  const [expenseToApproveAccounting, setExpenseToApproveAccounting] = useState<string | number | null>(null)
-  const [debitAccountType, setDebitAccountType] = useState<"coffre" | "commissions" | "receipt_commissions" | "ecobank" | "uba">("receipt_commissions")
+  const [editDialogOpen, setEditDialogOpen] = useState(false)
+  const [expenseToEdit, setExpenseToEdit] = useState<typeof items[0] | null>(null)
+  const [editDesc, setEditDesc] = useState("")
+  const [editAmount, setEditAmount] = useState("")
+  const [editCategory, setEditCategory] = useState("")
+  const [editAgency, setEditAgency] = useState("")
+  const [editComment, setEditComment] = useState("")
   const [loading, setLoading] = useState(true)
 
   const expenses = items
@@ -484,20 +490,11 @@ export function ExpensesView({ user }: ExpensesViewProps) {
     }
   }
 
-  const EXPENSE_DEBIT_ACCOUNTS: { value: "coffre" | "commissions" | "receipt_commissions" | "ecobank" | "uba"; label: string }[] = [
-    { value: "receipt_commissions", label: "Commissions Reçus" },
-    { value: "coffre", label: "Coffre" },
-    { value: "commissions", label: "Commissions Transferts" },
-    { value: "ecobank", label: "Compte Ecobank" },
-    { value: "uba", label: "Compte UBA" },
-  ]
-
-  // Nouvelles fonctions pour le workflow en 2 étapes
+  // Workflow d'approbation en 2 étapes (comptable puis directeur)
   async function validateExpense(
     id: string | number,
     approved: boolean,
-    validationType: "accounting" | "director",
-    debitAccountTypeParam?: "coffre" | "commissions" | "receipt_commissions" | "ecobank" | "uba"
+    validationType: "accounting" | "director"
   ) {
     try {
       const res = await fetch("/api/expenses/validate", {
@@ -508,9 +505,6 @@ export function ExpensesView({ user }: ExpensesViewProps) {
           approved, 
           validationType,
           rejectionReason: approved ? undefined : rejectionReason,
-          ...(validationType === "accounting" && approved && debitAccountTypeParam
-            ? { debitAccountType: debitAccountTypeParam }
-            : {}),
         }),
       })
       const data = await res.json()
@@ -624,10 +618,71 @@ export function ExpensesView({ user }: ExpensesViewProps) {
           variant: "destructive",
         })
       }
-    } catch (error: any) {
+    } catch (e) {
       toast({
-        title: "Erreur réseau",
-        description: "Impossible de supprimer la dépense. Vérifiez votre connexion.",
+        title: "Erreur",
+        description: "Impossible de supprimer la dépense",
+        variant: "destructive",
+      })
+    }
+  }
+
+  function openEditDialog(expense: typeof items[0]) {
+    setExpenseToEdit(expense)
+    setEditDesc(expense.description)
+    setEditAmount(String(expense.amount))
+    setEditCategory(expense.category)
+    setEditAgency(expense.agency)
+    setEditComment((expense as any).comment ?? "")
+    setEditDialogOpen(true)
+  }
+
+  async function submitEdit() {
+    if (!expenseToEdit) return
+    const amount = Number(editAmount)
+    if (!editDesc.trim() || Number.isNaN(amount) || amount < 0) {
+      toast({
+        title: "Champs invalides",
+        description: "Libellé et montant (positif) sont requis.",
+        variant: "destructive",
+      })
+      return
+    }
+    try {
+      const res = await fetch("/api/expenses", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: expenseToEdit.id,
+          description: editDesc.trim(),
+          amount,
+          category: editCategory || "Autre",
+          agency: editAgency.trim() || expenseToEdit.agency,
+          comment: editComment.trim() || undefined,
+        }),
+      })
+      const data = await res.json()
+      if (res.ok && data?.ok && data?.data) {
+        const updated = {
+          ...data.data,
+          amount: Number(data.data.amount),
+          requestedBy: data.data.requested_by ?? data.data.requestedBy,
+        }
+        setItems((prev) => prev.map((e) => (String(e.id) === String(expenseToEdit.id) ? updated : e)))
+        toast({ title: "Dépense modifiée", description: "Les modifications ont été enregistrées." })
+        setEditDialogOpen(false)
+        setExpenseToEdit(null)
+      } else {
+        toast({
+          title: "Erreur",
+          description: data?.error ?? "Erreur lors de la modification",
+          variant: "destructive",
+        })
+      }
+    } catch (e) {
+      toast({
+        title: "Erreur",
+        description: "Impossible de modifier la dépense",
         variant: "destructive",
       })
     }
@@ -1155,18 +1210,28 @@ export function ExpensesView({ user }: ExpensesViewProps) {
                       )}
                     >
                       <td className="px-5 py-3.5">
-                        <div className="flex flex-col gap-0.5">
+                        <div className="flex flex-col gap-1">
                           <span className="font-medium text-foreground">{expense.description}</span>
                           {((expense as any).comment && (expense as any).comment.trim()) && (
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-7 w-fit px-0 text-xs text-muted-foreground hover:text-foreground"
-                              onClick={() => setSelectedExpenseComment((expense as any).comment)}
-                            >
-                              <Eye className="h-3.5 w-3.5 mr-1" />
-                              Voir commentaire
-                            </Button>
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-9 w-fit gap-1.5 rounded-lg border-2 border-slate-300/80 bg-slate-500/5 px-2.5 font-medium text-slate-700 shadow-sm transition-all hover:border-slate-400 hover:bg-slate-500/10 hover:text-slate-900 dark:border-slate-500/60 dark:bg-slate-500/10 dark:text-slate-300 dark:hover:border-slate-400 dark:hover:bg-slate-500/20 dark:hover:text-slate-100"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <Eye className="h-4 w-4" />
+                                  Voir le commentaire
+                                </Button>
+                              </PopoverTrigger>
+                              <PopoverContent className="max-w-sm p-4 bg-popover" align="start">
+                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Commentaire</p>
+                                <p className="mt-2 text-sm text-foreground whitespace-pre-wrap">
+                                  {(expense as any).comment}
+                                </p>
+                              </PopoverContent>
+                            </Popover>
                           )}
                         </div>
                       </td>
@@ -1185,29 +1250,24 @@ export function ExpensesView({ user }: ExpensesViewProps) {
                       <td className="px-5 py-3.5 text-sm text-muted-foreground">{expense.agency}</td>
                       <td className="whitespace-nowrap px-5 py-3.5 text-sm tabular-nums text-muted-foreground">{formatDateFR(expense.date)}</td>
                       <td className="px-5 py-3.5">
-                        <div className="flex flex-wrap items-center justify-end gap-1.5">
+                        <div className="flex flex-wrap items-center justify-end gap-2">
                           {expense.status === "pending" && user.role === "accounting" && (
                             <>
                               <Button
                                 size="sm"
-                                variant="outline"
-                                className="h-8 rounded-md border-emerald-600 text-emerald-600 hover:bg-emerald-50 dark:border-emerald-500 dark:text-emerald-400 dark:hover:bg-emerald-950/50"
-                                onClick={() => {
-                                  setExpenseToApproveAccounting(expense.id)
-                                  setDebitAccountType("receipt_commissions")
-                                  setApproveAccountingDialogOpen(true)
-                                }}
+                                className="h-9 gap-1.5 rounded-lg bg-emerald-600 px-3 font-medium text-white shadow-sm transition-all hover:bg-emerald-700 hover:shadow dark:bg-emerald-600 dark:hover:bg-emerald-500"
+                                onClick={() => validateExpense(expense.id, true, "accounting")}
                               >
-                                <CheckCircle className="h-4 w-4 sm:mr-1" />
+                                <CheckCircle className="h-4 w-4" />
                                 <span className="hidden sm:inline">Approuver</span>
                               </Button>
                               <Button
                                 size="sm"
                                 variant="outline"
-                                className="h-8 rounded-md border-red-600 text-red-600 hover:bg-red-50 dark:border-red-500 dark:text-red-400 dark:hover:bg-red-950/50"
+                                className="h-9 gap-1.5 rounded-lg border-2 border-red-500/70 bg-red-500/5 font-medium text-red-600 shadow-sm transition-all hover:bg-red-500/15 hover:border-red-500 dark:border-red-400/70 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20"
                                 onClick={() => openRejectDialog(expense.id, "accounting")}
                               >
-                                <XCircle className="h-4 w-4 sm:mr-1" />
+                                <XCircle className="h-4 w-4" />
                                 <span className="hidden sm:inline">Rejeter</span>
                               </Button>
                             </>
@@ -1216,20 +1276,19 @@ export function ExpensesView({ user }: ExpensesViewProps) {
                             <>
                               <Button
                                 size="sm"
-                                variant="outline"
-                                className="h-8 rounded-md border-emerald-600 text-emerald-600 hover:bg-emerald-50 dark:border-emerald-500 dark:text-emerald-400 dark:hover:bg-emerald-950/50"
+                                className="h-9 gap-1.5 rounded-lg bg-emerald-600 px-3 font-medium text-white shadow-sm transition-all hover:bg-emerald-700 hover:shadow dark:bg-emerald-600 dark:hover:bg-emerald-500"
                                 onClick={() => validateExpense(expense.id, true, "director")}
                               >
-                                <CheckCircle className="h-4 w-4 sm:mr-1" />
+                                <CheckCircle className="h-4 w-4" />
                                 <span className="hidden sm:inline">Valider</span>
                               </Button>
                               <Button
                                 size="sm"
                                 variant="outline"
-                                className="h-8 rounded-md border-red-600 text-red-600 hover:bg-red-50 dark:border-red-500 dark:text-red-400 dark:hover:bg-red-950/50"
+                                className="h-9 gap-1.5 rounded-lg border-2 border-red-500/70 bg-red-500/5 font-medium text-red-600 shadow-sm transition-all hover:bg-red-500/15 hover:border-red-500 dark:border-red-400/70 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20"
                                 onClick={() => openRejectDialog(expense.id, "director")}
                               >
-                                <XCircle className="h-4 w-4 sm:mr-1" />
+                                <XCircle className="h-4 w-4" />
                                 <span className="hidden sm:inline">Rejeter</span>
                               </Button>
                             </>
@@ -1238,34 +1297,44 @@ export function ExpensesView({ user }: ExpensesViewProps) {
                             <>
                               <Button
                                 size="sm"
-                                variant="outline"
-                                className="h-8 rounded-md border-emerald-600 text-emerald-600 hover:bg-emerald-50 dark:border-emerald-500 dark:text-emerald-400 dark:hover:bg-emerald-950/50"
+                                className="h-9 gap-1.5 rounded-lg bg-emerald-600 px-3 font-medium text-white shadow-sm transition-all hover:bg-emerald-700 hover:shadow dark:bg-emerald-600 dark:hover:bg-emerald-500"
                                 onClick={() => approve(expense.id)}
                               >
-                                <CheckCircle className="h-4 w-4 sm:mr-1" />
+                                <CheckCircle className="h-4 w-4" />
                                 <span className="hidden sm:inline">Approuver</span>
                               </Button>
                               <Button
                                 size="sm"
                                 variant="outline"
-                                className="h-8 rounded-md border-red-600 text-red-600 hover:bg-red-50 dark:border-red-500 dark:text-red-400 dark:hover:bg-red-950/50"
+                                className="h-9 gap-1.5 rounded-lg border-2 border-red-500/70 bg-red-500/5 font-medium text-red-600 shadow-sm transition-all hover:bg-red-500/15 hover:border-red-500 dark:border-red-400/70 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20"
                                 onClick={() => openRejectDialog(expense.id)}
                               >
-                                <XCircle className="h-4 w-4 sm:mr-1" />
+                                <XCircle className="h-4 w-4" />
                                 <span className="hidden sm:inline">Rejeter</span>
                               </Button>
                             </>
                           )}
                           {expense.status !== "director_approved" && expense.status !== "approved" && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-8 rounded-md border-red-600 text-red-600 hover:bg-red-50 dark:border-red-500 dark:text-red-400 dark:hover:bg-red-950/50"
-                              onClick={() => handleDeleteExpense(expense.id)}
-                            >
-                              <Trash2 className="h-4 w-4 sm:mr-1" />
-                              <span className="hidden sm:inline">Supprimer</span>
-                            </Button>
+                            <>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-9 gap-1.5 rounded-lg border-2 border-blue-500/70 bg-blue-500/5 font-medium text-blue-700 shadow-sm transition-all hover:bg-blue-500/15 hover:border-blue-500 dark:border-blue-400/70 dark:bg-blue-500/10 dark:text-blue-300 dark:hover:bg-blue-500/20"
+                                onClick={() => openEditDialog(expense)}
+                              >
+                                <Pencil className="h-4 w-4" />
+                                <span className="hidden sm:inline">Modifier</span>
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-9 gap-1.5 rounded-lg border-2 border-amber-500/70 bg-amber-500/5 font-medium text-amber-800 shadow-sm transition-all hover:bg-amber-500/15 hover:border-amber-500 dark:border-amber-400/70 dark:bg-amber-500/10 dark:text-amber-300 dark:hover:bg-amber-500/20"
+                                onClick={() => handleDeleteExpense(expense.id)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                                <span className="hidden sm:inline">Supprimer</span>
+                              </Button>
+                            </>
                           )}
                           {(expense.status === "director_approved" || expense.status === "approved") && (
                             <PDFReceipt
@@ -1509,22 +1578,75 @@ export function ExpensesView({ user }: ExpensesViewProps) {
           </DialogContent>
         </Dialog>
 
-        {/* Dialog pour afficher le commentaire */}
-        <Dialog open={selectedExpenseComment !== null} onOpenChange={() => setSelectedExpenseComment(null)}>
+        {/* Dialog pour modifier une dépense (avant validation directeur) */}
+        <Dialog open={editDialogOpen} onOpenChange={(open) => { setEditDialogOpen(open); if (!open) setExpenseToEdit(null) }}>
           <DialogContent className="max-w-lg">
             <DialogHeader>
-              <DialogTitle>Commentaire de la dépense</DialogTitle>
+              <DialogTitle>Modifier la dépense</DialogTitle>
+              <DialogDescription>
+                Modifiez les champs ci-dessous. Les dépenses validées par le directeur ne sont plus modifiables.
+              </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
-              <div className="p-4 bg-gray-50 rounded-lg">
-                <p className="text-sm text-gray-700 whitespace-pre-wrap">
-                  {selectedExpenseComment || "Aucun commentaire disponible"}
-                </p>
+              <div>
+                <Label htmlFor="edit-desc">Libellé</Label>
+                <Input id="edit-desc" className="mt-1" value={editDesc} onChange={(e) => setEditDesc(e.target.value)} />
+              </div>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div>
+                  <Label htmlFor="edit-amount">Montant (XAF)</Label>
+                  <Input
+                    id="edit-amount"
+                    type="number"
+                    min={0}
+                    className="mt-1"
+                    value={editAmount}
+                    onChange={(e) => setEditAmount(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit-category">Catégorie</Label>
+                  <Select value={editCategory} onValueChange={setEditCategory}>
+                    <SelectTrigger className="mt-1">
+                      <SelectValue placeholder="Sélectionner une catégorie" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {expenseCategories.map((category) => (
+                        <SelectItem key={category} value={category}>{category}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div>
+                <Label htmlFor="edit-agency">Agence</Label>
+                <Input
+                  id="edit-agency"
+                  className="mt-1"
+                  value={editAgency}
+                  onChange={(e) => setEditAgency(e.target.value)}
+                  placeholder="Agence"
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-comment">Commentaire</Label>
+                <Textarea
+                  id="edit-comment"
+                  className="mt-1"
+                  value={editComment}
+                  onChange={(e) => setEditComment(e.target.value)}
+                  placeholder="Commentaire (optionnel)"
+                  rows={3}
+                />
               </div>
             </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setSelectedExpenseComment(null)}>
-                Fermer
+            <DialogFooter className="gap-2">
+              <Button variant="outline" onClick={() => { setEditDialogOpen(false); setExpenseToEdit(null) }}>
+                Annuler
+              </Button>
+              <Button onClick={submitEdit}>
+                <Pencil className="h-4 w-4 mr-1" />
+                Enregistrer
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -1562,52 +1684,6 @@ export function ExpensesView({ user }: ExpensesViewProps) {
                 disabled={!rejectionReason.trim()}
               >
                 Rejeter la dépense
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        {/* Dialog pour approuver (comptable) : choisir la caisse à débiter */}
-        <Dialog open={approveAccountingDialogOpen} onOpenChange={(open) => { setApproveAccountingDialogOpen(open); if (!open) setExpenseToApproveAccounting(null) }}>
-          <DialogContent className="max-w-lg">
-            <DialogHeader>
-              <DialogTitle>Approuver la dépense</DialogTitle>
-              <DialogDescription>
-                Choisissez la caisse à débiter lors de la validation définitive par le directeur. Par défaut : Commissions Reçus.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div>
-                <Label>Caisse à débiter</Label>
-                <Select value={debitAccountType} onValueChange={(v: typeof debitAccountType) => setDebitAccountType(v)}>
-                  <SelectTrigger className="mt-1">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {EXPENSE_DEBIT_ACCOUNTS.map((opt) => (
-                      <SelectItem key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <DialogFooter className="gap-2">
-              <Button variant="outline" onClick={() => setApproveAccountingDialogOpen(false)}>
-                Annuler
-              </Button>
-              <Button
-                className="text-green-600 border-green-600 hover:bg-green-50 bg-transparent"
-                onClick={async () => {
-                  if (expenseToApproveAccounting == null) return
-                  await validateExpense(expenseToApproveAccounting, true, "accounting", debitAccountType)
-                  setApproveAccountingDialogOpen(false)
-                  setExpenseToApproveAccounting(null)
-                }}
-              >
-                <CheckCircle className="h-4 w-4 mr-1" />
-                Confirmer l&apos;approbation
               </Button>
             </DialogFooter>
           </DialogContent>

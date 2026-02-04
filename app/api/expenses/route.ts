@@ -10,7 +10,8 @@ import {
   getExpensesPendingDirector,
   getExpensesStats,
   getExpensesPendingForDashboard,
-  deleteExpense
+  deleteExpense,
+  updateExpense
 } from "@/lib/expenses-queries"
 
 export async function GET(request: NextRequest) {
@@ -94,6 +95,33 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ ok: true, data: updated })
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: e?.message ?? "Erreur mise à jour dépense" }, { status: 400 })
+  }
+}
+
+export async function PATCH(request: NextRequest) {
+  const { user } = await requireAuth()
+  try {
+    const body = await request.json()
+    const id = String(body?.id ?? "")
+    if (!id) return NextResponse.json({ ok: false, error: "ID de dépense requis" }, { status: 400 })
+    const canViewAll = user.role === "director" || user.role === "delegate" || user.role === "accounting"
+    const expenses = await listExpensesForUser(user.name, canViewAll, 1000)
+    const expense = expenses.find((e) => e.id === id)
+    if (!expense) return NextResponse.json({ ok: false, error: "Dépense non trouvée" }, { status: 404 })
+    const isCreator = expense.requested_by === user.name
+    if (!isCreator && !canViewAll) {
+      return NextResponse.json({ ok: false, error: "Vous ne pouvez modifier que vos propres dépenses" }, { status: 403 })
+    }
+    const updated = await updateExpense(id, {
+      description: String(body?.description ?? expense.description),
+      amount: Number(body?.amount ?? expense.amount),
+      category: String(body?.category ?? expense.category),
+      agency: String(body?.agency ?? expense.agency),
+      comment: body?.comment !== undefined ? String(body.comment) : expense.comment,
+    })
+    return NextResponse.json({ ok: true, data: updated })
+  } catch (e: any) {
+    return NextResponse.json({ ok: false, error: e?.message ?? "Erreur modification dépense" }, { status: 400 })
   }
 }
 

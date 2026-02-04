@@ -131,7 +131,7 @@ export async function createExpense(input: {
   return expense
 }
 
-// Fonction pour validation comptable
+// Fonction pour validation comptable (tolérante si la colonne debit_account_type n'existe pas)
 export async function validateExpenseByAccounting(
   id: string, 
   approved: boolean, 
@@ -141,42 +141,65 @@ export async function validateExpenseByAccounting(
 ): Promise<Expense> {
   const status = approved ? "accounting_approved" : "accounting_rejected"
   const debitAccount = approved && debit_account_type ? debit_account_type : null
-  
-  const rows = await sql<Expense[]>`
-    UPDATE expenses
-    SET 
-      status = ${status}, 
-      rejection_reason = ${rejection_reason || null}, 
-      accounting_validated_by = ${validatedBy},
-      accounting_validated_at = NOW(),
-      debit_account_type = COALESCE(${debitAccount}, debit_account_type, 'receipt_commissions'),
-      updated_at = NOW()
-    WHERE id = ${id}::uuid AND status = 'pending'
-    RETURNING 
-      id::text, 
-      description, 
-      amount::bigint as amount, 
-      category, 
-      status, 
-      date::text as date, 
-      requested_by, 
-      agency, 
-      comment, 
-      rejection_reason,
-      accounting_validated_by,
-      accounting_validated_at::text as accounting_validated_at,
-      director_validated_by,
-      director_validated_at::text as director_validated_at,
-      debit_account_type;
-  `
-  
+
+  const runWithDebitColumn = async (): Promise<Expense[]> => {
+    return sql<Expense[]>`
+      UPDATE expenses
+      SET 
+        status = ${status}, 
+        rejection_reason = ${rejection_reason || null}, 
+        accounting_validated_by = ${validatedBy},
+        accounting_validated_at = NOW(),
+        debit_account_type = COALESCE(${debitAccount}, debit_account_type, 'receipt_commissions'),
+        updated_at = NOW()
+      WHERE id = ${id}::uuid AND status = 'pending'
+      RETURNING 
+        id::text, description, amount::bigint as amount, category, status, date::text as date,
+        requested_by, agency, comment, rejection_reason,
+        accounting_validated_by, accounting_validated_at::text as accounting_validated_at,
+        director_validated_by, director_validated_at::text as director_validated_at,
+        debit_account_type
+    `
+  }
+
+  const runWithoutDebitColumn = async (): Promise<Expense[]> => {
+    const rows = await sql<Expense[]>`
+      UPDATE expenses
+      SET 
+        status = ${status}, 
+        rejection_reason = ${rejection_reason || null}, 
+        accounting_validated_by = ${validatedBy},
+        accounting_validated_at = NOW(),
+        updated_at = NOW()
+      WHERE id = ${id}::uuid AND status = 'pending'
+      RETURNING 
+        id::text, description, amount::bigint as amount, category, status, date::text as date,
+        requested_by, agency, comment, rejection_reason,
+        accounting_validated_by, accounting_validated_at::text as accounting_validated_at,
+        director_validated_by, director_validated_at::text as director_validated_at
+    `
+    return rows.map((r) => ({ ...r, debit_account_type: null }))
+  }
+
+  let rows: Expense[]
+  try {
+    rows = await runWithDebitColumn()
+  } catch (err: any) {
+    const msg = err?.message ?? String(err)
+    const code = err?.code
+    if (code === "42703" || (msg.includes("debit_account_type") && msg.includes("does not exist"))) {
+      rows = await runWithoutDebitColumn()
+    } else {
+      throw err
+    }
+  }
+
   if (rows.length === 0) {
     throw new Error("Dépense non trouvée ou déjà traitée")
   }
-  
+
   const expense = rows[0]
 
-  // Envoyer une notification email pour la validation comptable
   try {
     const emailData = convertExpenseToEmailData(expense)
     await sendExpenseAccountingValidatedNotification(emailData)
@@ -187,7 +210,7 @@ export async function validateExpenseByAccounting(
   return expense
 }
 
-// Fonction pour validation directeur
+// Fonction pour validation directeur (tolérante si debit_account_type n'existe pas)
 export async function validateExpenseByDirector(
   id: string, 
   approved: boolean, 
@@ -195,43 +218,52 @@ export async function validateExpenseByDirector(
   rejection_reason?: string
 ): Promise<Expense> {
   const status = approved ? "director_approved" : "director_rejected"
-  
-  const rows = await sql<Expense[]>`
-    UPDATE expenses
-    SET 
-      status = ${status}, 
-      rejection_reason = ${rejection_reason || null}, 
-      director_validated_by = ${validatedBy},
-      director_validated_at = NOW(),
-      updated_at = NOW()
-    WHERE id = ${id}::uuid AND status = 'accounting_approved'
-    RETURNING 
-      id::text, 
-      description, 
-      amount::bigint as amount, 
-      category, 
-      status, 
-      date::text as date, 
-      requested_by, 
-      agency, 
-      comment, 
-      rejection_reason,
-      deduct_from_excedents,
-      deducted_cashier_id,
-      debit_account_type,
-      accounting_validated_by,
-      accounting_validated_at::text as accounting_validated_at,
-      director_validated_by,
-      director_validated_at::text as director_validated_at;
-  `
-  
+
+  const runWithDebitColumn = async () =>
+    sql<Expense[]>`
+      UPDATE expenses
+      SET status = ${status}, rejection_reason = ${rejection_reason || null},
+          director_validated_by = ${validatedBy}, director_validated_at = NOW(), updated_at = NOW()
+      WHERE id = ${id}::uuid AND status = 'accounting_approved'
+      RETURNING id::text, description, amount::bigint as amount, category, status, date::text as date,
+        requested_by, agency, comment, rejection_reason, deduct_from_excedents, deducted_cashier_id,
+        debit_account_type, accounting_validated_by, accounting_validated_at::text as accounting_validated_at,
+        director_validated_by, director_validated_at::text as director_validated_at
+    `
+
+  const runWithoutDebitColumn = async () => {
+    const rows = await sql<Expense[]>`
+      UPDATE expenses
+      SET status = ${status}, rejection_reason = ${rejection_reason || null},
+          director_validated_by = ${validatedBy}, director_validated_at = NOW(), updated_at = NOW()
+      WHERE id = ${id}::uuid AND status = 'accounting_approved'
+      RETURNING id::text, description, amount::bigint as amount, category, status, date::text as date,
+        requested_by, agency, comment, rejection_reason, deduct_from_excedents, deducted_cashier_id,
+        accounting_validated_by, accounting_validated_at::text as accounting_validated_at,
+        director_validated_by, director_validated_at::text as director_validated_at
+    `
+    return rows.map((r) => ({ ...r, debit_account_type: null }))
+  }
+
+  let rows: Expense[]
+  try {
+    rows = await runWithDebitColumn()
+  } catch (err: any) {
+    const msg = err?.message ?? String(err)
+    const code = err?.code
+    if (code === "42703" || (msg.includes("debit_account_type") && msg.includes("does not exist"))) {
+      rows = await runWithoutDebitColumn()
+    } else {
+      throw err
+    }
+  }
+
   if (rows.length === 0) {
     throw new Error("Dépense non trouvée ou pas encore approuvée par la comptabilité")
   }
-  
+
   const expense: any = rows[0]
 
-  // Si la dépense est approuvée par le directeur
   if (approved) {
     try {
       if (expense.deduct_from_excedents && expense.deducted_cashier_id) {
@@ -257,7 +289,6 @@ export async function validateExpenseByDirector(
     }
   }
 
-  // Envoyer une notification email pour la validation directeur
   try {
     const emailData = convertExpenseToEmailData(expense)
     await sendExpenseDirectorValidatedNotification(emailData)
@@ -426,34 +457,53 @@ export async function setExpenseStatus(id: string, status: ExpenseStatus, reject
   return rows[0]
 }
 
-// Fonction pour supprimer une dépense (seulement si elle n'est pas validée par le directeur)
-export async function deleteExpense(id: string): Promise<void> {
-  // Vérifier que la dépense existe et qu'elle n'est pas validée par le directeur
-  const checkRows = await sql<Expense[]>`
-    SELECT 
-      id::text, 
-      status,
-      director_validated_by
-    FROM expenses
-    WHERE id = ${id}::uuid
+/** Vérifie qu'une dépense existe et n'est pas validée par le directeur (pour modification/suppression). */
+async function assertExpenseEditable(id: string): Promise<{ status: string }> {
+  const checkRows = await sql<{ status: string }[]>`
+    SELECT status FROM expenses WHERE id = ${id}::uuid
   `
-  
-  if (checkRows.length === 0) {
-    throw new Error("Dépense non trouvée")
-  }
-  
+  if (checkRows.length === 0) throw new Error("Dépense non trouvée")
   const expense = checkRows[0]
-  
-  // Vérifier que la dépense n'est pas validée par le directeur (nouveau ou ancien format)
   if (expense.status === "director_approved" || expense.status === "approved") {
-    throw new Error("Impossible de supprimer une dépense déjà validée par le directeur")
+    throw new Error("Impossible de modifier ou supprimer une dépense déjà validée par le directeur")
   }
-  
-  // Supprimer la dépense
-  await sql`
-    DELETE FROM expenses
-    WHERE id = ${id}::uuid
-  `
+  return expense
 }
 
+/** Met à jour une dépense (description, amount, category, agency, comment). Refusé si déjà validée par le directeur. */
+export async function updateExpense(
+  id: string,
+  patch: { description: string; amount: number; category: string; agency: string; comment?: string }
+): Promise<Expense> {
+  await assertExpenseEditable(id)
+  const rows = await sql<Expense[]>`
+    UPDATE expenses
+    SET
+      description = ${patch.description},
+      amount = ${patch.amount}::bigint,
+      category = ${patch.category},
+      agency = ${patch.agency},
+      comment = ${patch.comment ?? null},
+      updated_at = NOW()
+    WHERE id = ${id}::uuid
+    RETURNING id::text, description, amount::bigint as amount, category, status, date::text as date,
+      requested_by, agency, comment, rejection_reason,
+      accounting_validated_by, accounting_validated_at::text as accounting_validated_at,
+      director_validated_by, director_validated_at::text as director_validated_at
+  `
+  if (rows.length === 0) throw new Error("Dépense non trouvée")
+  const out = rows[0]
+  try {
+    const withDebit = await sql<Expense[]>`SELECT ${sql.unsafe("id::text, description, amount::bigint as amount, category, status, date::text as date, requested_by, agency, comment, rejection_reason, accounting_validated_by, accounting_validated_at::text as accounting_validated_at, director_validated_by, director_validated_at::text as director_validated_at, debit_account_type")} FROM expenses WHERE id = ${id}::uuid`
+    if (withDebit.length > 0) return { ...out, debit_account_type: (withDebit[0] as any).debit_account_type ?? null }
+  } catch {
+    // colonne debit_account_type absente
+  }
+  return { ...out, debit_account_type: null }
+}
 
+/** Supprime une dépense. Refusé si déjà validée par le directeur. */
+export async function deleteExpense(id: string): Promise<void> {
+  await assertExpenseEditable(id)
+  await sql`DELETE FROM expenses WHERE id = ${id}::uuid`
+}
