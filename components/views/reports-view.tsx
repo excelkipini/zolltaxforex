@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Calendar, Download, TrendingUp, TrendingDown, DollarSign, Activity, Loader2 } from "lucide-react"
+import { PageLoader } from "@/components/ui/page-loader"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend } from "recharts"
 
 interface SessionUser {
@@ -199,12 +200,7 @@ export function ReportsView({ user }: ReportsViewProps) {
   }
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-8 w-8 animate-spin" />
-        <span className="ml-2">Chargement des données...</span>
-      </div>
-    )
+    return <PageLoader message="Chargement des données..." overlay={false} className="min-h-[320px]" />
   }
 
   if (error) {

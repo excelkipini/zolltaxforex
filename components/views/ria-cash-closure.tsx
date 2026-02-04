@@ -21,6 +21,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { AlertCircle, CheckCircle, XCircle, Edit, DollarSign, Clock, Send, Download } from "lucide-react"
+import { PageLoader } from "@/components/ui/page-loader"
 import { getSessionClient } from "@/lib/auth-client"
 
 type CashDeclarationStatus = 'pending' | 'submitted' | 'rejected' | 'corrected' | 'validated'
@@ -607,7 +608,7 @@ export function RiaCashClosure() {
   }
 
   if (loading && !user) {
-    return <div className="flex items-center justify-center p-8">Chargement...</div>
+    return <PageLoader message="Chargement..." overlay={false} />
   }
 
   return (

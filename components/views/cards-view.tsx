@@ -28,6 +28,7 @@ import {
   Battery,
   Calendar
 } from "lucide-react"
+import { PageLoader } from "@/components/ui/page-loader"
 
 type CardData = {
   id: string
@@ -394,12 +395,7 @@ export function CardsView() {
   }
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <RefreshCw className="h-8 w-8 animate-spin" />
-        <span className="ml-2">Chargement des cartes...</span>
-      </div>
-    )
+    return <PageLoader message="Chargement des cartes..." overlay={false} className="min-h-[320px]" />
   }
 
   return (

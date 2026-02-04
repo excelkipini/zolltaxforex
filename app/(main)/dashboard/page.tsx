@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { RoleDashboard } from "@/components/role-dashboard"
+import { PageLoader } from "@/components/ui/page-loader"
 import { getSessionClient, SessionUser } from "@/lib/auth-client"
 
 export default function DashboardPage() {
@@ -40,14 +41,7 @@ export default function DashboardPage() {
   }, [router])
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Chargement du dashboard...</p>
-        </div>
-      </div>
-    )
+    return <PageLoader message="Chargement du dashboard..." overlay={false} className="min-h-screen" />
   }
 
   if (!user) {

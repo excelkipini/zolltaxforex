@@ -12,6 +12,7 @@ import { Calendar } from "@/components/ui/calendar"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Search, Filter, Eye, Download, FileDown, CheckCircle, Check, X, AlertTriangle, ArrowUpDown, ArrowUp, ArrowDown, ChevronLeft, ChevronRight, Printer, Trash2, Clock, Play, FileUp, Upload, Calendar as CalendarIcon } from "lucide-react"
+import { PageLoader } from "@/components/ui/page-loader"
 import { useToast } from "@/hooks/use-toast"
 import { format } from "date-fns"
 import { fr } from "date-fns/locale"
@@ -41,6 +42,7 @@ interface TransactionsViewProps {
 // Fonctions utilitaires supprimées - utilisation de l'API uniquement
 
 export function TransactionsView({ user }: TransactionsViewProps = {}) {
+  const [loading, setLoading] = React.useState(true)
   const [transactions, setTransactions] = React.useState<Transaction[]>([])
   const [filteredTransactions, setFilteredTransactions] = React.useState<Transaction[]>([])
   const [searchTerm, setSearchTerm] = React.useState("")
@@ -88,16 +90,23 @@ export function TransactionsView({ user }: TransactionsViewProps = {}) {
     }
   }
 
+  const isInitialLoadRef = React.useRef(true)
   // Charger toutes les transactions depuis l'API uniquement
   React.useEffect(() => {
+    let cancelled = false
     const loadTransactionsFromAPI = async () => {
+      if (isInitialLoadRef.current) {
+        setLoading(true)
+        isInitialLoadRef.current = false
+      }
       try {
         const res = await fetch("/api/transactions")
         const data = await res.json()
+        if (cancelled) return
         if (res.ok && data?.ok && Array.isArray(data.data)) {
           const apiTransactions = data.data.map((item: any) => ({
             ...item,
-            amount: Number(item.amount), // Convertir en nombre
+            amount: Number(item.amount),
             details: typeof item.details === 'string' ? JSON.parse(item.details) : item.details
           }))
           setTransactions(apiTransactions)
@@ -107,15 +116,17 @@ export function TransactionsView({ user }: TransactionsViewProps = {}) {
           setFilteredTransactions([])
         }
       } catch (error) {
-        console.error("Erreur lors du chargement:", error)
-        setTransactions([])
-        setFilteredTransactions([])
+        if (!cancelled) {
+          setTransactions([])
+          setFilteredTransactions([])
+        }
+      } finally {
+        if (!cancelled) setLoading(false)
       }
     }
 
     loadTransactionsFromAPI()
 
-    // Écouter les événements personnalisés pour recharger depuis l'API
     const handleTransferCreated = () => loadTransactionsFromAPI()
     const handleReceptionCreated = () => loadTransactionsFromAPI()
     const handleExchangeCreated = () => loadTransactionsFromAPI()
@@ -125,9 +136,9 @@ export function TransactionsView({ user }: TransactionsViewProps = {}) {
     window.addEventListener('receptionCreated', handleReceptionCreated as EventListener)
     window.addEventListener('exchangeCreated', handleExchangeCreated as EventListener)
     window.addEventListener('transactionStatusChanged', handleTransactionStatusChanged as EventListener)
-    
-    // Nettoyer les écouteurs
+
     return () => {
+      cancelled = true
       window.removeEventListener('transferCreated', handleTransferCreated as EventListener)
       window.removeEventListener('receptionCreated', handleReceptionCreated as EventListener)
       window.removeEventListener('exchangeCreated', handleExchangeCreated as EventListener)
@@ -1864,6 +1875,10 @@ export function TransactionsView({ user }: TransactionsViewProps = {}) {
         variant: "destructive"
       })
     }
+  }
+
+  if (loading) {
+    return <PageLoader message="Chargement des opérations..." overlay={false} className="min-h-[400px]" />
   }
 
   return (

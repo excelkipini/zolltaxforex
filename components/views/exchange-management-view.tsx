@@ -33,6 +33,7 @@ import {
   Euro,
 } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { PageLoader } from "@/components/ui/page-loader"
 import { useDocumentTitle } from "@/hooks/use-document-title"
 import { useToast } from "@/hooks/use-toast"
 import { format } from "date-fns"
@@ -677,11 +678,7 @@ export function ExchangeManagementView({ user }: ExchangeManagementViewProps) {
   }
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-lg">Chargement des caisses...</div>
-      </div>
-    )
+    return <PageLoader message="Chargement des caisses..." overlay={false} className="min-h-[320px]" />
   }
 
   return (

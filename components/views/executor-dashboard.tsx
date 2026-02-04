@@ -28,6 +28,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
 import { Label } from "@/components/ui/label"
+import { PageLoader } from "@/components/ui/page-loader"
 import { useDocumentTitle } from "@/hooks/use-document-title"
 import { format } from "date-fns"
 import { fr } from "date-fns/locale"
@@ -338,11 +339,7 @@ export default function ExecutorDashboard({ user }: ExecutorDashboardProps) {
     `${Number(amount).toLocaleString("fr-FR", { minimumFractionDigits: 0, maximumFractionDigits: 0 })} ${currency}`
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-lg">Chargement des transactions...</div>
-      </div>
-    )
+    return <PageLoader message="Chargement des transactions..." overlay={false} className="min-h-[320px]" />
   }
 
   return (

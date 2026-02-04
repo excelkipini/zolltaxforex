@@ -39,6 +39,7 @@ import {
 } from "lucide-react"
 import { ActionGuard } from "@/components/permission-guard"
 import { PDFReceipt } from "@/components/pdf-receipt"
+import { PageLoader } from "@/components/ui/page-loader"
 import type { SessionUser } from "@/lib/auth"
 
 interface ExpensesViewProps {
@@ -122,32 +123,37 @@ export function ExpensesView({ user }: ExpensesViewProps) {
   const [approveAccountingDialogOpen, setApproveAccountingDialogOpen] = useState(false)
   const [expenseToApproveAccounting, setExpenseToApproveAccounting] = useState<string | number | null>(null)
   const [debitAccountType, setDebitAccountType] = useState<"coffre" | "commissions" | "receipt_commissions" | "ecobank" | "uba">("receipt_commissions")
+  const [loading, setLoading] = useState(true)
 
   const expenses = items
 
   // Load from API when DB is configured
   useEffect(() => {
+    let cancelled = false
     ;(async () => {
+      setLoading(true)
       try {
         const res = await fetch("/api/expenses")
         const data = await res.json()
+        if (cancelled) return
         if (res.ok && data?.ok && Array.isArray(data.data)) {
-          // Transformer les données de l'API pour correspondre au format du composant
           const apiData = data.data.map((item: any) => ({
             ...item,
-            amount: Number(item.amount), // Convertir le montant en nombre
+            amount: Number(item.amount),
             requestedBy: item.requested_by || item.requestedBy,
-            id: item.id // Garder l'ID original de l'API
+            id: item.id
           }))
-          
-          // Utiliser toujours les données de l'API (même si vides)
           setItems(apiData)
         } else if (res.status === 401 || res.status === 403) {
         } else {
         }
       } catch (error) {
+        if (!cancelled) setItems([])
+      } finally {
+        if (!cancelled) setLoading(false)
       }
     })()
+    return () => { cancelled = true }
   }, [])
 
   // Determine visibility scope: director/delegate and accounting see all, others only their own
@@ -883,6 +889,10 @@ export function ExpensesView({ user }: ExpensesViewProps) {
       // ignore
     }
   }, [items, user.name, user.role, toast])
+
+  if (loading) {
+    return <PageLoader message="Chargement des dépenses..." overlay={false} className="min-h-[320px]" />
+  }
 
   return (
     <div className="space-y-6">

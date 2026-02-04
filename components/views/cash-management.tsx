@@ -19,6 +19,7 @@ import {
   RefreshCw,
   AlertCircle
 } from "lucide-react"
+import { PageLoader } from "@/components/ui/page-loader"
 import { useToast } from "@/hooks/use-toast"
 
 type CashAccount = {
@@ -334,10 +335,7 @@ export function CashManagement({ user }: CashManagementProps) {
   if (loading) {
     return (
       <div className="flex-1 space-y-4 p-4 md:p-6">
-        <div className="text-center py-8">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Chargement des données de caisse...</p>
-        </div>
+        <PageLoader message="Chargement des données de caisse..." overlay={false} />
       </div>
     )
   }

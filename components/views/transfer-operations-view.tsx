@@ -34,6 +34,7 @@ import {
   Archive,
   Loader2,
 } from "lucide-react"
+import { PageLoader } from "@/components/ui/page-loader"
 import { useToast } from "@/hooks/use-toast"
 import { useExchangeRates } from "@/hooks/use-exchange-rates"
 import { format } from "date-fns"
@@ -377,14 +378,7 @@ export function TransferOperationsView({ user }: TransferOperationsViewProps) {
 
   return (
     <div className="relative min-h-[200px]">
-      {loading && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-white/80 backdrop-blur-sm">
-          <div className="flex flex-col items-center gap-4">
-            <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-200 border-t-blue-600" />
-            <span className="text-sm font-medium text-gray-700">Chargement...</span>
-          </div>
-        </div>
-      )}
+      {loading && <PageLoader message="Chargement..." overlay />}
       <div className="space-y-6">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Opérations - Transfert d&apos;argent</h2>

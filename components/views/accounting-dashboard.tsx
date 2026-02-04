@@ -33,6 +33,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/hooks/use-toast"
 import type { SessionUser } from "@/lib/auth-client"
+import { PageLoader } from "@/components/ui/page-loader"
 import { useDocumentTitle } from "@/hooks/use-document-title"
 import { PDFReceipt } from "@/components/pdf-receipt"
 import { useExchangeRates } from "@/hooks/use-exchange-rates"
@@ -363,10 +364,7 @@ export function AccountingDashboard({ user }: AccountingDashboardProps) {
   if (loading) {
     return (
       <div className="flex-1 space-y-4 p-4 md:p-6">
-        <div className="text-center py-8">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Chargement du tableau de bord...</p>
-        </div>
+        <PageLoader message="Chargement du tableau de bord..." overlay={false} />
       </div>
     )
   }
