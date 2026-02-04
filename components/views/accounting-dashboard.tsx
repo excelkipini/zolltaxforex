@@ -27,10 +27,14 @@ import {
   CreditCard,
   Plus,
   Trash2,
+  Pencil,
 } from "lucide-react"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { useToast } from "@/hooks/use-toast"
 import type { SessionUser } from "@/lib/auth-client"
 import { PageLoader } from "@/components/ui/page-loader"
@@ -64,6 +68,19 @@ export function AccountingDashboard({ user }: AccountingDashboardProps) {
   const [rejectDialogOpen, setRejectDialogOpen] = React.useState(false)
   const [rejectionReason, setRejectionReason] = React.useState("")
   const [expenseToReject, setExpenseToReject] = React.useState<any>(null)
+
+  // États pour modifier / supprimer une dépense
+  const [editDialogOpen, setEditDialogOpen] = React.useState(false)
+  const [expenseToEdit, setExpenseToEdit] = React.useState<any>(null)
+  const [editDesc, setEditDesc] = React.useState("")
+  const [editAmount, setEditAmount] = React.useState("")
+  const [editCategory, setEditCategory] = React.useState("")
+  const [editAgency, setEditAgency] = React.useState("")
+  const [editComment, setEditComment] = React.useState("")
+  const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false)
+  const [expenseToDelete, setExpenseToDelete] = React.useState<any>(null)
+
+  const expenseCategories = ["Bureau", "Transport", "Communication", "Formation", "Équipement", "Maintenance", "Marketing", "Autre", "Autres"]
 
   // Mettre à jour le titre de la page selon le rôle
   const isDirectorDelegate = user.role === "director" || user.role === "delegate"
@@ -298,6 +315,77 @@ export function AccountingDashboard({ user }: AccountingDashboardProps) {
     setExpenseToReject(null)
     setRejectionReason("")
     ;(window as any).currentValidationType = undefined
+  }
+
+  const openEditDialog = (expense: any) => {
+    setExpenseToEdit(expense)
+    setEditDesc(expense.description ?? "")
+    setEditAmount(String(expense.amount ?? ""))
+    setEditCategory(expense.category ?? "Autre")
+    setEditAgency(expense.agency ?? "")
+    setEditComment(expense.comment ?? "")
+    setEditDialogOpen(true)
+  }
+
+  const submitEdit = async () => {
+    if (!expenseToEdit) return
+    const amount = Number(editAmount)
+    if (!editDesc.trim() || Number.isNaN(amount) || amount < 0) {
+      toast({ title: "Champs invalides", description: "Libellé et montant (positif) sont requis.", variant: "destructive" })
+      return
+    }
+    try {
+      const res = await fetch("/api/expenses", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: expenseToEdit.id,
+          description: editDesc.trim(),
+          amount,
+          category: editCategory || "Autre",
+          agency: editAgency.trim() || expenseToEdit.agency,
+          comment: editComment.trim() || undefined,
+        }),
+      })
+      const data = await res.json()
+      if (res.ok && data?.ok) {
+        toast({ title: "Dépense modifiée", description: "Les modifications ont été enregistrées." })
+        setEditDialogOpen(false)
+        setExpenseToEdit(null)
+        await loadStats()
+      } else {
+        toast({ title: "Erreur", description: data?.error ?? "Erreur lors de la modification", variant: "destructive" })
+      }
+    } catch {
+      toast({ title: "Erreur", description: "Impossible de modifier la dépense", variant: "destructive" })
+    }
+  }
+
+  const handleDeleteExpense = (expense: any) => {
+    if (expense.status === "director_approved" || expense.status === "approved") {
+      toast({ title: "Suppression impossible", description: "Impossible de supprimer une dépense validée par le directeur.", variant: "destructive" })
+      return
+    }
+    setExpenseToDelete(expense)
+    setDeleteDialogOpen(true)
+  }
+
+  const confirmDeleteExpense = async () => {
+    if (!expenseToDelete) return
+    try {
+      const res = await fetch(`/api/expenses?id=${expenseToDelete.id}`, { method: "DELETE" })
+      const data = await res.json()
+      if (res.ok && data?.ok) {
+        toast({ title: "Dépense supprimée", description: `"${expenseToDelete.description}" a été supprimée.` })
+        setDeleteDialogOpen(false)
+        setExpenseToDelete(null)
+        await loadStats()
+      } else {
+        toast({ title: "Erreur", description: data?.error ?? "Erreur lors de la suppression", variant: "destructive" })
+      }
+    } catch {
+      toast({ title: "Erreur", description: "Impossible de supprimer la dépense", variant: "destructive" })
+    }
   }
 
   // Formater le montant
@@ -594,109 +682,177 @@ export function AccountingDashboard({ user }: AccountingDashboardProps) {
                           </span>
                         </div>
                       </div>
-                      
-                      {expense.comment && (
-                        <div className="mt-3 p-3 bg-gray-50 rounded-md">
-                          <p className="text-sm text-gray-700">
-                            <span className="font-medium">Commentaire :</span> {expense.comment}
-                          </p>
-                        </div>
-                      )}
                     </div>
                     
                     <div className="ml-4 flex flex-col gap-2">
                       {/* Boutons pour comptables - validation comptable */}
                       {user.role === "accounting" && expense.status === "pending" && (
                         <>
-                          <div className="flex gap-2">
+                          <div className="flex flex-wrap gap-2">
                             <Button
                               size="sm"
-                              variant="outline"
-                              className="text-green-600 border-green-600 hover:bg-green-50 bg-transparent"
+                              className="h-9 gap-1.5 rounded-lg bg-emerald-600 px-3 font-medium text-white shadow-sm hover:bg-emerald-700 dark:bg-emerald-600 dark:hover:bg-emerald-500"
                               onClick={() => validateExpense(expense.id, true, "accounting")}
                             >
-                              <CheckCircle className="h-4 w-4 mr-1" />
+                              <CheckCircle className="h-4 w-4" />
                               Approuver
                             </Button>
                             <Button
                               size="sm"
                               variant="outline"
-                              className="text-red-600 border-red-600 hover:bg-red-50 bg-transparent"
+                              className="h-9 gap-1.5 rounded-lg border-2 border-red-500/70 bg-red-500/5 font-medium text-red-600 hover:bg-red-500/15 dark:border-red-400/70 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20"
                               onClick={() => openRejectDialog(expense.id, "accounting")}
                             >
-                              <XCircle className="h-4 w-4 mr-1" />
+                              <XCircle className="h-4 w-4" />
                               Rejeter
                             </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-9 gap-1.5 rounded-lg border-2 border-blue-500/70 bg-blue-500/5 font-medium text-blue-700 hover:bg-blue-500/15 dark:border-blue-400/70 dark:text-blue-300 dark:hover:bg-blue-500/20"
+                              onClick={() => openEditDialog(expense)}
+                            >
+                              <Pencil className="h-4 w-4" />
+                              Modifier
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-9 gap-1.5 rounded-lg border-2 border-amber-500/70 bg-amber-500/5 font-medium text-amber-800 hover:bg-amber-500/15 dark:border-amber-400/70 dark:text-amber-300 dark:hover:bg-amber-500/20"
+                              onClick={() => handleDeleteExpense(expense)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                              Supprimer
+                            </Button>
                           </div>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="text-blue-600 border-blue-300 hover:bg-blue-50"
-                            asChild
-                          >
-                            <a href="/expenses">
-                              <Eye className="h-4 w-4 mr-1" />
-                              Voir détails
-                            </a>
-                          </Button>
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-9 gap-1.5 rounded-lg border-2 border-slate-300/80 bg-slate-500/5 font-medium hover:bg-slate-500/10 dark:border-slate-500/60 dark:bg-slate-500/10 dark:hover:bg-slate-500/20"
+                              >
+                                <Eye className="h-4 w-4" />
+                                Voir le commentaire
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="max-w-sm p-4 bg-popover" align="end">
+                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Commentaire</p>
+                              <p className="mt-2 text-sm text-foreground whitespace-pre-wrap">
+                                {expense.comment?.trim() || "Aucun commentaire"}
+                              </p>
+                            </PopoverContent>
+                          </Popover>
                         </>
                       )}
-                      
-                      {/* Boutons pour directeurs - validation directeur */}
-                      {isDirectorDelegate && expense.status === "accounting_approved" && (
+
+                      {/* Boutons pour directeurs - même modèle que le comptable */}
+                      {isDirectorDelegate && (expense.status === "accounting_approved" || expense.status === "pending") && (
                         <>
-                          <div className="flex gap-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="text-green-600 border-green-600 hover:bg-green-50 bg-transparent"
-                              onClick={() => validateExpense(expense.id, true, "director")}
-                            >
-                              <CheckCircle className="h-4 w-4 mr-1" />
-                              Valider
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="text-red-600 border-red-600 hover:bg-red-50 bg-transparent"
-                              onClick={() => openRejectDialog(expense.id, "director")}
-                            >
-                              <XCircle className="h-4 w-4 mr-1" />
-                              Rejeter
-                            </Button>
+                          <div className="flex flex-wrap gap-2">
+                            {expense.status === "accounting_approved" && (
+                              <>
+                                <Button
+                                  size="sm"
+                                  className="h-9 gap-1.5 rounded-lg bg-emerald-600 px-3 font-medium text-white shadow-sm hover:bg-emerald-700 dark:bg-emerald-600 dark:hover:bg-emerald-500"
+                                  onClick={() => validateExpense(expense.id, true, "director")}
+                                >
+                                  <CheckCircle className="h-4 w-4" />
+                                  Valider
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-9 gap-1.5 rounded-lg border-2 border-red-500/70 bg-red-500/5 font-medium text-red-600 hover:bg-red-500/15 dark:border-red-400/70 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20"
+                                  onClick={() => openRejectDialog(expense.id, "director")}
+                                >
+                                  <XCircle className="h-4 w-4" />
+                                  Rejeter
+                                </Button>
+                              </>
+                            )}
+                            {expense.status !== "director_approved" && expense.status !== "approved" && (
+                              <>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-9 gap-1.5 rounded-lg border-2 border-blue-500/70 bg-blue-500/5 font-medium text-blue-700 hover:bg-blue-500/15 dark:border-blue-400/70 dark:text-blue-300 dark:hover:bg-blue-500/20"
+                                  onClick={() => openEditDialog(expense)}
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                  Modifier
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-9 gap-1.5 rounded-lg border-2 border-amber-500/70 bg-amber-500/5 font-medium text-amber-800 hover:bg-amber-500/15 dark:border-amber-400/70 dark:text-amber-300 dark:hover:bg-amber-500/20"
+                                  onClick={() => handleDeleteExpense(expense)}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                  Supprimer
+                                </Button>
+                              </>
+                            )}
                           </div>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="text-blue-600 border-blue-300 hover:bg-blue-50"
-                            asChild
-                          >
-                            <a href="/expenses">
-                              <Eye className="h-4 w-4 mr-1" />
-                              Voir détails
-                            </a>
-                          </Button>
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-9 gap-1.5 rounded-lg border-2 border-slate-300/80 bg-slate-500/5 font-medium hover:bg-slate-500/10 dark:border-slate-500/60 dark:bg-slate-500/10 dark:hover:bg-slate-500/20"
+                              >
+                                <Eye className="h-4 w-4" />
+                                Voir le commentaire
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="max-w-sm p-4 bg-popover" align="end">
+                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Commentaire</p>
+                              <p className="mt-2 text-sm text-foreground whitespace-pre-wrap">
+                                {expense.comment?.trim() || "Aucun commentaire"}
+                              </p>
+                            </PopoverContent>
+                          </Popover>
+                          {(expense.status === "director_approved" || expense.status === "approved") && (
+                            <PDFReceipt
+                              expense={{
+                                id: String(expense.id),
+                                description: expense.description,
+                                amount: expense.amount,
+                                category: expense.category,
+                                status: expense.status,
+                                date: expense.date,
+                                requested_by: expense.requested_by,
+                                agency: expense.agency,
+                                comment: expense.comment,
+                                rejection_reason: expense.rejection_reason
+                              }}
+                              user={user}
+                            />
+                          )}
                         </>
                       )}
-                      
-                      {/* Bouton "Voir détails" pour les autres cas */}
-                      {((user.role === "accounting" && expense.status !== "pending") || 
-                        (isDirectorDelegate && expense.status !== "accounting_approved") ||
-                        (user.role !== "accounting" && !isDirectorDelegate)) && (
+
+                      {/* Comptable (déjà traité) ou autres rôles : seulement Voir le commentaire + PDF si approuvée */}
+                      {user.role === "accounting" && expense.status !== "pending" && (
                         <div className="flex flex-col gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="text-blue-600 border-blue-300 hover:bg-blue-50"
-                            asChild
-                          >
-                            <a href="/expenses">
-                              <Eye className="h-4 w-4 mr-1" />
-                              Voir détails
-                            </a>
-                          </Button>
-                          
-                          {/* PDF Receipt pour les dépenses finalement approuvées */}
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-9 gap-1.5 rounded-lg border-2 border-slate-300/80 bg-slate-500/5 font-medium hover:bg-slate-500/10 dark:border-slate-500/60 dark:bg-slate-500/10 dark:hover:bg-slate-500/20"
+                              >
+                                <Eye className="h-4 w-4" />
+                                Voir le commentaire
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="max-w-sm p-4 bg-popover" align="end">
+                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Commentaire</p>
+                              <p className="mt-2 text-sm text-foreground whitespace-pre-wrap">
+                                {expense.comment?.trim() || "Aucun commentaire"}
+                              </p>
+                            </PopoverContent>
+                          </Popover>
                           {(expense.status === "director_approved" || expense.status === "approved") && (
                             <PDFReceipt
                               expense={{
@@ -883,6 +1039,80 @@ export function AccountingDashboard({ user }: AccountingDashboardProps) {
           </div>
         </CardContent>
       </Card>
+
+      {/* Dialogue pour modifier une dépense */}
+      <Dialog open={editDialogOpen} onOpenChange={(open) => { setEditDialogOpen(open); if (!open) setExpenseToEdit(null) }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Modifier la dépense</DialogTitle>
+            <DialogDescription>
+              Modifiez les champs ci-dessous. Les dépenses validées par le directeur ne sont plus modifiables.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="edit-desc">Libellé</Label>
+              <Input id="edit-desc" className="mt-1" value={editDesc} onChange={(e) => setEditDesc(e.target.value)} />
+            </div>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div>
+                <Label htmlFor="edit-amount">Montant (XAF)</Label>
+                <Input id="edit-amount" type="number" min={0} className="mt-1" value={editAmount} onChange={(e) => setEditAmount(e.target.value)} />
+              </div>
+              <div>
+                <Label htmlFor="edit-category">Catégorie</Label>
+                <Select value={editCategory} onValueChange={setEditCategory}>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="Catégorie" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {expenseCategories.map((c) => (
+                      <SelectItem key={c} value={c}>{c}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div>
+              <Label htmlFor="edit-agency">Agence</Label>
+              <Input id="edit-agency" className="mt-1" value={editAgency} onChange={(e) => setEditAgency(e.target.value)} placeholder="Agence" />
+            </div>
+            <div>
+              <Label htmlFor="edit-comment">Commentaire</Label>
+              <Textarea id="edit-comment" className="mt-1" value={editComment} onChange={(e) => setEditComment(e.target.value)} placeholder="Optionnel" rows={3} />
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => { setEditDialogOpen(false); setExpenseToEdit(null) }}>Annuler</Button>
+            <Button onClick={submitEdit}>
+              <Pencil className="h-4 w-4 mr-1" />
+              Enregistrer
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialogue de confirmation de suppression */}
+      <Dialog open={deleteDialogOpen} onOpenChange={(open) => { setDeleteDialogOpen(open); if (!open) setExpenseToDelete(null) }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-600" />
+              Confirmer la suppression
+            </DialogTitle>
+            <DialogDescription>
+              Êtes-vous sûr de vouloir supprimer la dépense &quot;{expenseToDelete?.description}&quot; ? Cette action est irréversible.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => { setDeleteDialogOpen(false); setExpenseToDelete(null) }}>Annuler</Button>
+            <Button variant="destructive" onClick={confirmDeleteExpense}>
+              <Trash2 className="h-4 w-4 mr-1" />
+              Supprimer
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Dialogue pour rejeter une dépense avec motif */}
       <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>

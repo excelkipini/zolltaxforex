@@ -1210,30 +1210,7 @@ export function ExpensesView({ user }: ExpensesViewProps) {
                       )}
                     >
                       <td className="px-5 py-3.5">
-                        <div className="flex flex-col gap-1">
-                          <span className="font-medium text-foreground">{expense.description}</span>
-                          {((expense as any).comment && (expense as any).comment.trim()) && (
-                            <Popover>
-                              <PopoverTrigger asChild>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-9 w-fit gap-1.5 rounded-lg border-2 border-slate-300/80 bg-slate-500/5 px-2.5 font-medium text-slate-700 shadow-sm transition-all hover:border-slate-400 hover:bg-slate-500/10 hover:text-slate-900 dark:border-slate-500/60 dark:bg-slate-500/10 dark:text-slate-300 dark:hover:border-slate-400 dark:hover:bg-slate-500/20 dark:hover:text-slate-100"
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  <Eye className="h-4 w-4" />
-                                  Voir le commentaire
-                                </Button>
-                              </PopoverTrigger>
-                              <PopoverContent className="max-w-sm p-4 bg-popover" align="start">
-                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Commentaire</p>
-                                <p className="mt-2 text-sm text-foreground whitespace-pre-wrap">
-                                  {(expense as any).comment}
-                                </p>
-                              </PopoverContent>
-                            </Popover>
-                          )}
-                        </div>
+                        <span className="font-medium text-foreground">{expense.description}</span>
                       </td>
                       <td className="px-5 py-3.5 text-right">
                         <span className="font-semibold tabular-nums text-foreground">{expense.amount.toLocaleString()}</span>
@@ -1272,7 +1249,8 @@ export function ExpensesView({ user }: ExpensesViewProps) {
                               </Button>
                             </>
                           )}
-                          {expense.status === "accounting_approved" && isDirectorDelegate && (
+                          {/* Directeur : Valider/Rejeter uniquement si déjà approuvé par la compta (même modèle que le tableau de bord) */}
+                          {isDirectorDelegate && expense.status === "accounting_approved" && (
                             <>
                               <Button
                                 size="sm"
@@ -1293,7 +1271,8 @@ export function ExpensesView({ user }: ExpensesViewProps) {
                               </Button>
                             </>
                           )}
-                          {expense.status === "pending" && canModerateAll && user.role !== "accounting" && (
+                          {/* Délégué/directeur en mode "moderate all" sur dépense pending (autre workflow) : Approuver/Rejeter */}
+                          {expense.status === "pending" && canModerateAll && user.role !== "accounting" && !isDirectorDelegate && (
                             <>
                               <Button
                                 size="sm"
@@ -1336,6 +1315,24 @@ export function ExpensesView({ user }: ExpensesViewProps) {
                               </Button>
                             </>
                           )}
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-9 gap-1.5 rounded-lg border-2 border-slate-300/80 bg-slate-500/5 font-medium text-slate-700 shadow-sm transition-all hover:bg-slate-500/10 hover:border-slate-400 dark:border-slate-500/60 dark:bg-slate-500/10 dark:text-slate-300 dark:hover:bg-slate-500/20 dark:hover:text-slate-100"
+                              >
+                                <Eye className="h-4 w-4" />
+                                <span className="hidden sm:inline">Voir le commentaire</span>
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="max-w-sm p-4 bg-popover" align="end">
+                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Commentaire</p>
+                              <p className="mt-2 text-sm text-foreground whitespace-pre-wrap">
+                                {(expense as any).comment?.trim() || "Aucun commentaire"}
+                              </p>
+                            </PopoverContent>
+                          </Popover>
                           {(expense.status === "director_approved" || expense.status === "approved") && (
                             <PDFReceipt
                               expense={{
