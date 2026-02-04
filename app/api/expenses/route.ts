@@ -8,27 +8,55 @@ import {
   validateExpenseByDirector,
   getExpensesPendingAccounting,
   getExpensesPendingDirector,
+  getExpensesStats,
+  getExpensesPendingForDashboard,
   deleteExpense
 } from "@/lib/expenses-queries"
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const { user } = await requireAuth()
   const isDirectorDelegate = user.role === "director" || user.role === "delegate"
   const canModerateAll = isDirectorDelegate
   const canViewAll = isDirectorDelegate || user.role === "accounting"
-  
+  const { searchParams } = new URL(request.url)
+  const type = searchParams.get("type")
+  const limitParam = searchParams.get("limit")
+
   try {
-    // Pour les comptables et directeurs, retourner toutes les dépenses avec leurs états
+    // Tableau de bord : stats + liste des dépenses en attente (léger, rapide)
+    if (type === "dashboard") {
+      const [stats, pendingList] = await Promise.all([
+        getExpensesStats(user.name, canViewAll, user.role),
+        getExpensesPendingForDashboard(user.name, canViewAll, user.role),
+      ])
+      return NextResponse.json({
+        ok: true,
+        data: { stats, pendingList: pendingList.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()) },
+        type: "dashboard",
+      })
+    }
+
+    // Stats seules (très léger)
+    if (type === "stats") {
+      const stats = await getExpensesStats(user.name, canViewAll, user.role)
+      return NextResponse.json({ ok: true, data: stats, type: "stats" })
+    }
+
+    // Liste complète (avec limite optionnelle pour premier chargement plus rapide)
+    const parsed = limitParam ? parseInt(limitParam, 10) : NaN
+    const limit = Number.isNaN(parsed) ? 500 : Math.min(500, Math.max(1, parsed))
     if (canViewAll) {
-      const allExpenses = await listExpensesForUser(user.name, true)
+      const allExpenses = await listExpensesForUser(user.name, true, limit)
       return NextResponse.json({ ok: true, data: allExpenses, type: "all_expenses" })
     }
-    
-    // Pour les autres rôles, retourner les dépenses selon les permissions
-    const items = await listExpensesForUser(user.name, canViewAll)
+    const items = await listExpensesForUser(user.name, canViewAll, limit)
     return NextResponse.json({ ok: true, data: items })
-  } catch (e) {
-    return NextResponse.json({ ok: false, error: "Erreur chargement dépenses" }, { status: 500 })
+  } catch (e: any) {
+    console.error("[GET /api/expenses]", e?.message ?? e)
+    return NextResponse.json(
+      { ok: false, error: "Erreur chargement dépenses", details: process.env.NODE_ENV === "development" ? (e?.message ?? String(e)) : undefined },
+      { status: 500 }
+    )
   }
 }
 

@@ -20,6 +20,7 @@ import {
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { cn } from "@/lib/utils"
 import { useToast } from "@/hooks/use-toast"
 import {
   Plus,
@@ -36,6 +37,7 @@ import {
   ChevronRight,
   Eye,
   Trash2,
+  Receipt,
 } from "lucide-react"
 import { ActionGuard } from "@/components/permission-guard"
 import { PDFReceipt } from "@/components/pdf-receipt"
@@ -127,13 +129,13 @@ export function ExpensesView({ user }: ExpensesViewProps) {
 
   const expenses = items
 
-  // Load from API when DB is configured
+  // Load from API when DB is configured (limit=200 pour premier chargement plus rapide)
   useEffect(() => {
     let cancelled = false
     ;(async () => {
       setLoading(true)
       try {
-        const res = await fetch("/api/expenses")
+        const res = await fetch("/api/expenses?limit=200")
         const data = await res.json()
         if (cancelled) return
         if (res.ok && data?.ok && Array.isArray(data.data)) {
@@ -790,7 +792,7 @@ export function ExpensesView({ user }: ExpensesViewProps) {
         // Recharger les données depuis l'API pour s'assurer de la synchronisation
         setTimeout(async () => {
           try {
-            const res = await fetch("/api/expenses")
+            const res = await fetch("/api/expenses?limit=200")
             const data = await res.json()
             if (res.ok && data?.ok && Array.isArray(data.data)) {
               const apiData = data.data.map((item: any) => ({
@@ -895,19 +897,25 @@ export function ExpensesView({ user }: ExpensesViewProps) {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
         {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Gestion des Dépenses</h1>
-            <p className="text-gray-600 mt-1">
-            {isDirectorDelegate ? "Validation et suivi des dépenses" : 
-               user.role === "accounting" ? "Suivi et consultation des dépenses" : 
-               "Consultation des dépenses"}
-            </p>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="space-y-1">
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <Receipt className="h-6 w-6" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">Gestion des Dépenses</h1>
+                <p className="text-sm text-muted-foreground mt-0.5">
+                  {isDirectorDelegate ? "Validation et suivi des dépenses" : 
+                    user.role === "accounting" ? "Suivi et consultation des dépenses" : 
+                    "Consultation des dépenses"}
+                </p>
+              </div>
+            </div>
           </div>
-          {/* Tous les utilisateurs peuvent créer une dépense */}
-          <Button onClick={openCreate}>
+          <Button onClick={openCreate} className="shrink-0">
             <Plus className="h-4 w-4 mr-2" />
             Nouvelle dépense
           </Button>
@@ -915,7 +923,7 @@ export function ExpensesView({ user }: ExpensesViewProps) {
 
         {/* Alerts for director role */}
         {isDirectorDelegate && stats.pending > 0 && (
-          <Alert className="border-orange-200 bg-orange-50">
+          <Alert className="border-amber-200 bg-amber-50 dark:border-amber-900/50 dark:bg-amber-950/30 text-amber-900 dark:text-amber-100">
             <AlertTriangle className="h-4 w-4" />
             <AlertDescription>
               <strong>{stats.pending} dépenses</strong> nécessitent votre validation pour un montant total de{" "}
@@ -931,365 +939,388 @@ export function ExpensesView({ user }: ExpensesViewProps) {
         )}
 
         {/* Statistics */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-          <Card className="border-l-4 border-l-blue-500">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                <DollarSign className="h-4 w-4 text-blue-600" />
-                Total
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-blue-600">{stats.total}</div>
-              <p className="text-xs text-muted-foreground">Dépenses</p>
-            </CardContent>
-          </Card>
-
-          <Card className="border-l-4 border-l-orange-500">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                <Clock className="h-4 w-4 text-orange-600" />
-                {isDirectorDelegate ? "En attente de validation" : "En attente de validation comptable"}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-orange-600">
-                {isDirectorDelegate ? stats.pending + stats.accountingApproved : stats.pending}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          <Card className="overflow-hidden rounded-xl border bg-card shadow-sm transition-shadow hover:shadow">
+            <CardContent className="p-5">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400">
+                  <DollarSign className="h-5 w-5" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-muted-foreground">Total</p>
+                  <p className="text-2xl font-bold tabular-nums text-blue-600 dark:text-blue-400">{stats.total}</p>
+                  <p className="text-xs text-muted-foreground">dépenses</p>
+                </div>
               </div>
-              <p className="text-xs text-muted-foreground">
-                {isDirectorDelegate ? "Comptable ou directeur" : "Nécessitent validation comptable"}
-              </p>
             </CardContent>
           </Card>
 
-          <Card className="border-l-4 border-l-green-500">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                <CheckCircle className="h-4 w-4 text-green-600" />
-                Approuvées par directeur
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-green-600">{stats.directorApproved}</div>
-              <p className="text-xs text-muted-foreground">Validées par le directeur</p>
+          <Card className="overflow-hidden rounded-xl border bg-card shadow-sm transition-shadow hover:shadow">
+            <CardContent className="p-5">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                  <Clock className="h-5 w-5" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-muted-foreground">
+                    {isDirectorDelegate ? "En attente" : "En attente comptable"}
+                  </p>
+                  <p className="text-2xl font-bold tabular-nums text-amber-600 dark:text-amber-400">
+                    {isDirectorDelegate ? stats.pending + stats.accountingApproved : stats.pending}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {isDirectorDelegate ? "Comptable ou directeur" : "À valider"}
+                  </p>
+                </div>
+              </div>
             </CardContent>
           </Card>
 
-          <Card className="border-l-4 border-l-red-500">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                <XCircle className="h-4 w-4 text-red-600" />
-                Rejetées
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-red-600">{stats.accountingRejected + stats.directorRejected}</div>
-              <p className="text-xs text-muted-foreground">Comptable ou directeur</p>
+          <Card className="overflow-hidden rounded-xl border bg-card shadow-sm transition-shadow hover:shadow">
+            <CardContent className="p-5">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                  <CheckCircle className="h-5 w-5" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-muted-foreground">Approuvées</p>
+                  <p className="text-2xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400">{stats.directorApproved}</p>
+                  <p className="text-xs text-muted-foreground">par directeur</p>
+                </div>
+              </div>
             </CardContent>
           </Card>
 
-          <Card className="border-l-4 border-l-purple-500">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                <TrendingUp className="h-4 w-4 text-purple-600" />
-                Coût total
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-purple-600">{stats.totalCost.toLocaleString()}</div>
-              <p className="text-xs text-muted-foreground">XAF (validées)</p>
+          <Card className="overflow-hidden rounded-xl border bg-card shadow-sm transition-shadow hover:shadow">
+            <CardContent className="p-5">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-red-500/10 text-red-600 dark:text-red-400">
+                  <XCircle className="h-5 w-5" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-muted-foreground">Rejetées</p>
+                  <p className="text-2xl font-bold tabular-nums text-red-600 dark:text-red-400">{stats.accountingRejected + stats.directorRejected}</p>
+                  <p className="text-xs text-muted-foreground">comptable ou directeur</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="overflow-hidden rounded-xl border bg-card shadow-sm transition-shadow hover:shadow">
+            <CardContent className="p-5">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-violet-500/10 text-violet-600 dark:text-violet-400">
+                  <TrendingUp className="h-5 w-5" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-muted-foreground">Coût total</p>
+                  <p className="text-xl font-bold tabular-nums text-violet-600 dark:text-violet-400">{stats.totalCost.toLocaleString()}</p>
+                  <p className="text-xs text-muted-foreground">XAF (validées)</p>
+                </div>
+              </div>
             </CardContent>
           </Card>
         </div>
 
         {/* Filters and Search */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Filter className="h-5 w-5" />
-              Filtres et Recherche
+        <Card className="rounded-xl border bg-card shadow-sm">
+          <CardHeader className="pb-4">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted">
+                <Filter className="h-4 w-4 text-muted-foreground" />
+              </div>
+              Filtres et recherche
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-            <div className="flex flex-col sm:flex-row gap-4">
-              <div className="flex-1">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                  <Input
-                      placeholder="Rechercher par description, demandeur ou agence..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10"
-                  />
-                </div>
+          <CardContent className="space-y-4">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="Rechercher par description, demandeur ou agence..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="h-10 pl-9 rounded-lg bg-muted/50"
+                />
               </div>
-                <Button variant="outline" onClick={exportCsv}>
-                  <Download className="h-4 w-4 mr-2" />
-                  Exporter
-                </Button>
-              </div>
-              
-              <div className="flex flex-col sm:flex-row gap-4">
+              <Button variant="outline" size="sm" onClick={exportCsv} className="shrink-0 rounded-lg">
+                <Download className="h-4 w-4 mr-2" />
+                Exporter CSV
+              </Button>
+            </div>
+            <div className="flex flex-wrap gap-3">
               <Select value={filter} onValueChange={setFilter}>
-                <SelectTrigger className="w-full sm:w-48">
-                    <SelectValue placeholder="Statut" />
+                <SelectTrigger className="w-full rounded-lg sm:w-44">
+                  <SelectValue placeholder="Statut" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Tous les statuts</SelectItem>
                   <SelectItem value="pending">En attente</SelectItem>
-                  <SelectItem value="accounting_approved">Approuvées par comptabilité</SelectItem>
-                  <SelectItem value="accounting_rejected">Rejetées par comptabilité</SelectItem>
-                  <SelectItem value="director_approved">Approuvées par directeur</SelectItem>
-                  <SelectItem value="director_rejected">Rejetées par directeur</SelectItem>
-                  {/* Anciens statuts pour compatibilité */}
+                  <SelectItem value="accounting_approved">Approuvées comptabilité</SelectItem>
+                  <SelectItem value="accounting_rejected">Rejetées comptabilité</SelectItem>
+                  <SelectItem value="director_approved">Approuvées directeur</SelectItem>
+                  <SelectItem value="director_rejected">Rejetées directeur</SelectItem>
                   <SelectItem value="approved">Approuvées (ancien)</SelectItem>
                   <SelectItem value="rejected">Rejetées (ancien)</SelectItem>
                 </SelectContent>
               </Select>
-                
-                <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                  <SelectTrigger className="w-full sm:w-48">
-                    <SelectValue placeholder="Catégorie" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Toutes les catégories</SelectItem>
-                    {expenseCategories.map(category => (
-                      <SelectItem key={category} value={category}>{category}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                
-                <Select value={requesterFilter} onValueChange={setRequesterFilter}>
-                  <SelectTrigger className="w-full sm:w-48">
-                    <SelectValue placeholder="Demandeur" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Tous les demandeurs</SelectItem>
-                    {Array.from(new Set(expenses.map(e => e.requestedBy))).map(requester => (
-                      <SelectItem key={requester} value={requester}>{requester}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                
-                <Select value={agencyFilter} onValueChange={setAgencyFilter}>
-                  <SelectTrigger className="w-full sm:w-48">
-                    <SelectValue placeholder="Agence" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Toutes les agences</SelectItem>
-                    {Array.from(new Set(expenses.map(e => e.agency))).map(agency => (
-                      <SelectItem key={agency} value={agency}>{agency}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                
-                <Select value={periodFilter} onValueChange={setPeriodFilter}>
-                  <SelectTrigger className="w-full sm:w-48">
-                    <SelectValue placeholder="Période" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Toutes les périodes</SelectItem>
-                    <SelectItem value="today">Aujourd'hui</SelectItem>
-                    <SelectItem value="week">Cette semaine</SelectItem>
-                    <SelectItem value="month">Ce mois</SelectItem>
-                    <SelectItem value="year">Cette année</SelectItem>
-                    <SelectItem value="last_year">L'année dernière</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                <SelectTrigger className="w-full rounded-lg sm:w-44">
+                  <SelectValue placeholder="Catégorie" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Toutes les catégories</SelectItem>
+                  {expenseCategories.map(category => (
+                    <SelectItem key={category} value={category}>{category}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={requesterFilter} onValueChange={setRequesterFilter}>
+                <SelectTrigger className="w-full rounded-lg sm:w-44">
+                  <SelectValue placeholder="Demandeur" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Tous les demandeurs</SelectItem>
+                  {Array.from(new Set(expenses.map(e => e.requestedBy))).map(requester => (
+                    <SelectItem key={requester} value={requester}>{requester}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={agencyFilter} onValueChange={setAgencyFilter}>
+                <SelectTrigger className="w-full rounded-lg sm:w-44">
+                  <SelectValue placeholder="Agence" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Toutes les agences</SelectItem>
+                  {Array.from(new Set(expenses.map(e => e.agency))).map(agency => (
+                    <SelectItem key={agency} value={agency}>{agency}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={periodFilter} onValueChange={setPeriodFilter}>
+                <SelectTrigger className="w-full rounded-lg sm:w-44">
+                  <SelectValue placeholder="Période" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Toutes les périodes</SelectItem>
+                  <SelectItem value="today">Aujourd'hui</SelectItem>
+                  <SelectItem value="week">Cette semaine</SelectItem>
+                  <SelectItem value="month">Ce mois</SelectItem>
+                  <SelectItem value="year">Cette année</SelectItem>
+                  <SelectItem value="last_year">L'année dernière</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </CardContent>
         </Card>
 
-        {/* Expenses List */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Liste des Dépenses ({visibleExpenses.length})</CardTitle>
+        {/* Expenses List - Table */}
+        <Card className="rounded-xl border bg-card shadow-sm overflow-hidden">
+          <CardHeader className="border-b bg-muted/30 px-6 py-4">
+            <CardTitle className="text-base font-semibold">
+              Liste des dépenses
+              <span className="ml-2 font-normal text-muted-foreground">({visibleExpenses.length})</span>
+            </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {paginatedExpenses.map((expense) => (
-                <div key={expense.id} className="border rounded-lg p-4 hover:bg-gray-50 transition-colors">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2">
-                        <h3 className="font-medium">{expense.description}</h3>
-                        <Badge className={getStatusColor(expense.status)}>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[800px] border-collapse">
+                <thead>
+                  <tr className="border-b border-border bg-muted/50">
+                    <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Libellé</th>
+                    <th className="px-5 py-3.5 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">Montant</th>
+                    <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Catégorie</th>
+                    <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Statut</th>
+                    <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Demandeur</th>
+                    <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Agence</th>
+                    <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Date</th>
+                    <th className="px-5 py-3.5 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginatedExpenses.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="px-5 py-12 text-center text-muted-foreground">
+                        <p className="font-medium">Aucune dépense</p>
+                        <p className="text-sm mt-1">Aucun résultat ne correspond aux filtres ou la liste est vide.</p>
+                      </td>
+                    </tr>
+                  ) : paginatedExpenses.map((expense, index) => (
+                    <tr
+                      key={expense.id}
+                      className={cn(
+                        "border-b border-border/80 transition-colors duration-150 ease-out",
+                        "hover:bg-primary/10 hover:border-l-4 hover:border-l-primary border-l-4 border-l-transparent",
+                        index % 2 === 1 && "bg-muted/10"
+                      )}
+                    >
+                      <td className="px-5 py-3.5">
+                        <div className="flex flex-col gap-0.5">
+                          <span className="font-medium text-foreground">{expense.description}</span>
+                          {((expense as any).comment && (expense as any).comment.trim()) && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 w-fit px-0 text-xs text-muted-foreground hover:text-foreground"
+                              onClick={() => setSelectedExpenseComment((expense as any).comment)}
+                            >
+                              <Eye className="h-3.5 w-3.5 mr-1" />
+                              Voir commentaire
+                            </Button>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-5 py-3.5 text-right">
+                        <span className="font-semibold tabular-nums text-foreground">{expense.amount.toLocaleString()}</span>
+                        <span className="ml-1 text-xs text-muted-foreground">XAF</span>
+                      </td>
+                      <td className="px-5 py-3.5 text-sm text-muted-foreground">{expense.category}</td>
+                      <td className="px-5 py-3.5">
+                        <Badge className={cn("gap-1.5 font-medium", getStatusColor(expense.status))}>
                           {getStatusIcon(expense.status)}
-                          <span className="ml-1">{getStatusLabel(expense.status)}</span>
+                          <span>{getStatusLabel(expense.status)}</span>
                         </Badge>
-                        {((expense as any).comment && (expense as any).comment.trim()) && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setSelectedExpenseComment((expense as any).comment)}
-                            className="text-blue-600 border-blue-600 hover:bg-blue-50"
-                          >
-                            <Eye className="h-4 w-4 mr-1" />
-                            Voir commentaire
-                          </Button>
-                        )}
-                      </div>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm text-gray-600">
-                        <div>
-                          <span className="font-medium">Montant:</span>
-                          <div className="text-lg font-bold text-gray-900">{expense.amount.toLocaleString()} XAF</div>
+                      </td>
+                      <td className="px-5 py-3.5 text-sm text-muted-foreground">{expense.requestedBy}</td>
+                      <td className="px-5 py-3.5 text-sm text-muted-foreground">{expense.agency}</td>
+                      <td className="px-5 py-3.5 text-sm tabular-nums text-muted-foreground">{expense.date}</td>
+                      <td className="px-5 py-3.5">
+                        <div className="flex flex-wrap items-center justify-end gap-1.5">
+                          {expense.status === "pending" && user.role === "accounting" && (
+                            <>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-8 rounded-md border-emerald-600 text-emerald-600 hover:bg-emerald-50 dark:border-emerald-500 dark:text-emerald-400 dark:hover:bg-emerald-950/50"
+                                onClick={() => {
+                                  setExpenseToApproveAccounting(expense.id)
+                                  setDebitAccountType("receipt_commissions")
+                                  setApproveAccountingDialogOpen(true)
+                                }}
+                              >
+                                <CheckCircle className="h-4 w-4 sm:mr-1" />
+                                <span className="hidden sm:inline">Approuver</span>
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-8 rounded-md border-red-600 text-red-600 hover:bg-red-50 dark:border-red-500 dark:text-red-400 dark:hover:bg-red-950/50"
+                                onClick={() => openRejectDialog(expense.id, "accounting")}
+                              >
+                                <XCircle className="h-4 w-4 sm:mr-1" />
+                                <span className="hidden sm:inline">Rejeter</span>
+                              </Button>
+                            </>
+                          )}
+                          {expense.status === "accounting_approved" && isDirectorDelegate && (
+                            <>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-8 rounded-md border-emerald-600 text-emerald-600 hover:bg-emerald-50 dark:border-emerald-500 dark:text-emerald-400 dark:hover:bg-emerald-950/50"
+                                onClick={() => validateExpense(expense.id, true, "director")}
+                              >
+                                <CheckCircle className="h-4 w-4 sm:mr-1" />
+                                <span className="hidden sm:inline">Valider</span>
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-8 rounded-md border-red-600 text-red-600 hover:bg-red-50 dark:border-red-500 dark:text-red-400 dark:hover:bg-red-950/50"
+                                onClick={() => openRejectDialog(expense.id, "director")}
+                              >
+                                <XCircle className="h-4 w-4 sm:mr-1" />
+                                <span className="hidden sm:inline">Rejeter</span>
+                              </Button>
+                            </>
+                          )}
+                          {expense.status === "pending" && canModerateAll && user.role !== "accounting" && (
+                            <>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-8 rounded-md border-emerald-600 text-emerald-600 hover:bg-emerald-50 dark:border-emerald-500 dark:text-emerald-400 dark:hover:bg-emerald-950/50"
+                                onClick={() => approve(expense.id)}
+                              >
+                                <CheckCircle className="h-4 w-4 sm:mr-1" />
+                                <span className="hidden sm:inline">Approuver</span>
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-8 rounded-md border-red-600 text-red-600 hover:bg-red-50 dark:border-red-500 dark:text-red-400 dark:hover:bg-red-950/50"
+                                onClick={() => openRejectDialog(expense.id)}
+                              >
+                                <XCircle className="h-4 w-4 sm:mr-1" />
+                                <span className="hidden sm:inline">Rejeter</span>
+                              </Button>
+                            </>
+                          )}
+                          {expense.status !== "director_approved" && expense.status !== "approved" && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-8 rounded-md border-red-600 text-red-600 hover:bg-red-50 dark:border-red-500 dark:text-red-400 dark:hover:bg-red-950/50"
+                              onClick={() => handleDeleteExpense(expense.id)}
+                            >
+                              <Trash2 className="h-4 w-4 sm:mr-1" />
+                              <span className="hidden sm:inline">Supprimer</span>
+                            </Button>
+                          )}
+                          {(expense.status === "director_approved" || expense.status === "approved") && (
+                            <PDFReceipt
+                              expense={{
+                                id: String(expense.id),
+                                description: expense.description,
+                                amount: expense.amount,
+                                category: expense.category,
+                                status: expense.status,
+                                date: expense.date,
+                                requested_by: expense.requestedBy,
+                                agency: expense.agency,
+                                comment: (expense as any).comment,
+                                rejection_reason: (expense as any).rejection_reason
+                              }}
+                              user={user}
+                            />
+                          )}
                         </div>
-                        <div>
-                          <span className="font-medium">Catégorie:</span>
-                          <div>{expense.category}</div>
-                        </div>
-                        <div>
-                          <span className="font-medium">Demandeur:</span>
-                          <div>{expense.requestedBy}</div>
-                        </div>
-                        <div>
-                          <span className="font-medium">Agence:</span>
-                          <div>{expense.agency}</div>
-                        </div>
-                      </div>
-                      {/* Affichage du motif de rejet si la dépense est rejetée */}
-                      {expense.status === "rejected" && (expense as any).rejection_reason && (
-                        <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-                          <div className="flex items-start gap-2">
-                            <AlertTriangle className="h-4 w-4 text-red-600 mt-0.5 flex-shrink-0" />
-                            <div>
-                              <span className="font-medium text-red-800">Motif du rejet:</span>
-                              <p className="text-sm text-red-700 mt-1 whitespace-pre-wrap">
-                                {(expense as any).rejection_reason}
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex flex-col gap-2 ml-4">
-                      <div className="text-sm text-gray-500">{expense.date}</div>
-                      
-                      {/* Boutons pour comptables - validation comptable */}
-                      {expense.status === "pending" && user.role === "accounting" && (
-                        <div className="flex gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="text-green-600 border-green-600 hover:bg-green-50 bg-transparent"
-                            onClick={() => {
-                              setExpenseToApproveAccounting(expense.id)
-                              setDebitAccountType("receipt_commissions")
-                              setApproveAccountingDialogOpen(true)
-                            }}
-                          >
-                            <CheckCircle className="h-4 w-4 mr-1" />
-                            Approuver
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="text-red-600 border-red-600 hover:bg-red-50 bg-transparent"
-                            onClick={() => openRejectDialog(expense.id, "accounting")}
-                          >
-                            <XCircle className="h-4 w-4 mr-1" />
-                            Rejeter
-                          </Button>
-                        </div>
-                      )}
-                      
-                      {/* Boutons pour directeurs - validation directeur */}
-                      {expense.status === "accounting_approved" && isDirectorDelegate && (
-                        <div className="flex gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="text-green-600 border-green-600 hover:bg-green-50 bg-transparent"
-                            onClick={() => validateExpense(expense.id, true, "director")}
-                          >
-                            <CheckCircle className="h-4 w-4 mr-1" />
-                            Valider
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="text-red-600 border-red-600 hover:bg-red-50 bg-transparent"
-                            onClick={() => openRejectDialog(expense.id, "director")}
-                          >
-                            <XCircle className="h-4 w-4 mr-1" />
-                            Rejeter
-                          </Button>
-                        </div>
-                      )}
-                      
-                      {/* Ancienne logique pour compatibilité (à supprimer plus tard) */}
-                      {expense.status === "pending" && canModerateAll && user.role !== "accounting" && (
-                        <div className="flex gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="text-green-600 border-green-600 hover:bg-green-50 bg-transparent"
-                            onClick={() => approve(expense.id)}
-                          >
-                            <CheckCircle className="h-4 w-4 mr-1" />
-                            Approuver
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="text-red-600 border-red-600 hover:bg-red-50 bg-transparent"
-                            onClick={() => openRejectDialog(expense.id)}
-                          >
-                            <XCircle className="h-4 w-4 mr-1" />
-                            Rejeter
-                          </Button>
-                        </div>
-                      )}
-                      
-                      {/* Bouton de suppression - seulement pour les dépenses non validées par le directeur */}
-                      {expense.status !== "director_approved" && expense.status !== "approved" && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="text-red-600 border-red-600 hover:bg-red-50 bg-transparent"
-                          onClick={() => handleDeleteExpense(expense.id)}
-                        >
-                          <Trash2 className="h-4 w-4 mr-1" />
-                          Supprimer
-                        </Button>
-                      )}
-                      
-                      {/* Affichage du PDF pour les dépenses finalement approuvées */}
-                      {(expense.status === "director_approved" || expense.status === "approved") && (
-                        <PDFReceipt
-                          expense={{
-                            id: String(expense.id),
-                            description: expense.description,
-                            amount: expense.amount,
-                            category: expense.category,
-                            status: expense.status,
-                            date: expense.date,
-                            requested_by: expense.requestedBy,
-                            agency: expense.agency,
-                            comment: (expense as any).comment,
-                            rejection_reason: (expense as any).rejection_reason
-                          }}
-                          user={user}
-                        />
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
+            {/* Motifs de rejet (dépenses de la page concernées) */}
+            {paginatedExpenses.some((e) => (e.status === "rejected" || e.status === "accounting_rejected" || e.status === "director_rejected") && (e as any).rejection_reason) && (
+              <div className="space-y-2 border-t border-border bg-muted/10 px-6 py-4">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Motifs de rejet</p>
+                {paginatedExpenses
+                  .filter((e) => (e.status === "rejected" || e.status === "accounting_rejected" || e.status === "director_rejected") && (e as any).rejection_reason)
+                  .map((expense) => (
+                    <div key={expense.id} className="rounded-lg border border-red-200/80 bg-red-50/80 p-3 dark:border-red-900/50 dark:bg-red-950/30">
+                      <div className="flex items-start gap-2">
+                        <AlertTriangle className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400 mt-0.5" />
+                        <div className="min-w-0">
+                          <span className="text-sm font-medium text-red-800 dark:text-red-200">{expense.description}</span>
+                          <p className="text-sm text-red-700 dark:text-red-300 mt-1 whitespace-pre-wrap">{(expense as any).rejection_reason}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            )}
           </CardContent>
           
-          {/* Contrôles de pagination */}
-          <div className="flex items-center justify-between px-6 py-4 border-t bg-gray-50">
-            <div className="flex items-center gap-4">
+          {/* Pagination */}
+          <div className="flex flex-col gap-4 border-t bg-muted/20 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+            <div className="flex flex-wrap items-center gap-4">
               <div className="flex items-center gap-2">
-                <Label htmlFor="items-per-page" className="text-sm text-gray-600">
-                  Éléments par page:
+                <Label htmlFor="items-per-page" className="text-sm text-muted-foreground whitespace-nowrap">
+                  Par page
                 </Label>
                 <Select value={itemsPerPage.toString()} onValueChange={handleItemsPerPageChange}>
-                  <SelectTrigger className="w-20">
+                  <SelectTrigger id="items-per-page" className="h-9 w-20 rounded-lg">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -1301,22 +1332,21 @@ export function ExpensesView({ user }: ExpensesViewProps) {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="text-sm text-gray-600">
-                Affichage de {startIndex + 1} à {Math.min(endIndex, visibleExpenses.length)} sur {visibleExpenses.length} dépenses
-              </div>
+              <p className="text-sm text-muted-foreground">
+                {startIndex + 1} – {Math.min(endIndex, visibleExpenses.length)} sur {visibleExpenses.length}
+              </p>
             </div>
-
             <div className="flex items-center gap-2">
               <Button
                 variant="outline"
                 size="sm"
+                className="h-9 rounded-lg"
                 onClick={() => handlePageChange(currentPage - 1)}
                 disabled={currentPage === 1}
               >
                 <ChevronLeft className="h-4 w-4" />
-                Précédent
+                <span className="sr-only sm:not-sr-only sm:ml-1">Précédent</span>
               </Button>
-              
               <div className="flex items-center gap-1">
                 {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
                   let pageNumber: number
@@ -1329,28 +1359,27 @@ export function ExpensesView({ user }: ExpensesViewProps) {
                   } else {
                     pageNumber = currentPage - 2 + i
                   }
-                  
                   return (
                     <Button
                       key={pageNumber}
                       variant={currentPage === pageNumber ? "default" : "outline"}
                       size="sm"
+                      className="h-9 w-9 rounded-lg p-0"
                       onClick={() => handlePageChange(pageNumber)}
-                      className="w-8 h-8 p-0"
                     >
                       {pageNumber}
                     </Button>
                   )
                 })}
               </div>
-
               <Button
                 variant="outline"
                 size="sm"
+                className="h-9 rounded-lg"
                 onClick={() => handlePageChange(currentPage + 1)}
                 disabled={currentPage === totalPages}
               >
-                Suivant
+                <span className="sr-only sm:not-sr-only sm:mr-1">Suivant</span>
                 <ChevronRight className="h-4 w-4" />
               </Button>
             </div>

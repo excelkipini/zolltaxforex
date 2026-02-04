@@ -69,54 +69,22 @@ export function AccountingDashboard({ user }: AccountingDashboardProps) {
 
   useDocumentTitle({ title: isDirectorDelegate ? "Tableau de bord Directeur" : "Tableau de bord Comptable" })
 
-  // Charger les statistiques des dépenses
+  // Charger les statistiques des dépenses (endpoint dashboard = stats + liste limitée, plus rapide)
   const loadStats = async () => {
     try {
-      const response = await fetch('/api/expenses')
+      const response = await fetch('/api/expenses?type=dashboard')
       const data = await response.json()
-      
-      if (response.ok && data?.ok && Array.isArray(data.data)) {
-        const expenses = data.data
-        
-        // Pour les comptables et directeurs, afficher toutes les dépenses avec leurs états
-        let pendingExpenses = []
-        let approvedExpenses = []
-        let rejectedExpenses = []
-        
-        if (user.role === "accounting") {
-          // Comptables voient toutes les dépenses, mais se concentrent sur celles en attente de validation comptable
-          pendingExpenses = expenses.filter((e: any) => e.status === 'pending')
-          approvedExpenses = expenses.filter((e: any) => e.status === 'director_approved') // Seulement celles validées par le directeur
-          rejectedExpenses = expenses.filter((e: any) => e.status === 'accounting_rejected' || e.status === 'director_rejected')
-        } else if (isDirectorDelegate) {
-          // Directeurs voient toutes les dépenses, mais se concentrent sur celles en attente de validation directeur
-          pendingExpenses = expenses.filter((e: any) => e.status === 'pending' || e.status === 'accounting_approved') // En attente de validation comptable OU directeur
-          approvedExpenses = expenses.filter((e: any) => e.status === 'director_approved') // Seulement celles validées par le directeur
-          rejectedExpenses = expenses.filter((e: any) => e.status === 'accounting_rejected' || e.status === 'director_rejected')
-        } else {
-          // Autres rôles voient toutes les dépenses
-          pendingExpenses = expenses.filter((e: any) => e.status === 'pending')
-          approvedExpenses = expenses.filter((e: any) => e.status === 'approved' || e.status === 'director_approved')
-          rejectedExpenses = expenses.filter((e: any) => e.status === 'rejected' || e.status === 'director_rejected')
-        }
-        
-        const totalPendingAmount = pendingExpenses.reduce((sum: number, e: any) => sum + Number(e.amount), 0)
-        const totalApprovedAmount = approvedExpenses.reduce((sum: number, e: any) => sum + Number(e.amount), 0)
 
-        // Trier les dépenses en attente de la plus récente à la plus ancienne
-        const sortedPendingExpenses = pendingExpenses.sort((a: any, b: any) => 
-          new Date(b.date).getTime() - new Date(a.date).getTime()
-        )
-
+      if (response.ok && data?.ok && data?.type === 'dashboard' && data?.data) {
+        const { stats: s, pendingList } = data.data
         setStats({
-          pendingExpenses: pendingExpenses.length,
-          approvedExpenses: approvedExpenses.length,
-          rejectedExpenses: rejectedExpenses.length,
-          totalPendingAmount,
-          totalApprovedAmount
+          pendingExpenses: s.pendingCount ?? 0,
+          approvedExpenses: s.approvedCount ?? 0,
+          rejectedExpenses: s.rejectedCount ?? 0,
+          totalPendingAmount: s.totalPendingAmount ?? 0,
+          totalApprovedAmount: s.totalApprovedAmount ?? 0
         })
-        
-        setPendingExpensesList(sortedPendingExpenses)
+        setPendingExpensesList(Array.isArray(pendingList) ? pendingList : [])
       }
     } catch (error) {
     } finally {

@@ -265,26 +265,25 @@ export function RoleBasedSidebar({ user }: RoleBasedSidebarProps) {
                   <Button
                     variant="ghost"
                     className={cn(
-                      "h-10 w-full justify-between rounded-lg px-3 font-medium",
-                      "text-slate-700 dark:text-slate-200",
-                      "hover:bg-slate-100 dark:hover:bg-slate-800",
-                      isMainActive && "bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100"
+                      "h-10 w-full justify-between rounded-lg px-3 font-medium transition-colors",
+                      !isMainActive && "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100/80 dark:hover:bg-slate-800/80",
+                      isMainActive && "bg-primary/10 dark:bg-primary/20 text-primary font-semibold hover:bg-primary/15 dark:hover:bg-primary/25 border-l-2 border-primary -ml-[2px] pl-[14px]"
                     )}
                     onClick={() => toggleSubmenu(item.title)}
                   >
                     <div className="flex items-center gap-3">
                       <div className={cn(
-                        "flex h-8 w-8 shrink-0 items-center justify-center rounded-md",
-                        isMainActive ? "bg-primary/10 text-primary" : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400"
+                        "flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition-colors",
+                        isMainActive ? "bg-primary text-primary-foreground" : "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400"
                       )}>
                         <Icon className="h-4 w-4" />
                       </div>
                       <span>{item.title}</span>
                     </div>
                     {isSubmenuOpen ? (
-                      <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+                      <ChevronDown className={cn("h-4 w-4 shrink-0", isMainActive ? "text-primary" : "text-muted-foreground")} />
                     ) : (
-                      <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                      <ChevronRight className={cn("h-4 w-4 shrink-0", isMainActive ? "text-primary" : "text-muted-foreground")} />
                     )}
                   </Button>
 
@@ -297,8 +296,8 @@ export function RoleBasedSidebar({ user }: RoleBasedSidebarProps) {
                             <span
                               className={cn(
                                 "block rounded-md px-3 py-2 text-sm transition-colors",
-                                "text-muted-foreground hover:text-foreground hover:bg-slate-50 dark:hover:bg-slate-800/50",
-                                isSubActive && "bg-primary/10 text-primary font-medium hover:bg-primary/15 hover:text-primary"
+                                !isSubActive && "text-muted-foreground hover:text-foreground hover:bg-slate-50 dark:hover:bg-slate-800/50",
+                                isSubActive && "bg-primary/15 text-primary font-semibold border-l-2 border-primary -ml-0.5 pl-[11px] hover:bg-primary/20 hover:text-primary"
                               )}
                             >
                               {subItem.title}
@@ -317,15 +316,14 @@ export function RoleBasedSidebar({ user }: RoleBasedSidebarProps) {
                 <Button
                   variant="ghost"
                   className={cn(
-                    "h-10 w-full justify-start rounded-lg px-3 font-medium",
-                    "text-slate-700 dark:text-slate-200",
-                    "hover:bg-slate-100 dark:hover:bg-slate-800",
-                    isActive && "bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100"
+                    "h-10 w-full justify-start rounded-lg px-3 font-medium transition-colors",
+                    !isActive && "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100/80 dark:hover:bg-slate-800/80",
+                    isActive && "bg-primary/10 dark:bg-primary/20 text-primary font-semibold hover:bg-primary/15 dark:hover:bg-primary/25 border-l-2 border-primary -ml-[2px] pl-[14px]"
                   )}
                 >
                   <div className={cn(
-                    "flex h-8 w-8 shrink-0 items-center justify-center rounded-md mr-3",
-                    isActive ? "bg-primary/10 text-primary" : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400"
+                    "flex h-8 w-8 shrink-0 items-center justify-center rounded-md mr-3 transition-colors",
+                    isActive ? "bg-primary text-primary-foreground" : "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400"
                   )}>
                     <Icon className="h-4 w-4" />
                   </div>
@@ -355,15 +353,14 @@ export function RoleBasedSidebar({ user }: RoleBasedSidebarProps) {
                     <Button
                       variant="ghost"
                       className={cn(
-                        "h-10 w-full justify-start rounded-lg px-3 font-medium",
-                        "text-slate-600 dark:text-slate-300",
-                        "hover:bg-slate-100 dark:hover:bg-slate-800",
-                        isActive && "bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100"
+                        "h-10 w-full justify-start rounded-lg px-3 font-medium transition-colors",
+                        !isActive && "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100/80 dark:hover:bg-slate-800/80",
+                        isActive && "bg-primary/10 dark:bg-primary/20 text-primary font-semibold hover:bg-primary/15 dark:hover:bg-primary/25 border-l-2 border-primary -ml-[2px] pl-[14px]"
                       )}
                     >
                       <div className={cn(
-                        "flex h-8 w-8 shrink-0 items-center justify-center rounded-md mr-3",
-                        isActive ? "bg-primary/10 text-primary" : "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400"
+                        "flex h-8 w-8 shrink-0 items-center justify-center rounded-md mr-3 transition-colors",
+                        isActive ? "bg-primary text-primary-foreground" : "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400"
                       )}>
                         <Icon className="h-4 w-4" />
                       </div>
