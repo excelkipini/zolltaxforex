@@ -283,10 +283,10 @@ export async function getExpensesStats(
   const base = canViewAll
     ? sql`SELECT status, COUNT(*)::int AS cnt, COALESCE(SUM(amount), 0)::bigint AS total FROM expenses GROUP BY status`
     : sql`SELECT status, COUNT(*)::int AS cnt, COALESCE(SUM(amount), 0)::bigint AS total FROM expenses WHERE requested_by = ${userName} GROUP BY status`
-  const rows = await sql<{ status: string; cnt: number; total: string }[]>`${base}`
+  const rows = await sql<{ status: string; cnt: number | string; total: number | string }[]>`${base}`
   const byStatus: Record<string, { count: number; total: number }> = {}
   rows.forEach((r) => {
-    byStatus[r.status] = { count: r.cnt, total: Number(r.total) }
+    byStatus[r.status] = { count: Number(r.cnt), total: Number(r.total) }
   })
   const isDirectorDelegate = role === "director" || role === "delegate"
   const pendingCount = isDirectorDelegate
@@ -307,6 +307,34 @@ export async function getExpensesStats(
   }
 }
 
+const DASHBOARD_SELECT = `
+  id::text, description, amount::bigint as amount, category, status, date::text as date,
+  requested_by, agency, comment, rejection_reason,
+  accounting_validated_by, accounting_validated_at::text as accounting_validated_at,
+  director_validated_by, director_validated_at::text as director_validated_at,
+  debit_account_type
+`
+const DASHBOARD_SELECT_NO_DEBIT = `
+  id::text, description, amount::bigint as amount, category, status, date::text as date,
+  requested_by, agency, comment, rejection_reason,
+  accounting_validated_by, accounting_validated_at::text as accounting_validated_at,
+  director_validated_by, director_validated_at::text as director_validated_at
+`
+
+async function runDashboardPendingQuery(selectCols: string, whereClause: ReturnType<typeof sql>): Promise<Expense[]> {
+  try {
+    const rows = await sql<Expense[]>`SELECT ${sql.unsafe(selectCols)} FROM expenses ${whereClause} ORDER BY created_at DESC LIMIT 50`
+    return rows
+  } catch (err: any) {
+    const msg = err?.message ?? String(err)
+    if ((msg.includes("debit_account_type") || msg.includes("column")) && msg.includes("does not exist")) {
+      const rows = await sql<Expense[]>`SELECT ${sql.unsafe(DASHBOARD_SELECT_NO_DEBIT)} FROM expenses ${whereClause} ORDER BY created_at DESC LIMIT 50`
+      return rows.map((r) => ({ ...r, debit_account_type: null }))
+    }
+    throw err
+  }
+}
+
 /** Liste des dépenses en attente pour le tableau de bord (limitée, rapide). */
 export async function getExpensesPendingForDashboard(
   userName: string,
@@ -315,46 +343,12 @@ export async function getExpensesPendingForDashboard(
 ): Promise<Expense[]> {
   const isDirectorDelegate = role === "director" || role === "delegate"
   if (canViewAll && isDirectorDelegate) {
-    const rows = await sql<Expense[]>`
-      SELECT id::text, description, amount::bigint as amount, category, status, date::text as date,
-        requested_by, agency, comment, rejection_reason,
-        accounting_validated_by, accounting_validated_at::text as accounting_validated_at,
-        director_validated_by, director_validated_at::text as director_validated_at,
-        debit_account_type
-      FROM expenses
-      WHERE status IN ('pending', 'accounting_approved')
-      ORDER BY created_at DESC
-      LIMIT 50
-    `
-    return rows
+    return runDashboardPendingQuery(DASHBOARD_SELECT, sql`WHERE status IN ('pending', 'accounting_approved')`)
   }
   if (canViewAll && role === "accounting") {
-    const rows = await sql<Expense[]>`
-      SELECT id::text, description, amount::bigint as amount, category, status, date::text as date,
-        requested_by, agency, comment, rejection_reason,
-        accounting_validated_by, accounting_validated_at::text as accounting_validated_at,
-        director_validated_by, director_validated_at::text as director_validated_at,
-        debit_account_type
-      FROM expenses
-      WHERE status = 'pending'
-      ORDER BY created_at DESC
-      LIMIT 50
-    `
-    return rows
+    return runDashboardPendingQuery(DASHBOARD_SELECT, sql`WHERE status = 'pending'`)
   }
-  const rows = await sql<Expense[]>`
-    SELECT id::text, description, amount::bigint as amount, category, status, date::text as date,
-      requested_by, agency, comment, rejection_reason,
-      accounting_validated_by, accounting_validated_at::text as accounting_validated_at,
-      director_validated_by, director_validated_at::text as director_validated_at,
-      debit_account_type
-    FROM expenses
-    WHERE requested_by = ${userName}
-      AND status IN ('pending', 'accounting_approved')
-    ORDER BY created_at DESC
-    LIMIT 50
-  `
-  return rows
+  return runDashboardPendingQuery(DASHBOARD_SELECT, sql`WHERE requested_by = ${userName} AND status IN ('pending', 'accounting_approved')`)
 }
 
 // Fonction pour obtenir les dépenses en attente de validation comptable

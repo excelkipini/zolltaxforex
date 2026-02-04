@@ -86,8 +86,19 @@ export function AccountingDashboard({ user }: AccountingDashboardProps) {
           totalApprovedAmount: s.totalApprovedAmount ?? 0
         })
         setPendingExpensesList(Array.isArray(pendingList) ? pendingList : [])
+      } else {
+        toast({
+          title: "Erreur de chargement",
+          description: data?.error ?? "Impossible de charger les données des dépenses.",
+          variant: "destructive",
+        })
       }
     } catch (error) {
+      toast({
+        title: "Erreur de chargement",
+        description: "Impossible de charger les données des dépenses. Vérifiez votre connexion.",
+        variant: "destructive",
+      })
     } finally {
       setLoading(false)
     }
