@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { requireAuth } from "@/lib/auth"
+import { getSettings } from "@/lib/settings-queries"
 import { createReceipt } from "@/lib/receipts-queries"
 import { addReceiptCommissionToAccount, updateCashAccountBalance } from "@/lib/cash-queries"
 import jsPDF from "jspdf"
@@ -7,10 +8,9 @@ import QRCode from "qrcode"
 
 export const dynamic = 'force-dynamic'
 
-// Fonction pour calculer les frais de cartes
-function calculateCardFees(amountSent: number): { numberOfCards: number; cardFees: number } {
-  const numberOfCards = Math.ceil(amountSent / 800000) // Arrondi supérieur
-  const cardFees = numberOfCards * 14000 // 14,000 XAF par carte
+function calculateCardFees(amountSent: number, cardFeeXaf: number): { numberOfCards: number; cardFees: number } {
+  const numberOfCards = Math.ceil(amountSent / 800000)
+  const cardFees = numberOfCards * cardFeeXaf
   return { numberOfCards, cardFees }
 }
 
@@ -44,13 +44,13 @@ export async function POST(request: NextRequest) {
 
     const receiptData: ReceiptData = await request.json()
 
-    // Validation des données
     if (!receiptData.clientName || !receiptData.operationType || !receiptData.amountReceived) {
       return NextResponse.json({ error: "Données manquantes" }, { status: 400 })
     }
 
-    // Calculer les frais de cartes et la commission réelle
-    const { numberOfCards, cardFees } = calculateCardFees(receiptData.amountSent)
+    const settings = await getSettings()
+    const cardFeeXaf = settings.card_fee_xaf ?? 14000
+    const { numberOfCards, cardFees } = calculateCardFees(receiptData.amountSent, cardFeeXaf)
     const realCommission = calculateRealCommission(receiptData.amountReceived, receiptData.amountSent, cardFees)
     const totalAmountToAddToCoffre = receiptData.amountSent + cardFees
 

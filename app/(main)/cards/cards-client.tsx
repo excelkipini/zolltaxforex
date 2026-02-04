@@ -62,6 +62,8 @@ export default function CardsClient({
   const [statusFilter, setStatusFilter] = React.useState<"all" | "active" | "inactive">("all")
   const [countryFilter, setCountryFilter] = React.useState<"all" | "Mali" | "RDC" | "France" | "Congo">("all")
   const [usageFilter, setUsageFilter] = React.useState<"all" | "empty" | "used" | "full">("all")
+  const [cardsListPage, setCardsListPage] = React.useState(1)
+  const [cardsListPerPage, setCardsListPerPage] = React.useState(10)
   
   // États pour le tri
   const [sortField, setSortField] = React.useState<"cid" | "country" | "status" | "monthly_limit" | "monthly_used" | "availability" | "usage_percentage" | "recharge_limit" | "last_recharge_date">("cid")
@@ -487,6 +489,23 @@ export default function CardsClient({
       if (aValue > bValue) return sortDirection === "asc" ? 1 : -1
       return 0
     })
+
+  const totalCardsCount = filtered.length
+  const totalPages = Math.max(1, Math.ceil(totalCardsCount / cardsListPerPage))
+  const pageStart = (cardsListPage - 1) * cardsListPerPage
+  const pageEnd = Math.min(pageStart + cardsListPerPage, totalCardsCount)
+  const paginatedCards = React.useMemo(
+    () => filtered.slice(pageStart, pageEnd),
+    [filtered, pageStart, pageEnd]
+  )
+
+  React.useEffect(() => {
+    if (cardsListPage > totalPages && totalPages >= 1) setCardsListPage(1)
+  }, [cardsListPage, totalPages])
+
+  React.useEffect(() => {
+    setCardsListPage(1)
+  }, [search, statusFilter, countryFilter, usageFilter])
 
   function onCreate() {
     setEditing(null)
@@ -943,8 +962,16 @@ export default function CardsClient({
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                     <input
                       type="checkbox"
-                      checked={selectedCards.size === filtered.length && filtered.length > 0}
-                      onChange={selectedCards.size === filtered.length ? clearSelection : selectAllCards}
+                      checked={paginatedCards.length > 0 && paginatedCards.every(c => selectedCards.has(c.id))}
+                      onChange={() => {
+                        const pageIds = new Set(paginatedCards.map(c => c.id))
+                        const allPageSelected = paginatedCards.every(c => selectedCards.has(c.id))
+                        if (allPageSelected) {
+                          setSelectedCards(new Set([...selectedCards].filter(id => !pageIds.has(id))))
+                        } else {
+                          setSelectedCards(new Set([...selectedCards, ...pageIds]))
+                        }
+                      }}
                       className="rounded border-gray-300"
                     />
                   </th>
@@ -995,7 +1022,7 @@ export default function CardsClient({
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 bg-white">
-                {filtered.map((card) => {
+                {paginatedCards.map((card) => {
                   const usagePercentage = getUsagePercentage(card.monthly_used, card.monthly_limit)
                   return (
                     <tr key={card.id} className={selectedCards.has(card.id) ? "bg-blue-50" : ""}>
@@ -1103,6 +1130,54 @@ export default function CardsClient({
               </tbody>
             </table>
           </div>
+          {filtered.length > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t bg-gray-50 px-4 py-3 sm:px-6">
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-gray-600">Éléments par page&nbsp;:</span>
+                  <Select
+                    value={String(cardsListPerPage)}
+                    onValueChange={(v) => {
+                      setCardsListPerPage(Number(v))
+                      setCardsListPage(1)
+                    }}
+                  >
+                    <SelectTrigger className="w-[72px] h-8">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {[10, 25, 50, 100].map((n) => (
+                        <SelectItem key={n} value={String(n)}>
+                          {n}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <span className="text-sm text-gray-600">
+                  Affichage de {pageStart + 1} à {pageEnd} sur {totalCardsCount} carte{totalCardsCount !== 1 ? "s" : ""}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCardsListPage((p) => Math.max(1, p - 1))}
+                  disabled={cardsListPage <= 1}
+                >
+                  Précédent
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCardsListPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={cardsListPage >= totalPages}
+                >
+                  Suivant
+                </Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 

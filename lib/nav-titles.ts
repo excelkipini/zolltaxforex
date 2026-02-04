@@ -5,6 +5,7 @@ const TITLES: Record<Locale, Record<string, string>> = {
     "/dashboard": "Tableau de bord",
     "/cards": "Gestion des cartes prépayées",
     "/exchange": "Bureau de change",
+    "/exchange/management": "Gestion de change",
     "/expenses": "Gestion des dépenses",
     "/transactions": "Opérations",
     "/cash": "Gestion de la Caisse",
@@ -19,6 +20,7 @@ const TITLES: Record<Locale, Record<string, string>> = {
     "/dashboard": "Dashboard",
     "/cards": "Prepaid Cards Management",
     "/exchange": "Currency Exchange",
+    "/exchange/management": "Exchange Management",
     "/expenses": "Expenses Management",
     "/transactions": "Operations",
     "/cash": "Cash Management",
@@ -49,7 +51,8 @@ function getRouteKey(pathname: string): string {
   if (segments.length && ["fr", "en"].includes(segments[0]?.toLowerCase())) {
     idx = 1
   }
-  const route = `/${segments[idx] ?? "dashboard"}`
+  const pathSegments = segments.slice(idx)
+  const route = pathSegments.length ? `/${pathSegments.join("/")}` : "/dashboard"
   return route
 }
 

@@ -206,6 +206,13 @@ export async function initializeDatabase() {
       await sql`
         ALTER TABLE expenses ADD COLUMN IF NOT EXISTS deducted_cashier_id UUID
       `
+    // Caisse à débiter (choisie par le comptable à la validation)
+    await sql`
+      ALTER TABLE expenses ADD COLUMN IF NOT EXISTS debit_account_type TEXT CHECK (debit_account_type IN ('coffre','commissions','receipt_commissions','ecobank','uba'))
+    `
+    await sql`
+      ALTER TABLE expenses ALTER COLUMN debit_account_type SET DEFAULT 'receipt_commissions'
+    `
 
     // Update expenses status constraint to include new statuses
     await sql`

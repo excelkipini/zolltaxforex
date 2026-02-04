@@ -29,6 +29,13 @@ type Transaction = {
   rejection_reason?: string
 }
 
+const TRANSFER_MODES = [
+  { id: "Western Union", label: "Western Union", logo: "/logos/western-union.svg" },
+  { id: "Ria Money Transfer", label: "RIA", logo: "/logos/ria.svg" },
+  { id: "MoneyGram", label: "MoneyGram", logo: "/logos/moneygram.svg" },
+  { id: "Autre", label: "Autre" },
+] as const
+
 interface DailyOperationsProps {
   operationType: "reception" | "exchange" | "transfer" | "receipt"
   user: { name: string; role: string }
@@ -48,91 +55,67 @@ export function DailyOperations({ operationType, user, title }: DailyOperationsP
   const [transactionToValidate, setTransactionToValidate] = React.useState<string | null>(null)
   const [realAmountEUR, setRealAmountEUR] = React.useState("")
   const [selectedDate, setSelectedDate] = React.useState<Date | null>(new Date())
-  const [allTransactions, setAllTransactions] = React.useState<Transaction[]>([])
+  const [loading, setLoading] = React.useState(false)
   const { toast } = useToast()
 
-  // Charger les transactions du jour depuis l'API
-  React.useEffect(() => {
-    const loadDailyTransactions = async () => {
-      try {
-        // Charger toutes les transactions depuis l'API
-        const res = await fetch("/api/transactions")
-        const data = await res.json()
-        
-        if (res.ok && data?.ok && Array.isArray(data.data)) {
-          const apiTransactions = data.data.map((item: any) => ({
-            ...item,
-            details: typeof item.details === 'string' ? JSON.parse(item.details) : item.details,
-            // Inclure les informations de validation de suppression dans les détails
-            details: {
-              ...(typeof item.details === 'string' ? JSON.parse(item.details) : item.details),
-              delete_validated_by: item.delete_validated_by,
-              delete_validated_at: item.delete_validated_at
-            }
-          }))
-
-          // Stocker toutes les transactions
-          setAllTransactions(apiTransactions)
-          
-          // Filtrer selon la date sélectionnée
-          filterTransactionsByDate(apiTransactions)
-        } else {
-          setTransactions([])
-        }
-      } catch (error) {
-        setTransactions([])
-      }
-    }
-
-    loadDailyTransactions()
-
-    // Écouter les événements personnalisés pour recharger depuis l'API
-    const handleTransactionCreated = () => loadDailyTransactions()
-    const handleTransactionStatusChanged = () => loadDailyTransactions()
-
-    const eventName = `${operationType}Created`
-    window.addEventListener(eventName, handleTransactionCreated as EventListener)
-    window.addEventListener('transactionStatusChanged', handleTransactionStatusChanged as EventListener)
-    
-    return () => {
-      window.removeEventListener(eventName, handleTransactionCreated as EventListener)
-      window.removeEventListener('transactionStatusChanged', handleTransactionStatusChanged as EventListener)
-    }
-  }, [operationType])
-
-  // Filtrer les transactions selon la date sélectionnée
-  const filterTransactionsByDate = (transactionsToFilter: Transaction[]) => {
+  // Charger les transactions depuis l'API (filtrées par type et date côté serveur pour plus de rapidité)
+  const loadDailyTransactions = React.useCallback(async () => {
     if (!selectedDate) {
       setTransactions([])
       return
     }
+    setLoading(true)
+    try {
+      const dateStr = format(selectedDate, 'yyyy-MM-dd')
+      const url = `/api/transactions?type=${encodeURIComponent(operationType)}&from=${dateStr}&to=${dateStr}`
+      const res = await fetch(url)
+      const data = await res.json()
 
-    const selectedDateStr = format(selectedDate, 'yyyy-MM-dd')
-    
-    let filteredTransactions = transactionsToFilter.filter(t => {
-      const isSelectedDate = t.created_at.startsWith(selectedDateStr)
-      const isCorrectType = operationType === "receipt" ? t.type === "receipt" : t.type === operationType
-      
-      // Pour les reçus, inclure tous les statuts (completed, pending_delete)
-      if (operationType === "receipt" && t.type === "receipt") {
-        return isSelectedDate && (t.status === "completed" || t.status === "pending_delete")
+      if (res.ok && data?.ok && Array.isArray(data.data)) {
+        let list = data.data.map((item: any) => ({
+          ...item,
+          details: {
+            ...(typeof item.details === 'string' ? JSON.parse(item.details) : item.details || {}),
+            delete_validated_by: item.delete_validated_by,
+            delete_validated_at: item.delete_validated_at
+          }
+        }))
+
+        // Pour les reçus, garder seulement completed et pending_delete
+        if (operationType === "receipt") {
+          list = list.filter((t: Transaction) => t.status === "completed" || t.status === "pending_delete")
+        }
+        // Filtrer par utilisateur pour les caissiers
+        if (user.role === "cashier") {
+          list = list.filter((t: Transaction) => t.created_by === user.name)
+        }
+        setTransactions(list)
+      } else {
+        setTransactions([])
       }
-      
-      return isSelectedDate && isCorrectType
-    })
-    
-    // Filtrer par utilisateur pour les caissiers
-    if (user.role === "cashier") {
-      filteredTransactions = filteredTransactions.filter(t => t.created_by === user.name)
+    } catch {
+      setTransactions([])
+    } finally {
+      setLoading(false)
     }
-    
-    setTransactions(filteredTransactions)
-  }
+  }, [operationType, selectedDate, user.role, user.name])
 
-  // Réappliquer le filtre quand la date change
   React.useEffect(() => {
-    filterTransactionsByDate(allTransactions)
-  }, [selectedDate])
+    loadDailyTransactions()
+  }, [loadDailyTransactions])
+
+  // Écouter les événements personnalisés pour recharger
+  React.useEffect(() => {
+    const eventName = `${operationType}Created`
+    const onCreated = () => loadDailyTransactions()
+    const onStatusChanged = () => loadDailyTransactions()
+    window.addEventListener(eventName, onCreated as EventListener)
+    window.addEventListener('transactionStatusChanged', onStatusChanged as EventListener)
+    return () => {
+      window.removeEventListener(eventName, onCreated as EventListener)
+      window.removeEventListener('transactionStatusChanged', onStatusChanged as EventListener)
+    }
+  }, [operationType, loadDailyTransactions])
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -265,38 +248,7 @@ export function DailyOperations({ operationType, user, title }: DailyOperationsP
         description: result.message,
       })
 
-      // Recharger les transactions
-      const loadDailyTransactions = async () => {
-        try {
-          const today = new Date().toISOString().split('T')[0]
-          const res = await fetch("/api/transactions")
-          const data = await res.json()
-          
-          if (res.ok && data?.ok && Array.isArray(data.data)) {
-            const apiTransactions = data.data.map((item: any) => ({
-              ...item,
-              details: typeof item.details === 'string' ? JSON.parse(item.details) : item.details
-            }))
-
-            let todayTransactions = apiTransactions.filter(t => {
-              const isToday = t.created_at.startsWith(today)
-              const isCorrectType = operationType === "receipt" ? t.type === "receipt" : t.type === operationType
-              return isToday && isCorrectType
-            })
-            
-            if (user.role === "cashier") {
-              todayTransactions = todayTransactions.filter(t => t.created_by === user.name)
-            }
-            
-            setTransactions(todayTransactions)
-          }
-        } catch (error) {
-          console.error('Erreur lors du rechargement:', error)
-        }
-      }
-
       await loadDailyTransactions()
-      
       setDeleteConfirmDialogOpen(false)
       setReceiptToDelete(null)
     } catch (error: any) {
@@ -328,36 +280,6 @@ export function DailyOperations({ operationType, user, title }: DailyOperationsP
         title: "Transaction supprimée",
         description: result.message,
       })
-
-      // Recharger les transactions
-      const loadDailyTransactions = async () => {
-        try {
-          const today = new Date().toISOString().split('T')[0]
-          const res = await fetch("/api/transactions")
-          const data = await res.json()
-          
-          if (res.ok && data?.ok && Array.isArray(data.data)) {
-            const apiTransactions = data.data.map((item: any) => ({
-              ...item,
-              details: typeof item.details === 'string' ? JSON.parse(item.details) : item.details
-            }))
-
-            let todayTransactions = apiTransactions.filter(t => {
-              const isToday = t.created_at.startsWith(today)
-              const isCorrectType = operationType === "receipt" ? t.type === "receipt" : t.type === operationType
-              return isToday && isCorrectType
-            })
-            
-            if (user.role === "cashier") {
-              todayTransactions = todayTransactions.filter(t => t.created_by === user.name)
-            }
-            
-            setTransactions(todayTransactions)
-          }
-        } catch (error) {
-          console.error('Erreur lors du rechargement:', error)
-        }
-      }
 
       await loadDailyTransactions()
     } catch (error: any) {
@@ -581,7 +503,12 @@ export function DailyOperations({ operationType, user, title }: DailyOperationsP
           </div>
         </CardHeader>
         <CardContent>
-          {transactions.length === 0 ? (
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+              <span className="ml-3 text-sm text-gray-500">Chargement...</span>
+            </div>
+          ) : transactions.length === 0 ? (
             <div className="text-center py-8 text-gray-500">
               <Clock className="h-12 w-12 mx-auto mb-4 text-gray-300" />
               <p>Aucune opération {getOperationTypeLabel(operationType).toLowerCase()} effectuée le {selectedDate ? format(selectedDate, 'dd/MM/yyyy', { locale: fr }) : 'cette date'}</p>
@@ -597,10 +524,23 @@ export function DailyOperations({ operationType, user, title }: DailyOperationsP
                         {getStatusBadge(transaction.status)}
                       </div>
                       <p className="text-sm text-gray-600 mb-1">{transaction.description}</p>
-                      <div className="flex items-center gap-4 text-xs text-gray-500">
+                      <div className="flex items-center gap-0 text-xs text-gray-500 flex-wrap [&>*+*]:before:content-['|'] [&>*+*]:before:px-2 [&>*+*]:before:text-gray-400">
                         <span>{formatAmount(transaction.amount, transaction.currency)}</span>
                         <span>{formatDate(transaction.created_at)}</span>
                         <span>Par: {transaction.created_by}</span>
+                        {operationType === "transfer" && (() => {
+                          const modeId = transaction.details?.transfer_method || "Autre"
+                          const modeConfig = TRANSFER_MODES.find((m) => m.id === modeId)
+                          const hasLogo = modeConfig && "logo" in modeConfig && modeConfig.logo
+                          return (
+                            <span className="inline-flex items-center gap-1.5">
+                              <span>{modeConfig?.label ?? modeId}</span>
+                              {hasLogo && (
+                                <img src={modeConfig.logo} alt={modeConfig.label} className="h-5 w-5 object-contain" />
+                              )}
+                            </span>
+                          )
+                        })()}
                       </div>
                     </div>
                     <div className="flex gap-2">

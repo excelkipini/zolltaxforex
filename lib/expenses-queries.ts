@@ -1,9 +1,11 @@
 import "server-only"
 import { sql } from "./db"
 import { convertExpenseToEmailData, sendExpenseSubmittedNotification, sendExpenseAccountingValidatedNotification, sendExpenseDirectorValidatedNotification } from "./email-notifications"
-import { deductExpenseFromReceiptCommissions, deductExpenseFromRiaExcedents, reconcileRiaExcedentsBalance } from "./cash-queries"
+import { deductExpenseFromAccount, deductExpenseFromReceiptCommissions, deductExpenseFromRiaExcedents, reconcileRiaExcedentsBalance } from "./cash-queries"
 
 export type ExpenseStatus = "pending" | "accounting_approved" | "accounting_rejected" | "director_approved" | "director_rejected"
+
+export type ExpenseDebitAccount = "coffre" | "commissions" | "receipt_commissions" | "ecobank" | "uba"
 
 export type Expense = {
   id: string
@@ -20,6 +22,7 @@ export type Expense = {
   accounting_validated_at?: string
   director_validated_by?: string
   director_validated_at?: string
+  debit_account_type?: ExpenseDebitAccount | null
 }
 
 
@@ -40,7 +43,8 @@ export async function listExpensesForUser(userName: string, canModerateAll: bool
         accounting_validated_by,
         accounting_validated_at::text as accounting_validated_at,
         director_validated_by,
-        director_validated_at::text as director_validated_at
+        director_validated_at::text as director_validated_at,
+        debit_account_type
       FROM expenses
       ORDER BY created_at DESC
       LIMIT 500;
@@ -62,7 +66,8 @@ export async function listExpensesForUser(userName: string, canModerateAll: bool
       accounting_validated_by,
       accounting_validated_at::text as accounting_validated_at,
       director_validated_by,
-      director_validated_at::text as director_validated_at
+      director_validated_at::text as director_validated_at,
+      debit_account_type
     FROM expenses
     WHERE requested_by = ${userName}
     ORDER BY created_at DESC
@@ -125,9 +130,11 @@ export async function validateExpenseByAccounting(
   id: string, 
   approved: boolean, 
   validatedBy: string, 
-  rejection_reason?: string
+  rejection_reason?: string,
+  debit_account_type?: ExpenseDebitAccount | null
 ): Promise<Expense> {
   const status = approved ? "accounting_approved" : "accounting_rejected"
+  const debitAccount = approved && debit_account_type ? debit_account_type : null
   
   const rows = await sql<Expense[]>`
     UPDATE expenses
@@ -136,6 +143,7 @@ export async function validateExpenseByAccounting(
       rejection_reason = ${rejection_reason || null}, 
       accounting_validated_by = ${validatedBy},
       accounting_validated_at = NOW(),
+      debit_account_type = COALESCE(${debitAccount}, debit_account_type, 'receipt_commissions'),
       updated_at = NOW()
     WHERE id = ${id}::uuid AND status = 'pending'
     RETURNING 
@@ -152,7 +160,8 @@ export async function validateExpenseByAccounting(
       accounting_validated_by,
       accounting_validated_at::text as accounting_validated_at,
       director_validated_by,
-      director_validated_at::text as director_validated_at;
+      director_validated_at::text as director_validated_at,
+      debit_account_type;
   `
   
   if (rows.length === 0) {
@@ -203,6 +212,7 @@ export async function validateExpenseByDirector(
       rejection_reason,
       deduct_from_excedents,
       deducted_cashier_id,
+      debit_account_type,
       accounting_validated_by,
       accounting_validated_at::text as accounting_validated_at,
       director_validated_by,
@@ -219,7 +229,6 @@ export async function validateExpenseByDirector(
   if (approved) {
     try {
       if (expense.deduct_from_excedents && expense.deducted_cashier_id) {
-        // Déduire de la caisse Excédents RIA, pas des Commissions Reçus
         await deductExpenseFromRiaExcedents(
           expense.id,
           expense.amount,
@@ -227,19 +236,18 @@ export async function validateExpenseByDirector(
           validatedBy
         )
       } else {
-        // Workflow par défaut: Commissions Reçus
-        await deductExpenseFromReceiptCommissions(
+        const debitAccount = (expense.debit_account_type || "receipt_commissions") as import("./cash-queries").ExpenseDebitAccountType
+        await deductExpenseFromAccount(
+          debitAccount,
           expense.id,
           expense.amount,
           `Dépense approuvée: ${expense.description}`,
           validatedBy
         )
       }
-      // Réconcilier le solde Excédents RIA après la mise à jour
       await reconcileRiaExcedentsBalance(validatedBy)
     } catch (error) {
       console.error('Erreur lors de la déduction de la dépense après validation directeur:', error)
-      // Ne pas faire échouer la validation si la déduction échoue
     }
   }
 

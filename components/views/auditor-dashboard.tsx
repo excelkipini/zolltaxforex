@@ -41,28 +41,18 @@ export function AuditorDashboard({ user }: AuditorDashboardProps) {
   // Mettre à jour le titre de la page
   useDocumentTitle({ title: "Tableau de bord Auditeur" })
 
-  // Charger les statistiques des transactions
+  // Charger les statistiques des transactions (API légère : comptages uniquement)
   const loadStats = async () => {
     try {
-      const response = await fetch('/api/transactions')
+      const response = await fetch('/api/transactions/stats')
       const data = await response.json()
-      
-      if (response.ok && data?.ok && Array.isArray(data.data)) {
-        const transactions = data.data
-        
-        const pendingTransactions = transactions.filter((t: any) => t.status === 'pending')
-        const validatedTransactions = transactions.filter((t: any) => t.status === 'validated')
-        const completedTransactions = transactions.filter((t: any) => t.status === 'completed')
-        const rejectedTransactions = transactions.filter((t: any) => t.status === 'rejected')
-        
-        const totalPendingAmount = pendingTransactions.reduce((sum: number, t: any) => sum + Number(t.amount), 0)
-
+      if (response.ok && data?.ok) {
         setStats({
-          pendingTransactions: pendingTransactions.length,
-          validatedTransactions: validatedTransactions.length,
-          completedTransactions: completedTransactions.length,
-          rejectedTransactions: rejectedTransactions.length,
-          totalPendingAmount,
+          pendingTransactions: data.pending ?? 0,
+          validatedTransactions: data.validated ?? 0,
+          completedTransactions: data.completed ?? 0,
+          rejectedTransactions: data.rejected ?? 0,
+          totalPendingAmount: data.totalPendingAmount ?? 0,
         })
       }
     } catch (error) {
@@ -73,6 +63,12 @@ export function AuditorDashboard({ user }: AuditorDashboardProps) {
 
   React.useEffect(() => {
     loadStats()
+  }, [])
+
+  React.useEffect(() => {
+    const handleRefresh = () => loadStats()
+    window.addEventListener("transactionStatusChanged", handleRefresh)
+    return () => window.removeEventListener("transactionStatusChanged", handleRefresh)
   }, [])
 
   // Formater le montant

@@ -13,6 +13,7 @@ import {
   convertTransferToEmailData
 } from "./email-notifications"
 import { addCommissionToAccount } from "./cash-queries"
+import { getSettings } from "./settings-queries"
 
 export type Transaction = {
   id: string
@@ -75,6 +76,215 @@ export async function listTransactions(): Promise<Transaction[]> {
   `
 
   return rows
+}
+
+export type ListTransactionsFilters = {
+  type?: string
+  fromDate?: string
+  toDate?: string
+  status?: string
+  createdBy?: string
+  transferMethod?: string
+  search?: string
+  limit?: number
+  offset?: number
+}
+
+export async function listTransactionsFiltered(filters?: ListTransactionsFilters): Promise<Transaction[]> {
+  const typeParam = (filters?.type?.trim() || null) as string | null
+  const fromParam = (filters?.fromDate?.trim() || null) as string | null
+  const toParam = (filters?.toDate?.trim() || null) as string | null
+  const statusParam = (filters?.status?.trim() || null) as string | null
+  const createdByParam = (filters?.createdBy?.trim() || null) as string | null
+  const transferMethodParam = (filters?.transferMethod?.trim() || null) as string | null
+  const searchParam = (filters?.search?.trim() || null) as string | null
+  const searchPattern = searchParam ? `%${searchParam}%` : null
+  const limitParam = filters?.limit ?? null
+  const offsetParam = filters?.offset ?? null
+
+  const rows = await sql<Transaction[]>`
+    SELECT 
+      id::text,
+      type,
+      status,
+      description,
+      amount::bigint as amount,
+      currency,
+      created_by,
+      agency,
+      details,
+      rejection_reason,
+      delete_validated_by,
+      delete_validated_at::text as delete_validated_at,
+      real_amount_eur,
+      commission_amount,
+      executor_id::text as executor_id,
+      executed_at::text as executed_at,
+      receipt_url,
+      executor_comment,
+      created_at::text as created_at,
+      updated_at::text as updated_at
+    FROM transactions
+    WHERE
+      (${typeParam}::text IS NULL OR type = ${typeParam})
+      AND (${fromParam}::text IS NULL OR created_at::date >= (${fromParam})::date)
+      AND (${toParam}::text IS NULL OR created_at::date <= (${toParam})::date)
+      AND (${statusParam}::text IS NULL OR status = ${statusParam})
+      AND (${createdByParam}::text IS NULL OR created_by = ${createdByParam})
+      AND (${transferMethodParam}::text IS NULL OR details->>'transfer_method' = ${transferMethodParam})
+      AND (${searchPattern}::text IS NULL OR id ILIKE ${searchPattern} OR description ILIKE ${searchPattern} OR created_by ILIKE ${searchPattern} OR details->>'beneficiary_name' ILIKE ${searchPattern})
+    ORDER BY created_at DESC
+    ${limitParam != null ? sql`LIMIT ${limitParam}` : sql``}
+    ${offsetParam != null ? sql`OFFSET ${offsetParam}` : sql``}
+  `
+
+  return rows
+}
+
+export async function listTransactionsCount(filters?: Omit<ListTransactionsFilters, "limit" | "offset">): Promise<number> {
+  const typeParam = (filters?.type?.trim() || null) as string | null
+  const fromParam = (filters?.fromDate?.trim() || null) as string | null
+  const toParam = (filters?.toDate?.trim() || null) as string | null
+  const statusParam = (filters?.status?.trim() || null) as string | null
+  const createdByParam = (filters?.createdBy?.trim() || null) as string | null
+  const transferMethodParam = (filters?.transferMethod?.trim() || null) as string | null
+  const searchParam = (filters?.search?.trim() || null) as string | null
+  const searchPattern = searchParam ? `%${searchParam}%` : null
+
+  const result = await sql<{ count: string }[]>`
+    SELECT COUNT(*)::text as count
+    FROM transactions
+    WHERE
+      (${typeParam}::text IS NULL OR type = ${typeParam})
+      AND (${fromParam}::text IS NULL OR created_at::date >= (${fromParam})::date)
+      AND (${toParam}::text IS NULL OR created_at::date <= (${toParam})::date)
+      AND (${statusParam}::text IS NULL OR status = ${statusParam})
+      AND (${createdByParam}::text IS NULL OR created_by = ${createdByParam})
+      AND (${transferMethodParam}::text IS NULL OR details->>'transfer_method' = ${transferMethodParam})
+      AND (${searchPattern}::text IS NULL OR id ILIKE ${searchPattern} OR description ILIKE ${searchPattern} OR created_by ILIKE ${searchPattern} OR details->>'beneficiary_name' ILIKE ${searchPattern})
+  `
+  return parseInt(result[0]?.count ?? "0", 10)
+}
+
+export async function listTransactionFilterOptions(status: "validated" | "executed"): Promise<{ cashiers: string[] }> {
+  const rows = await sql<{ created_by: string }[]>`
+    SELECT DISTINCT created_by
+    FROM transactions
+    WHERE status = ${status}
+    ORDER BY created_by
+  `
+  return { cashiers: rows.map((r) => r.created_by).filter(Boolean) }
+}
+
+export type TransactionStats = {
+  pending: number
+  validated: number
+  completed: number
+  rejected: number
+  executed: number
+  totalPendingAmount: number
+  totalExecutedAmount: number
+}
+
+const statsWhereClause = (filters?: Omit<ListTransactionsFilters, "limit" | "offset">) => {
+  const typeParam = (filters?.type?.trim() || null) as string | null
+  const fromParam = (filters?.fromDate?.trim() || null) as string | null
+  const toParam = (filters?.toDate?.trim() || null) as string | null
+  const statusParam = (filters?.status?.trim() || null) as string | null
+  const createdByParam = (filters?.createdBy?.trim() || null) as string | null
+  const transferMethodParam = (filters?.transferMethod?.trim() || null) as string | null
+  const searchParam = (filters?.search?.trim() || null) as string | null
+  const searchPattern = searchParam ? `%${searchParam}%` : null
+  return {
+    typeParam,
+    fromParam,
+    toParam,
+    statusParam,
+    createdByParam,
+    transferMethodParam,
+    searchPattern,
+  }
+}
+
+export async function getTransactionStats(filters?: Omit<ListTransactionsFilters, "limit" | "offset">): Promise<TransactionStats> {
+  const hasFilters =
+    filters?.fromDate?.trim() ||
+    filters?.toDate?.trim() ||
+    (filters?.createdBy?.trim() && filters.createdBy !== "all") ||
+    (filters?.transferMethod?.trim() && filters.transferMethod !== "all") ||
+    filters?.search?.trim()
+  if (!hasFilters) {
+    return getTransactionStatsUnfiltered()
+  }
+  const w = statsWhereClause(filters)
+  const baseWhere = sql`
+    (${w.typeParam}::text IS NULL OR type = ${w.typeParam})
+    AND (${w.fromParam}::text IS NULL OR created_at::date >= (${w.fromParam})::date)
+    AND (${w.toParam}::text IS NULL OR created_at::date <= (${w.toParam})::date)
+    AND (${w.createdByParam}::text IS NULL OR created_by = ${w.createdByParam})
+    AND (${w.transferMethodParam}::text IS NULL OR details->>'transfer_method' = ${w.transferMethodParam})
+    AND (${w.searchPattern}::text IS NULL OR id ILIKE ${w.searchPattern} OR description ILIKE ${w.searchPattern} OR created_by ILIKE ${w.searchPattern} OR details->>'beneficiary_name' ILIKE ${w.searchPattern})
+  `
+  const rows = await sql<{ status: string; count: string }[]>`
+    SELECT status, COUNT(*)::text as count
+    FROM transactions
+    WHERE status IN ('pending', 'validated', 'completed', 'rejected', 'executed')
+    AND ${baseWhere}
+    GROUP BY status
+  `
+  const [pendingAmountRow, executedAmountRow] = await Promise.all([
+    sql<{ total: string }[]>`
+      SELECT COALESCE(SUM(amount)::text, '0') as total FROM transactions
+      WHERE status = 'pending' AND ${baseWhere}
+    `,
+    sql<{ total: string }[]>`
+      SELECT COALESCE(SUM(amount)::text, '0') as total FROM transactions
+      WHERE status = 'executed' AND ${baseWhere}
+    `,
+  ])
+  const byStatus: Record<string, number> = { pending: 0, validated: 0, completed: 0, rejected: 0, executed: 0 }
+  for (const row of rows) {
+    byStatus[row.status] = parseInt(row.count, 10)
+  }
+  const totalPendingAmount = parseInt(pendingAmountRow[0]?.total ?? "0", 10)
+  const totalExecutedAmount = parseInt(executedAmountRow[0]?.total ?? "0", 10)
+  return {
+    pending: byStatus.pending ?? 0,
+    validated: byStatus.validated ?? 0,
+    completed: byStatus.completed ?? 0,
+    rejected: byStatus.rejected ?? 0,
+    executed: byStatus.executed ?? 0,
+    totalPendingAmount,
+    totalExecutedAmount,
+  }
+}
+
+async function getTransactionStatsUnfiltered(): Promise<TransactionStats> {
+  const rows = await sql<{ status: string; count: string }[]>`
+    SELECT status, COUNT(*)::text as count
+    FROM transactions
+    WHERE status IN ('pending', 'validated', 'completed', 'rejected', 'executed')
+    GROUP BY status
+  `
+  const [pendingAmountRow, executedAmountRow] = await Promise.all([
+    sql<{ total: string }[]>`SELECT COALESCE(SUM(amount)::text, '0') as total FROM transactions WHERE status = 'pending'`,
+    sql<{ total: string }[]>`SELECT COALESCE(SUM(amount)::text, '0') as total FROM transactions WHERE status = 'executed'`,
+  ])
+  const byStatus: Record<string, number> = { pending: 0, validated: 0, completed: 0, rejected: 0, executed: 0 }
+  for (const row of rows) {
+    byStatus[row.status] = parseInt(row.count, 10)
+  }
+  const totalPendingAmount = parseInt(pendingAmountRow[0]?.total ?? "0", 10)
+  const totalExecutedAmount = parseInt(executedAmountRow[0]?.total ?? "0", 10)
+  return {
+    pending: byStatus.pending ?? 0,
+    validated: byStatus.validated ?? 0,
+    completed: byStatus.completed ?? 0,
+    rejected: byStatus.rejected ?? 0,
+    executed: byStatus.executed ?? 0,
+    totalPendingAmount,
+    totalExecutedAmount,
+  }
 }
 
 export async function createTransaction(input: CreateTransactionInput): Promise<Transaction> {
@@ -356,11 +566,9 @@ export async function updateTransactionRealAmount(
   realAmountEUR: number,
   validatedBy: string
 ): Promise<Transaction> {
-  // Récupérer le taux de change EUR vers XAF
-  const settings = await sql`
-    SELECT eur FROM settings ORDER BY updated_at DESC LIMIT 1
-  `
-  const eurToXAFRate = settings[0]?.eur || 650 // Taux par défaut si non trouvé
+  const s = await getSettings()
+  const eurToXAFRate = s.eur || 650
+  const commissionMinXaf = s.transfer_commission_min_xaf ?? 0
 
   // Récupérer la transaction
   const transactionRows = await sql`
@@ -402,16 +610,15 @@ export async function updateTransactionRealAmount(
     eurToXAFRate
   )
 
-  // Règle de validation :
-  // - Si la commission est strictement > 0 XAF → transaction VALIDÉE
-  // - Sinon (commission ≤ 0 XAF) → transaction REJETÉE automatiquement
-  const hasPositiveCommission = commissionAmount > 0
-  const newStatus: Transaction["status"] = hasPositiveCommission ? "validated" : "rejected"
+  // Règle de validation : commission >= seuil minimum (Taux & Plafonds)
+  const hasSufficientCommission = commissionAmount >= commissionMinXaf
+  const newStatus: Transaction["status"] = hasSufficientCommission ? "validated" : "rejected"
 
-  // Motif standardisé en cas de rejet automatique
-  const rejectionReason = hasPositiveCommission
+  const rejectionReason = hasSufficientCommission
     ? null
-    : 'Commission nulle ou négative : montant reçu ≤ montant réel converti en XAF'
+    : commissionMinXaf > 0
+      ? `Commission (${commissionAmount.toLocaleString("fr-FR")} XAF) inférieure au minimum requis (${commissionMinXaf.toLocaleString("fr-FR")} XAF)`
+      : "Commission nulle ou négative : montant reçu ≤ montant réel converti en XAF"
   
   // Assigner un exécuteur disponible
   let executorId: string | null = null
@@ -422,7 +629,7 @@ export async function updateTransactionRealAmount(
       LIMIT 1
     `
     executorId = executorRows[0]?.id || null
-  const assignedExecutorId = hasPositiveCommission ? executorId : null
+  const assignedExecutorId = hasSufficientCommission ? executorId : null
 
   // Mettre à jour la transaction
   const updatedRows = await sql`
@@ -460,7 +667,6 @@ export async function updateTransactionRealAmount(
 
   const updatedTransaction = updatedRows[0]
 
-  // Ajouter la commission au compte commissions si la transaction est validée
   if (newStatus === "validated" && commissionAmount > 0) {
     try {
       await addCommissionToAccount(

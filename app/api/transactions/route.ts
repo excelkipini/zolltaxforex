@@ -1,11 +1,72 @@
 import { NextRequest, NextResponse } from "next/server"
 import { requireAuth } from "@/lib/auth"
-import { listTransactions, createTransaction, updateTransactionStatus, deleteAllTransactions } from "@/lib/transactions-queries"
+import { listTransactions, listTransactionsFiltered, listTransactionsCount, createTransaction, updateTransactionStatus, deleteAllTransactions, listTransactionFilterOptions } from "@/lib/transactions-queries"
 
-export async function GET() {
-  const { user } = await requireAuth()
-  
+export async function GET(request: NextRequest) {
+  await requireAuth()
+
+  const { searchParams } = new URL(request.url)
+  const type = searchParams.get("type") ?? undefined
+  const from = searchParams.get("from") ?? undefined
+  const to = searchParams.get("to") ?? undefined
+  const status = searchParams.get("status") ?? undefined
+  const cashier = searchParams.get("cashier") ?? undefined
+  const transferMethod = searchParams.get("transferMethod") ?? undefined
+  const search = searchParams.get("search") ?? undefined
+  const pageParam = searchParams.get("page")
+  const limitParam = searchParams.get("limit")
+  const filterOptions = searchParams.get("filterOptions") // ?status=validated ou executed pour options
+  const page = pageParam != null ? Math.max(1, parseInt(String(pageParam), 10) || 1) : undefined
+  const limit = limitParam != null ? Math.max(1, Math.min(100, parseInt(String(limitParam), 10) || 10)) : undefined
+  const useFilters = type != null || from != null || to != null || status != null || (cashier != null && cashier !== "all") || (transferMethod != null && transferMethod !== "all") || (search != null && search.trim() !== "")
+  const usePagination = page != null && limit != null
+
   try {
+    if (filterOptions === "validated" || filterOptions === "executed") {
+      const options = await listTransactionFilterOptions(filterOptions)
+      return NextResponse.json({ ok: true, ...options })
+    }
+    const filterCreatedBy = cashier && cashier !== "all" ? cashier : undefined
+    const filterTransferMethod = transferMethod && transferMethod !== "all" ? transferMethod : undefined
+    const filterSearch = search?.trim() || undefined
+    if (usePagination) {
+      const offset = (page - 1) * limit
+      const [transactions, total] = await Promise.all([
+        listTransactionsFiltered({
+          type,
+          fromDate: from,
+          toDate: to,
+          status,
+          createdBy: filterCreatedBy,
+          transferMethod: filterTransferMethod,
+          search: filterSearch,
+          limit,
+          offset,
+        }),
+        listTransactionsCount({
+          type,
+          fromDate: from,
+          toDate: to,
+          status,
+          createdBy: filterCreatedBy,
+          transferMethod: filterTransferMethod,
+          search: filterSearch,
+        }),
+      ])
+      return NextResponse.json({ ok: true, data: transactions, total })
+    }
+    if (useFilters) {
+      const transactions = await listTransactionsFiltered({
+        type,
+        fromDate: from,
+        toDate: to,
+        status,
+        createdBy: filterCreatedBy,
+        transferMethod: filterTransferMethod,
+        search: filterSearch,
+      })
+      return NextResponse.json({ ok: true, data: transactions })
+    }
     const transactions = await listTransactions()
     return NextResponse.json({ ok: true, data: transactions })
   } catch (error: any) {

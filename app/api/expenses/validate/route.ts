@@ -7,7 +7,7 @@ export async function POST(request: NextRequest) {
   
   try {
     const body = await request.json()
-    const { expenseId, approved, rejectionReason, validationType } = body
+    const { expenseId, approved, rejectionReason, validationType, debitAccountType } = body
 
     if (!expenseId || typeof approved !== 'boolean' || !validationType) {
       return NextResponse.json({ 
@@ -15,6 +15,9 @@ export async function POST(request: NextRequest) {
         error: "Paramètres manquants: expenseId, approved, validationType requis" 
       }, { status: 400 })
     }
+
+    const validDebitAccounts = ['coffre', 'commissions', 'receipt_commissions', 'ecobank', 'uba'] as const
+    const debitAccount = debitAccountType && validDebitAccounts.includes(debitAccountType) ? debitAccountType : undefined
 
     let result
 
@@ -28,7 +31,8 @@ export async function POST(request: NextRequest) {
         expenseId,
         approved,
         user.name,
-        rejectionReason
+        rejectionReason,
+        approved ? (debitAccount ?? 'receipt_commissions') : undefined
       )
     } else if (validationType === 'director') {
       // Seuls les directeurs peuvent valider au niveau directeur

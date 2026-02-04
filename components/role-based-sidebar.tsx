@@ -22,7 +22,6 @@ import {
   Users,
   Building2,
   Settings,
-  Plus,
   ChevronDown,
   ChevronRight,
   BarChart3,
@@ -40,6 +39,19 @@ interface RoleBasedSidebarProps {
 export function RoleBasedSidebar({ user }: RoleBasedSidebarProps) {
   const pathname = usePathname()
   const [openSubmenus, setOpenSubmenus] = React.useState<Record<string, boolean>>({})
+
+  // Ouvrir le sous-menu "Transfert d'argent" quand on est sur /transfer ou /transfer/operations
+  React.useEffect(() => {
+    if (pathname === "/transfer" || pathname.startsWith("/transfer/")) {
+      setOpenSubmenus(prev => ({ ...prev, "Transfert d'argent": true }))
+    }
+  }, [pathname])
+  // Ouvrir le sous-menu "Bureau de change" quand on est sur /exchange ou /exchange/management
+  React.useEffect(() => {
+    if (pathname === "/exchange" || pathname.startsWith("/exchange/")) {
+      setOpenSubmenus(prev => ({ ...prev, "Bureau de change": true }))
+    }
+  }, [pathname])
 
   const toggleSubmenu = (itemTitle: string) => {
     setOpenSubmenus(prev => ({
@@ -62,6 +74,10 @@ export function RoleBasedSidebar({ user }: RoleBasedSidebarProps) {
       icon: Send,
       permission: "view_transfer" as const,
       primary: user.role === "cashier" || user.role === "director" || user.role === "delegate",
+      submenu: [
+        { title: "Effectuer un transfert", href: "/transfer", permission: "view_transfer" as const },
+        { title: "Opérations", href: "/transfer/operations", permission: "view_transfer" as const },
+      ],
     },
     {
       title: "Gestion Cartes",
@@ -76,6 +92,10 @@ export function RoleBasedSidebar({ user }: RoleBasedSidebarProps) {
       icon: Banknote,
       permission: "view_exchange" as const,
       primary: false,
+      submenu: [
+        { title: "Nouvelle opération de change", href: "/exchange", permission: "view_exchange" as const },
+        { title: "Gestion de change", href: "/exchange/management", permission: "view_exchange" as const },
+      ],
     },
     {
       title: "Dépenses",
@@ -142,27 +162,6 @@ export function RoleBasedSidebar({ user }: RoleBasedSidebarProps) {
     },
   ]
 
-  const quickActions = [
-    {
-      title: "Nouvelle transaction",
-      href: "/reception",
-      permission: "create_reception" as const,
-      roles: ["cashier", "director", "delegate"],
-    },
-    {
-      title: "Nouvelle dépense",
-      href: "/expenses",
-      permission: "create_expenses" as const,
-      roles: ["accounting", "director", "delegate"],
-    },
-    {
-      title: "Rapport du jour",
-      href: "/reports",
-      permission: "view_reports" as const,
-      roles: ["director", "delegate"],
-    },
-  ]
-
   // Logique spéciale pour l'auditeur - ne montrer que Tableau de bord, Opérations, Dépenses, Utilisateurs et Taux & Plafonds
   const visibleMenuItems = user.role === "auditor" 
     ? [
@@ -185,25 +184,20 @@ export function RoleBasedSidebar({ user }: RoleBasedSidebarProps) {
       })
   
   const visibleAdminItems = adminItems.filter((item) => hasPermission(user, item.permission))
-  const visibleQuickActions = quickActions.filter(
-    (action) => hasPermission(user, action.permission) && action.roles.includes(user.role),
-  )
 
   return (
-    <div className="flex h-full w-64 flex-col bg-white border-r">
+    <div className="flex h-full w-64 flex-col border-r bg-slate-50/50 dark:bg-slate-950/50">
       {/* Header */}
-      <div className="p-6">
+      <div className="shrink-0 p-4">
         <div className="flex items-center justify-between gap-2">
-          <div>
-            <div className="flex items-center gap-3 mb-2">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2.5 mb-2">
               <ZollLogo size="sm" showText={false} />
-              <h2 className="text-lg font-semibold">ZOLL TAX FOREX</h2>
+              <h2 className="text-base font-semibold truncate text-slate-900 dark:text-slate-100">ZOLL TAX FOREX</h2>
             </div>
-            <div>
-              <Badge variant="secondary">
-                {getRoleDisplayName(user.role)}
-              </Badge>
-            </div>
+            <Badge variant="secondary" className="text-xs font-medium">
+              {getRoleDisplayName(user.role)}
+            </Badge>
           </div>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -245,131 +239,153 @@ export function RoleBasedSidebar({ user }: RoleBasedSidebarProps) {
         </div>
       </div>
 
-      <Separator />
+      <Separator className="bg-slate-200 dark:bg-slate-800" />
 
       {/* Navigation */}
-      <nav className="flex-1 space-y-1 p-4">
-        {visibleMenuItems.map((item) => {
-          const Icon = item.icon
-          const isActive = pathname === item.href
-          const hasSubmenu = item.submenu && item.submenu.length > 0
-          const isSubmenuOpen = openSubmenus[item.title] || false
+      <nav className="flex-1 overflow-y-auto p-4">
+        {/* Section principale */}
+        <div className="mb-2 px-2">
+          <span className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/90">
+            Menu principal
+          </span>
+        </div>
+        <div className="space-y-0.5">
+          {visibleMenuItems.map((item) => {
+            const Icon = item.icon
+            const isActive = pathname === item.href
+            const hasSubmenu = item.submenu && item.submenu.length > 0
+            const isSubmenuOpen = openSubmenus[item.title] ?? false
 
-          // Vérifier si un sous-menu est actif
-          const isSubmenuActive = hasSubmenu && item.submenu?.some(subItem => pathname === subItem.href)
+            const isSubmenuActive = hasSubmenu && item.submenu?.some(subItem => pathname === subItem.href)
+            const isMainActive = isActive || isSubmenuActive
 
-          if (hasSubmenu) {
-            return (
-              <div key={item.title}>
-                <Button
-                  variant={isActive || isSubmenuActive ? "secondary" : "ghost"}
-                  className={cn(
-                    "w-full justify-between",
-                    (isActive || isSubmenuActive) && "bg-blue-50 text-blue-700 hover:bg-blue-100"
-                  )}
-                  onClick={() => toggleSubmenu(item.title)}
-                >
-                  <div className="flex items-center">
-                    <Icon className="mr-2 h-4 w-4" />
-                    {item.title}
-                  </div>
-                  {isSubmenuOpen ? (
-                    <ChevronDown className="h-4 w-4" />
-                  ) : (
-                    <ChevronRight className="h-4 w-4" />
-                  )}
-                </Button>
-                
-                {isSubmenuOpen && (
-                  <div className="ml-4 mt-1 space-y-1">
-                    {item.submenu?.filter(subItem => hasPermission(user, subItem.permission)).map((subItem) => {
-                      const isSubActive = pathname === subItem.href
-                      return (
-                        <Link key={subItem.href} href={subItem.href}>
-                          <Button
-                            variant={isSubActive ? "secondary" : "ghost"}
-                            className={cn(
-                              "w-full justify-start text-sm",
-                              isSubActive && "bg-blue-50 text-blue-700 hover:bg-blue-100"
-                            )}
-                          >
-                            {subItem.title}
-                          </Button>
-                        </Link>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-            )
-          }
-
-          return (
-            <Link key={item.href} href={item.href}>
-              <Button
-                variant={isActive ? "secondary" : "ghost"}
-                className={cn("w-full justify-start", isActive && "bg-blue-50 text-blue-700 hover:bg-blue-100")}
-              >
-                <Icon className="mr-2 h-4 w-4" />
-                {item.title}
-              </Button>
-            </Link>
-          )
-        })}
-
-        {/* Admin Section */}
-        {visibleAdminItems.length > 0 && (
-          <>
-            <Separator className="my-4" />
-            <div className="px-2 py-1">
-              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Administration</h3>
-            </div>
-            {visibleAdminItems.map((item) => {
-              const Icon = item.icon
-              const isActive = pathname === item.href
-
+            if (hasSubmenu) {
               return (
-                <Link key={item.href} href={item.href}>
+                <div key={item.title} className="rounded-lg">
                   <Button
-                    variant={isActive ? "secondary" : "ghost"}
-                    className={cn("w-full justify-start", isActive && "bg-blue-50 text-blue-700 hover:bg-blue-100")}
+                    variant="ghost"
+                    className={cn(
+                      "h-10 w-full justify-between rounded-lg px-3 font-medium",
+                      "text-slate-700 dark:text-slate-200",
+                      "hover:bg-slate-100 dark:hover:bg-slate-800",
+                      isMainActive && "bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100"
+                    )}
+                    onClick={() => toggleSubmenu(item.title)}
                   >
-                    <Icon className="mr-2 h-4 w-4" />
-                    {item.title}
+                    <div className="flex items-center gap-3">
+                      <div className={cn(
+                        "flex h-8 w-8 shrink-0 items-center justify-center rounded-md",
+                        isMainActive ? "bg-primary/10 text-primary" : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400"
+                      )}>
+                        <Icon className="h-4 w-4" />
+                      </div>
+                      <span>{item.title}</span>
+                    </div>
+                    {isSubmenuOpen ? (
+                      <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    ) : (
+                      <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    )}
                   </Button>
-                </Link>
-              )
-            })}
-          </>
-        )}
 
-        {/* Quick Actions */}
-        {visibleQuickActions.length > 0 && user.role !== "cashier" && (
-          <>
-            <Separator className="my-4" />
-            <div className="px-2 py-1">
-              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions rapides</h3>
-            </div>
-            {visibleQuickActions.map((action) => (
-              <Link key={action.href} href={action.href}>
-                <Button variant="outline" className="w-full justify-start border-dashed bg-transparent">
-                  <Plus className="mr-2 h-4 w-4" />
-                  {action.title}
+                  {isSubmenuOpen && (
+                    <div className="ml-3 mt-0.5 border-l border-slate-200 dark:border-slate-700 pl-3 py-1 space-y-0.5">
+                      {item.submenu?.filter(subItem => hasPermission(user, subItem.permission)).map((subItem) => {
+                        const isSubActive = pathname === subItem.href
+                        return (
+                          <Link key={subItem.href} href={subItem.href}>
+                            <span
+                              className={cn(
+                                "block rounded-md px-3 py-2 text-sm transition-colors",
+                                "text-muted-foreground hover:text-foreground hover:bg-slate-50 dark:hover:bg-slate-800/50",
+                                isSubActive && "bg-primary/10 text-primary font-medium hover:bg-primary/15 hover:text-primary"
+                              )}
+                            >
+                              {subItem.title}
+                            </span>
+                          </Link>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              )
+            }
+
+            return (
+              <Link key={item.href} href={item.href}>
+                <Button
+                  variant="ghost"
+                  className={cn(
+                    "h-10 w-full justify-start rounded-lg px-3 font-medium",
+                    "text-slate-700 dark:text-slate-200",
+                    "hover:bg-slate-100 dark:hover:bg-slate-800",
+                    isActive && "bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100"
+                  )}
+                >
+                  <div className={cn(
+                    "flex h-8 w-8 shrink-0 items-center justify-center rounded-md mr-3",
+                    isActive ? "bg-primary/10 text-primary" : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400"
+                  )}>
+                    <Icon className="h-4 w-4" />
+                  </div>
+                  {item.title}
                 </Button>
               </Link>
-            ))}
+            )
+          })}
+        </div>
+
+        {/* Section Administration */}
+        {visibleAdminItems.length > 0 && (
+          <>
+            <Separator className="my-4 bg-slate-200 dark:bg-slate-800" />
+            <div className="mb-2 px-2">
+              <span className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/90">
+                Administration
+              </span>
+            </div>
+            <div className="space-y-0.5">
+              {visibleAdminItems.map((item) => {
+                const Icon = item.icon
+                const isActive = pathname === item.href
+
+                return (
+                  <Link key={item.href} href={item.href}>
+                    <Button
+                      variant="ghost"
+                      className={cn(
+                        "h-10 w-full justify-start rounded-lg px-3 font-medium",
+                        "text-slate-600 dark:text-slate-300",
+                        "hover:bg-slate-100 dark:hover:bg-slate-800",
+                        isActive && "bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100"
+                      )}
+                    >
+                      <div className={cn(
+                        "flex h-8 w-8 shrink-0 items-center justify-center rounded-md mr-3",
+                        isActive ? "bg-primary/10 text-primary" : "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400"
+                      )}>
+                        <Icon className="h-4 w-4" />
+                      </div>
+                      {item.title}
+                    </Button>
+                  </Link>
+                )
+              })}
+            </div>
           </>
         )}
       </nav>
 
       {/* User Info + Logout */}
-      <div className="border-t p-4 space-y-3">
-        <div className="text-sm">
-          <div className="font-medium">{user.name}</div>
-          <div className="text-gray-500">{user.email}</div>
+      <div className="shrink-0 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 p-4 space-y-3">
+        <div className="text-sm min-w-0">
+          <div className="font-medium text-slate-900 dark:text-slate-100 truncate">{user.name}</div>
+          <div className="text-muted-foreground text-xs truncate">{user.email}</div>
         </div>
         <Button
           variant="outline"
+          size="sm"
           className="w-full justify-center"
           onClick={async () => {
             try {

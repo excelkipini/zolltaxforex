@@ -341,6 +341,47 @@ export async function deductExpenseFromReceiptCommissions(
   await reconcileReceiptCommissionsBalance(updatedBy)
 }
 
+export type ExpenseDebitAccountType = "coffre" | "commissions" | "receipt_commissions" | "ecobank" | "uba"
+
+/** Déduire une dépense d'une caisse (choisie par le comptable). */
+export async function deductExpenseFromAccount(
+  accountType: ExpenseDebitAccountType,
+  expenseId: string,
+  amount: number,
+  description: string,
+  updatedBy: string
+): Promise<void> {
+  if (accountType === "receipt_commissions") {
+    return deductExpenseFromReceiptCommissions(expenseId, amount, description, updatedBy)
+  }
+  if (accountType === "coffre") {
+    return deductExpenseFromCoffre(expenseId, amount, description, updatedBy)
+  }
+  // commissions, ecobank, uba : déduction générique
+  const account = await sql<CashAccount[]>`
+    SELECT id::text, account_type, current_balance::bigint as current_balance
+    FROM cash_accounts
+    WHERE account_type = ${accountType}
+  `
+  if (account.length === 0) {
+    throw new Error(`Compte ${accountType} non trouvé`)
+  }
+  const currentBalance = Number(account[0].current_balance)
+  const newBalance = currentBalance - Number(amount)
+  if (newBalance < 0) {
+    throw new Error(`Solde insuffisant dans le compte ${accountType}`)
+  }
+  await sql`
+    UPDATE cash_accounts
+    SET current_balance = ${newBalance}, last_updated = NOW(), updated_by = ${updatedBy}
+    WHERE account_type = ${accountType}
+  `
+  await sql`
+    INSERT INTO cash_transactions (account_type, transaction_type, amount, description, reference_id, created_by)
+    VALUES (${accountType}, 'expense', ${Math.round(amount)}, ${description}, ${expenseId}, ${updatedBy})
+  `
+}
+
 // Ajouter des commissions au compte commissions (pour les transferts)
 export async function addCommissionToAccount(
   transactionId: string,

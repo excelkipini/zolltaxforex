@@ -119,6 +119,9 @@ export function ExpensesView({ user }: ExpensesViewProps) {
   const [expenseToReject, setExpenseToReject] = useState<string | number | null>(null)
   const [deleteConfirmDialogOpen, setDeleteConfirmDialogOpen] = useState(false)
   const [expenseToDelete, setExpenseToDelete] = useState<{ id: string | number; description: string } | null>(null)
+  const [approveAccountingDialogOpen, setApproveAccountingDialogOpen] = useState(false)
+  const [expenseToApproveAccounting, setExpenseToApproveAccounting] = useState<string | number | null>(null)
+  const [debitAccountType, setDebitAccountType] = useState<"coffre" | "commissions" | "receipt_commissions" | "ecobank" | "uba">("receipt_commissions")
 
   const expenses = items
 
@@ -473,8 +476,21 @@ export function ExpensesView({ user }: ExpensesViewProps) {
     }
   }
 
+  const EXPENSE_DEBIT_ACCOUNTS: { value: "coffre" | "commissions" | "receipt_commissions" | "ecobank" | "uba"; label: string }[] = [
+    { value: "receipt_commissions", label: "Commissions Reçus" },
+    { value: "coffre", label: "Coffre" },
+    { value: "commissions", label: "Commissions Transferts" },
+    { value: "ecobank", label: "Compte Ecobank" },
+    { value: "uba", label: "Compte UBA" },
+  ]
+
   // Nouvelles fonctions pour le workflow en 2 étapes
-  async function validateExpense(id: string | number, approved: boolean, validationType: "accounting" | "director") {
+  async function validateExpense(
+    id: string | number,
+    approved: boolean,
+    validationType: "accounting" | "director",
+    debitAccountTypeParam?: "coffre" | "commissions" | "receipt_commissions" | "ecobank" | "uba"
+  ) {
     try {
       const res = await fetch("/api/expenses/validate", {
         method: "POST",
@@ -483,7 +499,10 @@ export function ExpensesView({ user }: ExpensesViewProps) {
           expenseId: id, 
           approved, 
           validationType,
-          rejectionReason: approved ? undefined : rejectionReason
+          rejectionReason: approved ? undefined : rejectionReason,
+          ...(validationType === "accounting" && approved && debitAccountTypeParam
+            ? { debitAccountType: debitAccountTypeParam }
+            : {}),
         }),
       })
       const data = await res.json()
@@ -1145,7 +1164,11 @@ export function ExpensesView({ user }: ExpensesViewProps) {
                             size="sm"
                             variant="outline"
                             className="text-green-600 border-green-600 hover:bg-green-50 bg-transparent"
-                            onClick={() => validateExpense(expense.id, true, "accounting")}
+                            onClick={() => {
+                              setExpenseToApproveAccounting(expense.id)
+                              setDebitAccountType("receipt_commissions")
+                              setApproveAccountingDialogOpen(true)
+                            }}
                           >
                             <CheckCircle className="h-4 w-4 mr-1" />
                             Approuver
@@ -1500,6 +1523,52 @@ export function ExpensesView({ user }: ExpensesViewProps) {
                 disabled={!rejectionReason.trim()}
               >
                 Rejeter la dépense
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Dialog pour approuver (comptable) : choisir la caisse à débiter */}
+        <Dialog open={approveAccountingDialogOpen} onOpenChange={(open) => { setApproveAccountingDialogOpen(open); if (!open) setExpenseToApproveAccounting(null) }}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Approuver la dépense</DialogTitle>
+              <DialogDescription>
+                Choisissez la caisse à débiter lors de la validation définitive par le directeur. Par défaut : Commissions Reçus.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label>Caisse à débiter</Label>
+                <Select value={debitAccountType} onValueChange={(v: typeof debitAccountType) => setDebitAccountType(v)}>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {EXPENSE_DEBIT_ACCOUNTS.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <DialogFooter className="gap-2">
+              <Button variant="outline" onClick={() => setApproveAccountingDialogOpen(false)}>
+                Annuler
+              </Button>
+              <Button
+                className="text-green-600 border-green-600 hover:bg-green-50 bg-transparent"
+                onClick={async () => {
+                  if (expenseToApproveAccounting == null) return
+                  await validateExpense(expenseToApproveAccounting, true, "accounting", debitAccountType)
+                  setApproveAccountingDialogOpen(false)
+                  setExpenseToApproveAccounting(null)
+                }}
+              >
+                <CheckCircle className="h-4 w-4 mr-1" />
+                Confirmer l&apos;approbation
               </Button>
             </DialogFooter>
           </DialogContent>

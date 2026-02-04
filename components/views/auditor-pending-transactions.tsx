@@ -8,10 +8,11 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Input } from "@/components/ui/input"
-import { CheckCircle, Eye, X, AlertTriangle, Info, Upload, Play, FileUp } from "lucide-react"
+import { CheckCircle, Eye, X, AlertTriangle, Info, Upload, Play, FileUp, ChevronLeft, ChevronRight } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useExchangeRates } from "@/hooks/use-exchange-rates"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 type Transaction = {
   id: string
@@ -55,58 +56,87 @@ export function AuditorPendingTransactions({ user }: AuditorPendingTransactionsP
   const [receiptFile, setReceiptFile] = React.useState<File | null>(null)
   const [executorComment, setExecutorComment] = React.useState("")
   const [executingTransaction, setExecutingTransaction] = React.useState<string | null>(null)
+  const [loading, setLoading] = React.useState(true)
+  const [pendingPage, setPendingPage] = React.useState(1)
+  const [pendingLimit, setPendingLimit] = React.useState(10)
+  const [pendingTotal, setPendingTotal] = React.useState(0)
+  const [executionPage, setExecutionPage] = React.useState(1)
+  const [executionLimit, setExecutionLimit] = React.useState(10)
+  const [executionTotal, setExecutionTotal] = React.useState(0)
   const { toast } = useToast()
   const { rates } = useExchangeRates()
 
-  // Charger les transactions depuis l'API
-  React.useEffect(() => {
-    const loadTransactions = async () => {
-      try {
-        const res = await fetch("/api/transactions")
-        const data = await res.json()
-        if (res.ok && data?.ok && Array.isArray(data.data)) {
-          const apiTransactions = data.data.map((item: any) => ({
-            ...item,
-            details: typeof item.details === 'string' ? JSON.parse(item.details) : item.details
-          }))
-          
-          // Filtrer les transactions en attente de validation
-          const pendingTransactions = apiTransactions.filter(t => t.status === "pending")
-          setTransactions(pendingTransactions)
-          
-          // Filtrer les transactions en attente d'exécution
-          const pendingExecution = apiTransactions.filter(t => t.status === "validated")
-          setPendingExecutionTransactions(pendingExecution)
-        } else {
-          setTransactions([])
-          setPendingExecutionTransactions([])
-        }
-      } catch (error) {
+  const loadPending = React.useCallback(async (page: number, limit: number) => {
+    try {
+      setLoading(true)
+      const res = await fetch(`/api/transactions?status=pending&page=${page}&limit=${limit}`)
+      const data = await res.json()
+      if (res.ok && data?.ok && Array.isArray(data.data)) {
+        const list = data.data.map((item: any) => ({
+          ...item,
+          details: typeof item.details === "string" ? JSON.parse(item.details) : item.details,
+        }))
+        setTransactions(list)
+        setPendingTotal(typeof data.total === "number" ? data.total : list.length)
+      } else {
         setTransactions([])
-        setPendingExecutionTransactions([])
+        setPendingTotal(0)
       }
-    }
-
-    loadTransactions()
-
-    // Écouter les événements personnalisés pour recharger depuis l'API
-    const handleTransferCreated = () => loadTransactions()
-    const handleReceptionCreated = () => loadTransactions()
-    const handleExchangeCreated = () => loadTransactions()
-    const handleTransactionStatusChanged = () => loadTransactions()
-
-    window.addEventListener('transferCreated', handleTransferCreated as EventListener)
-    window.addEventListener('receptionCreated', handleReceptionCreated as EventListener)
-    window.addEventListener('exchangeCreated', handleExchangeCreated as EventListener)
-    window.addEventListener('transactionStatusChanged', handleTransactionStatusChanged as EventListener)
-    
-    return () => {
-      window.removeEventListener('transferCreated', handleTransferCreated as EventListener)
-      window.removeEventListener('receptionCreated', handleReceptionCreated as EventListener)
-      window.removeEventListener('exchangeCreated', handleExchangeCreated as EventListener)
-      window.removeEventListener('transactionStatusChanged', handleTransactionStatusChanged as EventListener)
+    } catch {
+      setTransactions([])
+      setPendingTotal(0)
+    } finally {
+      setLoading(false)
     }
   }, [])
+
+  const loadExecution = React.useCallback(async (page: number, limit: number) => {
+    try {
+      const res = await fetch(`/api/transactions?status=validated&page=${page}&limit=${limit}`)
+      const data = await res.json()
+      if (res.ok && data?.ok && Array.isArray(data.data)) {
+        const list = data.data.map((item: any) => ({
+          ...item,
+          details: typeof item.details === "string" ? JSON.parse(item.details) : item.details,
+        }))
+        setPendingExecutionTransactions(list)
+        setExecutionTotal(typeof data.total === "number" ? data.total : list.length)
+      } else {
+        setPendingExecutionTransactions([])
+        setExecutionTotal(0)
+      }
+    } catch {
+      setPendingExecutionTransactions([])
+      setExecutionTotal(0)
+    }
+  }, [])
+
+  const refreshBoth = React.useCallback(() => {
+    loadPending(pendingPage, pendingLimit)
+    loadExecution(executionPage, executionLimit)
+  }, [loadPending, loadExecution, pendingPage, pendingLimit, executionPage, executionLimit])
+
+  React.useEffect(() => {
+    loadPending(pendingPage, pendingLimit)
+  }, [loadPending, pendingPage, pendingLimit])
+
+  React.useEffect(() => {
+    loadExecution(executionPage, executionLimit)
+  }, [loadExecution, executionPage, executionLimit])
+
+  React.useEffect(() => {
+    const handleRefresh = () => refreshBoth()
+    window.addEventListener("transferCreated", handleRefresh as EventListener)
+    window.addEventListener("receptionCreated", handleRefresh as EventListener)
+    window.addEventListener("exchangeCreated", handleRefresh as EventListener)
+    window.addEventListener("transactionStatusChanged", handleRefresh as EventListener)
+    return () => {
+      window.removeEventListener("transferCreated", handleRefresh as EventListener)
+      window.removeEventListener("receptionCreated", handleRefresh as EventListener)
+      window.removeEventListener("exchangeCreated", handleRefresh as EventListener)
+      window.removeEventListener("transactionStatusChanged", handleRefresh as EventListener)
+    }
+  }, [refreshBoth])
 
   const handleValidateTransaction = (transactionId: string) => {
     setTransactionToValidate(transactionId)
@@ -710,15 +740,20 @@ export function AuditorPendingTransactions({ user }: AuditorPendingTransactionsP
         <Tabs defaultValue="validation" className="w-full">
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="validation">
-              Validation ({transactions.length})
+              Validation ({pendingTotal})
             </TabsTrigger>
             <TabsTrigger value="execution">
-              Exécution ({pendingExecutionTransactions.length})
+              Exécution ({executionTotal})
             </TabsTrigger>
           </TabsList>
           
           <TabsContent value="validation" className="space-y-4 mt-4">
-            {transactions.length === 0 ? (
+            {loading ? (
+              <div className="text-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2" />
+                <p className="text-gray-500">Chargement des transactions...</p>
+              </div>
+            ) : transactions.length === 0 ? (
           <div className="text-center py-8">
             <p className="text-gray-500">Aucune transaction en attente de validation</p>
           </div>
@@ -782,12 +817,41 @@ export function AuditorPendingTransactions({ user }: AuditorPendingTransactionsP
                     Une fois validées, elles apparaîtront dans l'onglet "Exécution".
           </p>
         </div>
+        {/* Pagination Validation */}
+        {pendingTotal > 0 && (
+          <div className="mt-4 pt-4 border-t flex flex-nowrap items-center gap-x-4 gap-y-0 overflow-x-auto min-w-0">
+            <span className="text-sm text-gray-600 whitespace-nowrap shrink-0">Éléments par page:</span>
+            <Select value={String(pendingLimit)} onValueChange={(v) => { setPendingLimit(Number(v)); setPendingPage(1); }}>
+              <SelectTrigger className="w-[80px] shrink-0">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {[10, 20, 50].map((n) => (
+                  <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <span className="text-sm text-gray-600 whitespace-nowrap shrink-0">
+              Affichage de {pendingTotal === 0 ? 1 : (pendingPage - 1) * pendingLimit + 1} à {Math.min(pendingPage * pendingLimit, pendingTotal)} sur {pendingTotal} transaction(s)
+            </span>
+            <div className="flex items-center gap-2 shrink-0 ml-auto">
+              <Button variant="outline" size="sm" onClick={() => setPendingPage((p) => Math.max(1, p - 1))} disabled={pendingPage <= 1}>
+                <ChevronLeft className="h-4 w-4 mr-1" />
+                Précédent
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setPendingPage((p) => p + 1)} disabled={pendingPage >= Math.ceil(pendingTotal / pendingLimit)}>
+                Suivant
+                <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            </div>
+          </div>
+        )}
               </>
             )}
           </TabsContent>
           
           <TabsContent value="execution" className="space-y-4 mt-4">
-            {pendingExecutionTransactions.length === 0 ? (
+            {executionTotal === 0 ? (
               <div className="text-center py-8">
                 <p className="text-gray-500">Aucune transaction en attente d'exécution</p>
               </div>
@@ -844,6 +908,35 @@ export function AuditorPendingTransactions({ user }: AuditorPendingTransactionsP
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+            {/* Pagination Exécution */}
+            {executionTotal > 0 && (
+              <div className="mt-4 pt-4 border-t flex flex-nowrap items-center gap-x-4 gap-y-0 overflow-x-auto min-w-0">
+                <span className="text-sm text-gray-600 whitespace-nowrap shrink-0">Éléments par page:</span>
+                <Select value={String(executionLimit)} onValueChange={(v) => { setExecutionLimit(Number(v)); setExecutionPage(1); }}>
+                  <SelectTrigger className="w-[80px] shrink-0">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[10, 20, 50].map((n) => (
+                      <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <span className="text-sm text-gray-600 whitespace-nowrap shrink-0">
+                  Affichage de {(executionPage - 1) * executionLimit + 1} à {Math.min(executionPage * executionLimit, executionTotal)} sur {executionTotal} transaction(s)
+                </span>
+                <div className="flex items-center gap-2 shrink-0 ml-auto">
+                  <Button variant="outline" size="sm" onClick={() => setExecutionPage((p) => Math.max(1, p - 1))} disabled={executionPage <= 1}>
+                    <ChevronLeft className="h-4 w-4 mr-1" />
+                    Précédent
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => setExecutionPage((p) => p + 1)} disabled={executionPage >= Math.ceil(executionTotal / executionLimit)}>
+                    Suivant
+                    <ChevronRight className="h-4 w-4 ml-1" />
+                  </Button>
+                </div>
               </div>
             )}
           </TabsContent>

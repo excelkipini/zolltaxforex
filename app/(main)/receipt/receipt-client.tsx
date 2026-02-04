@@ -48,6 +48,12 @@ interface ReceiptHistoryItem {
   real_commission?: number
 }
 
+function parseCommissionRate(v: unknown): number {
+  if (typeof v === "number" && !Number.isNaN(v)) return Math.max(0, Math.min(100, v))
+  const n = parseFloat(String(v).trim().replace(/,/g, ".").replace(/[^0-9.-]/g, ""))
+  return Number.isNaN(n) ? 3.6 : Math.max(0, Math.min(100, n))
+}
+
 export default function ReceiptClient() {
   const [receiptData, setReceiptData] = useState<ReceiptData>({
     clientName: "",
@@ -141,12 +147,25 @@ export default function ReceiptClient() {
     }
   }
 
-  // Charger l'historique au montage du composant
   useEffect(() => {
     if (showHistory) {
       loadReceiptHistory()
     }
   }, [showHistory, searchQuery])
+
+  // Charger le taux de commission Transfert International depuis Taux & Plafonds
+  useEffect(() => {
+    let cancelled = false
+    fetch("/api/settings?type=public")
+      .then((res) => res.json())
+      .then((data) => {
+        if (cancelled || !data?.ok || !data?.data?.settings) return
+        const rate = parseCommissionRate(data.data.settings.commission_international_pct ?? 3.6)
+        setReceiptData((prev) => ({ ...prev, commissionRate: rate }))
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [])
 
   const handleGenerateReceipt = async () => {
     if (!receiptData.clientName || !receiptData.operationType || !receiptData.amountReceived) {
@@ -192,7 +211,8 @@ export default function ReceiptClient() {
       }
       
       // Réinitialiser le formulaire
-      setReceiptData({
+      setReceiptData((prev) => ({
+        ...prev,
         clientName: "",
         clientPhone: "",
         clientEmail: "",
@@ -200,11 +220,10 @@ export default function ReceiptClient() {
         amountReceived: 0,
         amountSent: 0,
         commission: 0,
-        commissionRate: 3.6,
         currency: "XAF",
         notes: "",
         receiptNumber: ""
-      })
+      }))
     } catch (error) {
       console.error('Erreur:', error)
       toast.error("Erreur lors de la génération du reçu")
@@ -331,7 +350,7 @@ export default function ReceiptClient() {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="commission">Commission ({receiptData.commissionRate}%)</Label>
+                <Label htmlFor="commission">Commission ({Number(receiptData.commissionRate).toFixed(1)}%)</Label>
                 <Input
                   id="commission"
                   value={receiptData.commission.toFixed(2)}
@@ -463,7 +482,7 @@ export default function ReceiptClient() {
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Commission ({receiptData.commissionRate}%):</span>
+                  <span>Commission ({Number(receiptData.commissionRate).toFixed(1)}%):</span>
                   <span className="text-red-600">
                     -{receiptData.commission.toLocaleString('fr-FR')} {receiptData.currency}
                   </span>
@@ -647,7 +666,7 @@ export default function ReceiptClient() {
                                         <span className="font-medium">Montant reçu:</span> {receipt.amount_received.toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} {receipt.currency}
                                       </div>
                                       <div>
-                                        <span className="font-medium">Commission ({receipt.commission_rate}%):</span> -{receipt.commission.toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} {receipt.currency}
+                                        <span className="font-medium">Commission ({Number(parseCommissionRate(receipt.commission_rate)).toFixed(1)}%):</span> -{Number(receipt.commission).toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} {receipt.currency}
                                       </div>
                                       <div>
                                         <span className="font-medium">Montant envoyé:</span> {receipt.amount_sent.toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} {receipt.currency}

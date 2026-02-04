@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { 
   Wallet, 
   Building2, 
@@ -57,6 +57,8 @@ export function CashManagement({ user }: CashManagementProps) {
   const [updating, setUpdating] = React.useState(false)
   const [syncing, setSyncing] = React.useState(false)
   const [syncingReceipts, setSyncingReceipts] = React.useState(false)
+  const [transactionsPage, setTransactionsPage] = React.useState(1)
+  const [transactionsPerPage, setTransactionsPerPage] = React.useState(10)
   const { toast } = useToast()
 
   // Synchroniser les commissions existantes
@@ -134,8 +136,7 @@ export function CashManagement({ user }: CashManagementProps) {
         setAccounts(accountsData.accounts)
       }
 
-      // Charger les transactions récentes
-      const transactionsResponse = await fetch('/api/cash?action=transactions&limit=20')
+      const transactionsResponse = await fetch('/api/cash?action=transactions&limit=500')
       const transactionsData = await transactionsResponse.json()
       
       if (transactionsData.success) {
@@ -157,6 +158,18 @@ export function CashManagement({ user }: CashManagementProps) {
   React.useEffect(() => {
     loadCashData()
   }, [])
+
+  const totalPages = Math.max(1, Math.ceil(transactions.length / transactionsPerPage))
+  const paginatedTransactions = transactions.slice(
+    (transactionsPage - 1) * transactionsPerPage,
+    transactionsPage * transactionsPerPage
+  )
+
+  React.useEffect(() => {
+    if (transactions.length > 0 && (transactionsPage - 1) * transactionsPerPage >= transactions.length) {
+      setTransactionsPage(1)
+    }
+  }, [transactions.length, transactionsPerPage, transactionsPage])
 
   // Formater le montant
   const formatAmount = (amount: number) => {
@@ -384,9 +397,21 @@ export function CashManagement({ user }: CashManagementProps) {
         </div>
       </div>
 
-      {/* Statistiques des comptes */}
-      <div className="grid grid-cols-5 gap-4">
-        {accounts.map((account) => (
+      {/* Statistiques des comptes (Excédents RIA masqué, UBA et Ecobank en fin) */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+        {accounts
+          .filter((a) => a.account_type !== "ria_excedents")
+          .sort((a, b) => {
+            const order: Record<string, number> = {
+              coffre: 0,
+              commissions: 1,
+              receipt_commissions: 2,
+              ecobank: 3,
+              uba: 4,
+            }
+            return (order[a.account_type] ?? 99) - (order[b.account_type] ?? 99)
+          })
+          .map((account) => (
           <Card key={account.id}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">{account.account_name}</CardTitle>
@@ -400,7 +425,7 @@ export function CashManagement({ user }: CashManagementProps) {
                 <p className="text-xs text-muted-foreground">
                   Mis à jour: {formatDate(account.last_updated)}
                 </p>
-                {account.account_type !== 'commissions' && account.account_type !== 'receipt_commissions' && (
+                {account.account_type !== 'commissions' && account.account_type !== 'receipt_commissions' && account.account_type !== 'ria_excedents' && (
                   <Button
                     size="sm"
                     variant="outline"
@@ -416,120 +441,115 @@ export function CashManagement({ user }: CashManagementProps) {
         ))}
       </div>
 
-      {/* Onglets pour les détails */}
-      <Tabs defaultValue="overview" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="overview">Vue d'ensemble</TabsTrigger>
-          <TabsTrigger value="transactions">Historique des transactions</TabsTrigger>
-        </TabsList>
+      {/* Historique des transactions avec pagination */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <History className="h-5 w-5" />
+            Historique des transactions
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Date</TableHead>
+                <TableHead>Compte</TableHead>
+                <TableHead>Type</TableHead>
+                <TableHead>Montant</TableHead>
+                <TableHead>Description</TableHead>
+                <TableHead>Utilisateur</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {paginatedTransactions.map((transaction) => (
+                <TableRow key={transaction.id}>
+                  <TableCell className="text-sm">
+                    {formatDate(transaction.created_at)}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      {getAccountIcon(transaction.account_type)}
+                      <span className="text-sm font-medium">
+                        {accounts.find(a => a.account_type === transaction.account_type)?.account_name}
+                      </span>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    {getTransactionBadge(transaction.transaction_type)}
+                  </TableCell>
+                  <TableCell className={`font-medium ${
+                    transaction.transaction_type === 'deposit' || transaction.transaction_type === 'commission'
+                      ? 'text-green-600'
+                      : 'text-red-600'
+                  }`}>
+                    {transaction.transaction_type === 'deposit' || transaction.transaction_type === 'commission' ? '+' : '-'}
+                    {formatAmount(Math.abs(transaction.amount))}
+                  </TableCell>
+                  <TableCell className="text-sm">
+                    {translateOperationType(transaction.description)}
+                  </TableCell>
+                  <TableCell className="text-sm">
+                    {transaction.created_by}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
 
-        <TabsContent value="overview" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <AlertCircle className="h-5 w-5 text-blue-600" />
-                Informations importantes
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
-                <p className="text-sm text-blue-800">
-                  <strong>Compte UBA :</strong> Solde du compte bancaire UBA pour les opérations de transfert
-                </p>
+          {transactions.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">
+              <History className="h-8 w-8 mx-auto mb-2" />
+              <p>Aucune transaction enregistrée</p>
+            </div>
+          ) : (
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-4 pt-4 border-t">
+              <div className="flex items-center gap-2">
+                <Label className="text-sm text-muted-foreground shrink-0">Éléments par page:</Label>
+                <Select
+                  value={String(transactionsPerPage)}
+                  onValueChange={(v) => {
+                    setTransactionsPerPage(Number(v))
+                    setTransactionsPage(1)
+                  }}
+                >
+                  <SelectTrigger className="w-[80px] h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="10">10</SelectItem>
+                    <SelectItem value="25">25</SelectItem>
+                    <SelectItem value="50">50</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-              <div className="p-3 bg-green-50 rounded-lg border border-green-200">
-                <p className="text-sm text-green-800">
-                  <strong>Compte Ecobank :</strong> Solde du compte bancaire Ecobank pour les opérations de transfert
-                </p>
+              <p className="text-sm text-muted-foreground">
+                Affichage de {transactions.length === 0 ? 0 : (transactionsPage - 1) * transactionsPerPage + 1} à{" "}
+                {Math.min(transactionsPage * transactionsPerPage, transactions.length)} sur{" "}
+                {transactions.length} opérations
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setTransactionsPage((p) => Math.max(1, p - 1))}
+                  disabled={transactionsPage <= 1}
+                >
+                  Précédent
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setTransactionsPage((p) => p + 1)}
+                  disabled={transactionsPage >= totalPages}
+                >
+                  Suivant
+                </Button>
               </div>
-              <div className="p-3 bg-orange-50 rounded-lg border border-orange-200">
-                <p className="text-sm text-orange-800">
-                  <strong>Coffre :</strong> Espèces disponibles pour les opérations courantes
-                </p>
-              </div>
-              <div className="p-3 bg-purple-50 rounded-lg border border-purple-200">
-                <p className="text-sm text-purple-800">
-                  <strong>Commissions Transferts :</strong> Commissions générées par les transferts d'argent (≥ 10000 XAF)
-                </p>
-              </div>
-              <div className="p-3 bg-indigo-50 rounded-lg border border-indigo-200">
-                <p className="text-sm text-indigo-800">
-                  <strong>Commissions Reçus :</strong> Commissions générées par l'émission de reçus
-                </p>
-                <p className="text-xs text-indigo-700 mt-1">
-                  Les dépenses validées par le Directeur sont automatiquement déduites du solde Commissions Reçus
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="transactions" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <History className="h-5 w-5" />
-                Historique des transactions récentes
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Compte</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Montant</TableHead>
-                    <TableHead>Description</TableHead>
-                    <TableHead>Utilisateur</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {transactions.map((transaction) => (
-                    <TableRow key={transaction.id}>
-                      <TableCell className="text-sm">
-                        {formatDate(transaction.created_at)}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          {getAccountIcon(transaction.account_type)}
-                          <span className="text-sm font-medium">
-                            {accounts.find(a => a.account_type === transaction.account_type)?.account_name}
-                          </span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {getTransactionBadge(transaction.transaction_type)}
-                      </TableCell>
-                      <TableCell className={`font-medium ${
-                        transaction.transaction_type === 'deposit' || transaction.transaction_type === 'commission' 
-                          ? 'text-green-600' 
-                          : 'text-red-600'
-                      }`}>
-                        {transaction.transaction_type === 'deposit' || transaction.transaction_type === 'commission' ? '+' : '-'}
-                        {formatAmount(Math.abs(transaction.amount))}
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        {translateOperationType(transaction.description)}
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        {transaction.created_by}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-              
-              {transactions.length === 0 && (
-                <div className="text-center py-8 text-gray-500">
-                  <History className="h-8 w-8 mx-auto mb-2" />
-                  <p>Aucune transaction enregistrée</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Dialog de mise à jour du solde */}
       <Dialog open={updateDialogOpen} onOpenChange={setUpdateDialogOpen}>
