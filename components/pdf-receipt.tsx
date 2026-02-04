@@ -1,6 +1,7 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
+import { formatDateFR } from "@/lib/utils"
 import { Download, FileText } from "lucide-react"
 import jsPDF from "jspdf"
 import html2canvas from "html2canvas"
@@ -51,7 +52,7 @@ export function PDFReceipt({ expense, user }: PDFReceiptProps) {
           <div style="margin-bottom: 20mm; flex-grow: 1;">
             <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
               <span style="font-weight: bold; font-size: 12px;">Date:</span>
-              <span style="font-size: 12px;">${new Date(expense.date).toLocaleDateString("fr-FR")}</span>
+              <span style="font-size: 12px;">${formatDateFR(expense.date)}</span>
             </div>
             <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
               <span style="font-weight: bold; font-size: 12px;">Libellé:</span>

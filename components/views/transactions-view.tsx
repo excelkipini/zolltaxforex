@@ -45,6 +45,7 @@ export function TransactionsView({ user }: TransactionsViewProps = {}) {
   const [loading, setLoading] = React.useState(true)
   const [transactions, setTransactions] = React.useState<Transaction[]>([])
   const [filteredTransactions, setFilteredTransactions] = React.useState<Transaction[]>([])
+  const [totalCount, setTotalCount] = React.useState(0)
   const [searchTerm, setSearchTerm] = React.useState("")
   const [dateFilter, setDateFilter] = React.useState<{ from?: Date; to?: Date } | null>(null)
   const [statusFilter, setStatusFilter] = React.useState<string>("all")
@@ -57,7 +58,7 @@ export function TransactionsView({ user }: TransactionsViewProps = {}) {
   const [sortField, setSortField] = React.useState<string | null>("created_at")
   const [sortDirection, setSortDirection] = React.useState<"asc" | "desc">("desc")
   const [currentPage, setCurrentPage] = React.useState(1)
-  const [itemsPerPage, setItemsPerPage] = React.useState(10)
+  const [itemsPerPage, setItemsPerPage] = React.useState(25)
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false)
   const [transactionToDelete, setTransactionToDelete] = React.useState<string | null>(null)
   const [validateDeleteDialogOpen, setValidateDeleteDialogOpen] = React.useState(false)
@@ -71,10 +72,26 @@ export function TransactionsView({ user }: TransactionsViewProps = {}) {
   const [executorComment, setExecutorComment] = React.useState("")
   const { toast } = useToast()
 
-  // Fonction helper pour recharger et filtrer les transactions
-  const reloadAndFilterTransactions = async () => {
+  // Réinitialiser à la page 1 quand les filtres changent
+  React.useEffect(() => {
+    setCurrentPage(1)
+  }, [searchTerm, dateFilter, statusFilter, typeFilter, cashierFilter])
+
+  const loadTransactionsFromAPI = React.useCallback(async () => {
+    setLoading(true)
     try {
-      const res = await fetch("/api/transactions")
+      const params = new URLSearchParams()
+      params.set("page", String(currentPage))
+      params.set("limit", String(itemsPerPage))
+      if (typeFilter && typeFilter !== "all") params.set("type", typeFilter)
+      if (statusFilter && statusFilter !== "all") params.set("status", statusFilter)
+      if (cashierFilter && cashierFilter !== "all") params.set("cashier", cashierFilter)
+      if (searchTerm.trim()) params.set("search", searchTerm.trim())
+      if (dateFilter?.from) params.set("from", dateFilter.from.toISOString().slice(0, 10))
+      if (dateFilter?.to) params.set("to", dateFilter.to.toISOString().slice(0, 10))
+      if (user?.role === "cashier") params.set("cashier", user.name)
+
+      const res = await fetch(`/api/transactions?${params.toString()}`)
       const data = await res.json()
       if (res.ok && data?.ok && Array.isArray(data.data)) {
         const apiTransactions = data.data.map((item: any) => ({
@@ -83,179 +100,71 @@ export function TransactionsView({ user }: TransactionsViewProps = {}) {
           details: typeof item.details === 'string' ? JSON.parse(item.details) : item.details
         }))
         setTransactions(apiTransactions)
-        // Les filtres seront réappliqués automatiquement par le useEffect
+        setFilteredTransactions(apiTransactions)
+        setTotalCount(typeof data.total === "number" ? data.total : apiTransactions.length)
+      } else {
+        setTransactions([])
+        setFilteredTransactions([])
+        setTotalCount(0)
       }
     } catch (error) {
-      console.error("Erreur lors du rechargement:", error)
+      setTransactions([])
+      setFilteredTransactions([])
+      setTotalCount(0)
+    } finally {
+      setLoading(false)
     }
-  }
+  }, [currentPage, itemsPerPage, typeFilter, statusFilter, cashierFilter, searchTerm, dateFilter, user?.role, user?.name])
 
-  const isInitialLoadRef = React.useRef(true)
-  // Charger toutes les transactions depuis l'API uniquement
   React.useEffect(() => {
-    let cancelled = false
-    const loadTransactionsFromAPI = async () => {
-      if (isInitialLoadRef.current) {
-        setLoading(true)
-        isInitialLoadRef.current = false
-      }
-      try {
-        const res = await fetch("/api/transactions")
-        const data = await res.json()
-        if (cancelled) return
-        if (res.ok && data?.ok && Array.isArray(data.data)) {
-          const apiTransactions = data.data.map((item: any) => ({
-            ...item,
-            amount: Number(item.amount),
-            details: typeof item.details === 'string' ? JSON.parse(item.details) : item.details
-          }))
-          setTransactions(apiTransactions)
-          setFilteredTransactions(apiTransactions)
-        } else {
-          setTransactions([])
-          setFilteredTransactions([])
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setTransactions([])
-          setFilteredTransactions([])
-        }
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    }
-
     loadTransactionsFromAPI()
+  }, [loadTransactionsFromAPI])
 
+  React.useEffect(() => {
     const handleTransferCreated = () => loadTransactionsFromAPI()
     const handleReceptionCreated = () => loadTransactionsFromAPI()
     const handleExchangeCreated = () => loadTransactionsFromAPI()
     const handleTransactionStatusChanged = () => loadTransactionsFromAPI()
-
     window.addEventListener('transferCreated', handleTransferCreated as EventListener)
     window.addEventListener('receptionCreated', handleReceptionCreated as EventListener)
     window.addEventListener('exchangeCreated', handleExchangeCreated as EventListener)
     window.addEventListener('transactionStatusChanged', handleTransactionStatusChanged as EventListener)
-
     return () => {
-      cancelled = true
       window.removeEventListener('transferCreated', handleTransferCreated as EventListener)
       window.removeEventListener('receptionCreated', handleReceptionCreated as EventListener)
       window.removeEventListener('exchangeCreated', handleExchangeCreated as EventListener)
       window.removeEventListener('transactionStatusChanged', handleTransactionStatusChanged as EventListener)
     }
-  }, [])
+  }, [loadTransactionsFromAPI])
 
-  // Filtrage et tri des transactions
+  const reloadAndFilterTransactions = React.useCallback(() => {
+    loadTransactionsFromAPI()
+  }, [loadTransactionsFromAPI])
+
+  // Tri côté client sur la page courante (les filtres sont appliqués côté API)
   React.useEffect(() => {
-    let filtered = transactions
-
-    // Filtre par utilisateur pour les caissiers
-    if (user?.role === "cashier") {
-      filtered = filtered.filter(t => t.created_by === user.name)
-    }
-
-    // Filtre par terme de recherche
-    if (searchTerm) {
-      filtered = filtered.filter(t => 
-        t.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        t.created_by.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        t.id.toLowerCase().includes(searchTerm.toLowerCase())
-      )
-    }
-
-    // Filtre par statut
-    if (statusFilter !== "all") {
-      filtered = filtered.filter(t => t.status === statusFilter)
-    }
-
-    // Filtre par type
-    if (typeFilter !== "all") {
-      filtered = filtered.filter(t => t.type === typeFilter)
-    }
-
-    // Filtre par caissier
-    if (cashierFilter !== "all") {
-      filtered = filtered.filter(t => t.created_by === cashierFilter)
-    }
-
-    // Filtre par date calendrier
-    if (dateFilter) {
-      const dateFrom = dateFilter.from ? new Date(dateFilter.from) : null
-      const dateTo = dateFilter.to ? new Date(dateFilter.to) : null
-      
-      filtered = filtered.filter(t => {
-        const transDate = new Date(t.created_at)
-        
-        // Comparer avec la date de début
-        if (dateFrom) {
-          dateFrom.setHours(0, 0, 0, 0)
-          if (transDate < dateFrom) return false
-        }
-        
-        // Comparer avec la date de fin
-        if (dateTo) {
-          dateTo.setHours(23, 59, 59, 999)
-          if (transDate > dateTo) return false
-        }
-        
-        return true
-      })
-    }
-
-    // Tri des transactions
+    const sorted = [...transactions]
     if (sortField) {
-      filtered.sort((a, b) => {
+      sorted.sort((a, b) => {
         let aValue: any
         let bValue: any
-
         switch (sortField) {
-          case "id":
-            aValue = a.id
-            bValue = b.id
-            break
-          case "type":
-            aValue = a.type
-            bValue = b.type
-            break
-          case "description":
-            aValue = a.description
-            bValue = b.description
-            break
-          case "amount":
-            aValue = a.amount
-            bValue = b.amount
-            break
-          case "created_by":
-            aValue = a.created_by
-            bValue = b.created_by
-            break
-          case "status":
-            aValue = a.status
-            bValue = b.status
-            break
-          case "created_at":
-            aValue = new Date(a.created_at).getTime()
-            bValue = new Date(b.created_at).getTime()
-            break
-          default:
-            return 0
+          case "id": aValue = a.id; bValue = b.id; break
+          case "type": aValue = a.type; bValue = b.type; break
+          case "description": aValue = a.description; bValue = b.description; break
+          case "amount": aValue = a.amount; bValue = b.amount; break
+          case "created_by": aValue = a.created_by; bValue = b.created_by; break
+          case "status": aValue = a.status; bValue = b.status; break
+          case "created_at": aValue = new Date(a.created_at).getTime(); bValue = new Date(b.created_at).getTime(); break
+          default: return 0
         }
-
         if (aValue < bValue) return sortDirection === "asc" ? -1 : 1
         if (aValue > bValue) return sortDirection === "asc" ? 1 : -1
         return 0
       })
     }
-
-    setFilteredTransactions(filtered)
-    
-    // Réinitialiser la page courante si elle dépasse le nombre total de pages
-    const totalPages = Math.ceil(filtered.length / itemsPerPage)
-    if (currentPage > totalPages && totalPages > 0) {
-      setCurrentPage(1)
-    }
-  }, [transactions, searchTerm, dateFilter, statusFilter, typeFilter, cashierFilter, sortField, sortDirection, itemsPerPage, currentPage])
+    setFilteredTransactions(sorted)
+  }, [transactions, sortField, sortDirection])
 
   // Obtenir la liste des caissiers uniques
   const uniqueCashiers = React.useMemo(() => {
@@ -281,11 +190,11 @@ export function TransactionsView({ user }: TransactionsViewProps = {}) {
     pending_delete: "Suppression"
   }
 
-  // Calculer les transactions paginées
-  const totalPages = Math.ceil(filteredTransactions.length / itemsPerPage)
+  // Pagination côté serveur : la page courante est déjà dans filteredTransactions
+  const totalPages = Math.max(1, Math.ceil(totalCount / itemsPerPage))
   const startIndex = (currentPage - 1) * itemsPerPage
-  const endIndex = startIndex + itemsPerPage
-  const paginatedTransactions = filteredTransactions.slice(startIndex, endIndex)
+  const endIndex = startIndex + filteredTransactions.length
+  const paginatedTransactions = filteredTransactions
 
   // Réinitialiser la page quand le nombre d'éléments par page change
   React.useEffect(() => {
@@ -1878,7 +1787,7 @@ export function TransactionsView({ user }: TransactionsViewProps = {}) {
   }
 
   if (loading) {
-    return <PageLoader message="Chargement des opérations..." overlay={false} className="min-h-[400px]" />
+    return <PageLoader message="Chargement des opérations..." overlay className="min-h-[50vh]" />
   }
 
   return (

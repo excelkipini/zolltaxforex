@@ -35,6 +35,7 @@ import { useToast } from "@/hooks/use-toast"
 import type { SessionUser } from "@/lib/auth-client"
 import { PageLoader } from "@/components/ui/page-loader"
 import { useDocumentTitle } from "@/hooks/use-document-title"
+import { formatDateFR } from "@/lib/utils"
 import { PDFReceipt } from "@/components/pdf-receipt"
 import { useExchangeRates } from "@/hooks/use-exchange-rates"
 
@@ -577,8 +578,8 @@ export function AccountingDashboard({ user }: AccountingDashboardProps) {
                         
                         <div className="flex items-center gap-2">
                           <Calendar className="h-4 w-4 text-gray-600" />
-                          <span className="text-gray-600">
-                            {new Date(expense.date).toLocaleDateString('fr-FR')}
+                          <span className="whitespace-nowrap text-gray-600">
+                            {formatDateFR(expense.date)}
                           </span>
                         </div>
                       </div>

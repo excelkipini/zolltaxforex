@@ -141,6 +141,23 @@ export async function listTransactionsFiltered(filters?: ListTransactionsFilters
   return rows
 }
 
+/** Comptage approximatif rapide (pg_class) pour la pagination sans filtre. */
+async function getTransactionsApproximateCount(): Promise<number | null> {
+  try {
+    const rows = await sql<{ reltuples: number | string }[]>`
+      SELECT reltuples::bigint as reltuples
+      FROM pg_class
+      WHERE relname = 'transactions'
+    `
+    const raw = rows[0]?.reltuples
+    const n = typeof raw === "string" ? parseInt(raw, 10) : Number(raw)
+    if (Number.isNaN(n) || n < 0) return null
+    return n
+  } catch {
+    return null
+  }
+}
+
 export async function listTransactionsCount(filters?: Omit<ListTransactionsFilters, "limit" | "offset">): Promise<number> {
   const typeParam = (filters?.type?.trim() || null) as string | null
   const fromParam = (filters?.fromDate?.trim() || null) as string | null
@@ -150,6 +167,13 @@ export async function listTransactionsCount(filters?: Omit<ListTransactionsFilte
   const transferMethodParam = (filters?.transferMethod?.trim() || null) as string | null
   const searchParam = (filters?.search?.trim() || null) as string | null
   const searchPattern = searchParam ? `%${searchParam}%` : null
+
+  const hasFilters = typeParam != null || fromParam != null || toParam != null || statusParam != null || createdByParam != null || transferMethodParam != null || searchPattern != null
+
+  if (!hasFilters) {
+    const approx = await getTransactionsApproximateCount()
+    if (approx != null) return approx
+  }
 
   const result = await sql<{ count: string }[]>`
     SELECT COUNT(*)::text as count

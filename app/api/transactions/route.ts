@@ -67,8 +67,14 @@ export async function GET(request: NextRequest) {
       })
       return NextResponse.json({ ok: true, data: transactions })
     }
-    const transactions = await listTransactions()
-    return NextResponse.json({ ok: true, data: transactions })
+    // Par défaut : première page limitée pour chargement rapide (25 éléments)
+    const defaultLimit = limitParam != null ? Math.min(100, Math.max(1, parseInt(String(limitParam), 10) || 25)) : 25
+    const defaultOffset = 0
+    const [transactions, total] = await Promise.all([
+      listTransactionsFiltered({ limit: defaultLimit, offset: defaultOffset }),
+      listTransactionsCount({}),
+    ])
+    return NextResponse.json({ ok: true, data: transactions, total })
   } catch (error: any) {
     return NextResponse.json({ ok: false, error: error.message }, { status: 500 })
   }

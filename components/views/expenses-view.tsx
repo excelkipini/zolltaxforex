@@ -20,7 +20,7 @@ import {
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { cn } from "@/lib/utils"
+import { cn, formatDateFR } from "@/lib/utils"
 import { useToast } from "@/hooks/use-toast"
 import {
   Plus,
@@ -1183,7 +1183,7 @@ export function ExpensesView({ user }: ExpensesViewProps) {
                       </td>
                       <td className="px-5 py-3.5 text-sm text-muted-foreground">{expense.requestedBy}</td>
                       <td className="px-5 py-3.5 text-sm text-muted-foreground">{expense.agency}</td>
-                      <td className="px-5 py-3.5 text-sm tabular-nums text-muted-foreground">{expense.date}</td>
+                      <td className="whitespace-nowrap px-5 py-3.5 text-sm tabular-nums text-muted-foreground">{formatDateFR(expense.date)}</td>
                       <td className="px-5 py-3.5">
                         <div className="flex flex-wrap items-center justify-end gap-1.5">
                           {expense.status === "pending" && user.role === "accounting" && (
