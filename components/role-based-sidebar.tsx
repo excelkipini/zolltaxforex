@@ -122,7 +122,7 @@ export function RoleBasedSidebar({ user }: RoleBasedSidebarProps) {
       href: "/receipt",
       icon: Receipt,
       permission: "view_receipts" as const,
-      primary: user.role === "cashier" || user.role === "accounting" || user.role === "director" || user.role === "delegate",
+      primary: user.role === "accounting" || user.role === "director" || user.role === "delegate",
     },
     {
       title: "Caisse",
@@ -138,8 +138,8 @@ export function RoleBasedSidebar({ user }: RoleBasedSidebarProps) {
       permission: "view_ria_dashboard" as const,
       primary: user.role === "cash_manager",
       submenu: [
-        { title: "Congo", href: "/ria", permission: "view_ria_dashboard" as const },
-        { title: "Paris", href: "/ria/paris", permission: "view_ria_dashboard" as const },
+        ...(user.role !== "auditor" && user.role !== "executor" ? [{ title: "Congo", href: "/ria", permission: "view_ria_dashboard" as const }] : []),
+        ...(user.role !== "cashier" ? [{ title: "Paris", href: "/ria/paris", permission: "view_ria_dashboard" as const }] : []),
       ],
     },
     {
@@ -172,15 +172,13 @@ export function RoleBasedSidebar({ user }: RoleBasedSidebarProps) {
     },
   ]
 
-  // Logique spéciale pour l'auditeur - ne montrer que Tableau de bord, Opérations, Dépenses, Utilisateurs et Taux & Plafonds
+  // Logique spéciale pour l'auditeur - ne montrer que Tableau de bord, Opérations, Dépenses et Arrêtés de Caisse
   const visibleMenuItems = user.role === "auditor" 
     ? [
         menuItems.find((item) => item.href === "/dashboard"),
         menuItems.find((item) => item.href === "/transactions"),
         menuItems.find((item) => item.href === "/expenses"),
         menuItems.find((item) => item.href === "/ria"),
-        menuItems.find((item) => item.href === "/users"),
-        menuItems.find((item) => item.href === "/rates")
       ].filter(Boolean) // Supprimer les undefined
     : menuItems.filter((item) => {
         // Vérifier la permission principale
@@ -194,7 +192,10 @@ export function RoleBasedSidebar({ user }: RoleBasedSidebarProps) {
         return true
       })
   
-  const visibleAdminItems = adminItems.filter((item) => hasPermission(user, item.permission))
+  // Les auditeurs n'ont pas accès à la section Administration
+  const visibleAdminItems = user.role === "auditor" 
+    ? [] 
+    : adminItems.filter((item) => hasPermission(user, item.permission))
 
   return (
     <div className="flex h-full w-64 flex-col border-r bg-slate-50/50 dark:bg-slate-950/50">

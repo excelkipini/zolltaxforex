@@ -167,6 +167,16 @@ export async function POST(request: NextRequest) {
 
     // Mise à jour manuelle du solde
     if (action === "update-balance") {
+      // Les caissiers et auditeurs n'ont pas le droit de modifier les soldes des caisses
+      const BALANCE_EDIT_ROLES = ["director", "accounting", "super_admin", "delegate"]
+      const userRole = session.user?.role
+      if (!userRole || !BALANCE_EDIT_ROLES.includes(userRole)) {
+        return NextResponse.json(
+          { success: false, error: "Vous n'avez pas l'autorisation de modifier le solde des caisses." },
+          { status: 403 }
+        )
+      }
+
       const currency = (body?.currency || "XAF") as ExchangeCaisseCurrency
       if (!["XAF", "USD", "EUR", "GBP"].includes(currency)) {
         return NextResponse.json({ success: false, error: "Devise invalide" }, { status: 400 })

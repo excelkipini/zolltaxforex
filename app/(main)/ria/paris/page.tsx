@@ -5,7 +5,7 @@ import { RiaParisView } from "@/components/views/ria-paris-view"
 export default async function RiaParisPage() {
   const { user } = await requireAuth()
   
-  if (!hasPermission(user, "view_ria_dashboard")) {
+  if (!hasPermission(user, "view_ria_dashboard") || user.role === "cashier") {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">

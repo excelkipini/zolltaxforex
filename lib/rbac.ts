@@ -188,8 +188,6 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "edit_exchange",
     "view_expenses",
     "create_expenses",
-    "view_receipts",
-    "create_receipts",
     "view_ria_transactions",
     "import_ria_csv",
     "view_ria_dashboard",

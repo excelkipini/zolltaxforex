@@ -47,23 +47,6 @@ export function CashierDashboard({ user }: CashierDashboardProps) {
   })
   const [loading, setLoading] = React.useState(true)
 
-  // Ajouter les styles CSS pour l'animation
-  React.useEffect(() => {
-    const style = document.createElement('style')
-    style.textContent = `
-      @keyframes scroll {
-        0% { transform: translateX(100%); }
-        100% { transform: translateX(-100%); }
-      }
-    `
-    document.head.appendChild(style)
-    
-    return () => {
-      document.head.removeChild(style)
-    }
-  }, [])
-
-
   // Charger les statistiques depuis l'API
   React.useEffect(() => {
     const loadStats = async () => {
@@ -203,7 +186,7 @@ export function CashierDashboard({ user }: CashierDashboardProps) {
         })}
       </div>
 
-      {/* Taux de change actuels (défilants) */}
+      {/* Taux de change actuels (Achat / Vente) */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -212,28 +195,62 @@ export function CashierDashboard({ user }: CashierDashboardProps) {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="overflow-hidden">
-            <div 
-              className="flex space-x-8"
-              style={{
-                animation: 'scroll 20s linear infinite',
-                width: 'max-content'
-              }}
-            >
-              <div className="flex-shrink-0 text-center p-3 bg-blue-50 rounded-lg min-w-[120px]">
-                <div className="text-lg font-bold text-blue-600">1 USD</div>
-                <div className="text-sm text-gray-600">= {ratesLoading ? "..." : exchangeRates.USD} XAF</div>
+          {ratesLoading ? (
+            <div className="text-center text-muted-foreground py-4">Chargement des taux…</div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* USD */}
+              <div className="rounded-lg border p-4 bg-blue-50/60">
+                <div className="flex items-center gap-2 mb-3">
+                  <Badge variant="outline" className="text-sm font-semibold">USD/XAF</Badge>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <p className="text-xs text-muted-foreground uppercase tracking-wide">Achat</p>
+                    <p className="text-lg font-bold text-green-600">{exchangeRates.USD_buy.toLocaleString("fr-FR")}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground uppercase tracking-wide">Vente</p>
+                    <p className="text-lg font-bold text-red-500">{exchangeRates.USD_sell.toLocaleString("fr-FR")}</p>
+                  </div>
+                </div>
               </div>
-              <div className="flex-shrink-0 text-center p-3 bg-green-50 rounded-lg min-w-[120px]">
-                <div className="text-lg font-bold text-green-600">1 EUR</div>
-                <div className="text-sm text-gray-600">= {ratesLoading ? "..." : exchangeRates.EUR} XAF</div>
+
+              {/* EUR */}
+              <div className="rounded-lg border p-4 bg-green-50/60">
+                <div className="flex items-center gap-2 mb-3">
+                  <Badge variant="outline" className="text-sm font-semibold">EUR/XAF</Badge>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <p className="text-xs text-muted-foreground uppercase tracking-wide">Achat</p>
+                    <p className="text-lg font-bold text-green-600">{exchangeRates.EUR_buy.toLocaleString("fr-FR")}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground uppercase tracking-wide">Vente</p>
+                    <p className="text-lg font-bold text-red-500">{exchangeRates.EUR_sell.toLocaleString("fr-FR")}</p>
+                  </div>
+                </div>
               </div>
-              <div className="flex-shrink-0 text-center p-3 bg-purple-50 rounded-lg min-w-[120px]">
-                <div className="text-lg font-bold text-purple-600">1 GBP</div>
-                <div className="text-sm text-gray-600">= {ratesLoading ? "..." : exchangeRates.GBP} XAF</div>
+
+              {/* GBP */}
+              <div className="rounded-lg border p-4 bg-purple-50/60">
+                <div className="flex items-center gap-2 mb-3">
+                  <Badge variant="outline" className="text-sm font-semibold">GBP/XAF</Badge>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <p className="text-xs text-muted-foreground uppercase tracking-wide">Achat</p>
+                    <p className="text-lg font-bold text-green-600">{exchangeRates.GBP_buy.toLocaleString("fr-FR")}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground uppercase tracking-wide">Vente</p>
+                    <p className="text-lg font-bold text-red-500">{exchangeRates.GBP_sell.toLocaleString("fr-FR")}</p>
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </CardContent>
       </Card>
 

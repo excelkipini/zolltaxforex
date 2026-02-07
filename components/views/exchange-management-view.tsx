@@ -77,6 +77,9 @@ type AgencyCaisse = {
 // Rôles ayant accès à toutes les caisses
 const ADMIN_ROLES = ["director", "auditor", "accounting", "super_admin", "delegate"]
 
+// Rôles autorisés à modifier le solde des caisses (les caissiers n'ont PAS ce droit)
+const BALANCE_EDIT_ROLES = ["director", "accounting", "super_admin", "delegate"]
+
 export function ExchangeManagementView({ user }: ExchangeManagementViewProps) {
   useDocumentTitle("Caisse - Bureau de change")
 
@@ -119,6 +122,9 @@ export function ExchangeManagementView({ user }: ExchangeManagementViewProps) {
 
   // Vérifier si l'utilisateur est admin (accès à toutes les caisses)
   const isAdmin = ADMIN_ROLES.includes(user.role)
+  
+  // Vérifier si l'utilisateur peut modifier les soldes des caisses
+  const canEditBalance = BALANCE_EDIT_ROLES.includes(user.role)
   
   // Trouver l'agence de l'utilisateur
   const userAgencyId = React.useMemo(() => {
@@ -1321,11 +1327,13 @@ table{width:100%;border-collapse:collapse}thead th{background:#1e3a5f;color:#fff
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* Caisse XAF */}
             <div className="relative group rounded-xl border-2 border-emerald-200 bg-gradient-to-br from-emerald-50 via-green-50 to-emerald-100/50 p-4 transition-all hover:shadow-lg hover:border-emerald-300">
-              <div className="absolute top-2 right-2">
-                <Button variant="ghost" size="sm" className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => openUpdateCaisse("XAF")} title="Mettre à jour">
-                  <Pencil className="h-3.5 w-3.5 text-emerald-600" />
-                </Button>
-              </div>
+              {canEditBalance && (
+                <div className="absolute top-2 right-2">
+                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => openUpdateCaisse("XAF")} title="Mettre à jour">
+                    <Pencil className="h-3.5 w-3.5 text-emerald-600" />
+                  </Button>
+                </div>
+              )}
               <div className="flex items-center gap-3 mb-3">
                 <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-green-600 text-white shadow-md">
                   <span className="text-sm font-bold">XAF</span>
@@ -1348,11 +1356,13 @@ table{width:100%;border-collapse:collapse}thead th{background:#1e3a5f;color:#fff
 
             {/* Caisse USD */}
             <div className="relative group rounded-xl border-2 border-blue-200 bg-gradient-to-br from-blue-50 via-indigo-50 to-blue-100/50 p-4 transition-all hover:shadow-lg hover:border-blue-300">
-              <div className="absolute top-2 right-2">
-                <Button variant="ghost" size="sm" className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => openUpdateCaisse("USD")} title="Mettre à jour">
-                  <Pencil className="h-3.5 w-3.5 text-blue-600" />
-                </Button>
-              </div>
+              {canEditBalance && (
+                <div className="absolute top-2 right-2">
+                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => openUpdateCaisse("USD")} title="Mettre à jour">
+                    <Pencil className="h-3.5 w-3.5 text-blue-600" />
+                  </Button>
+                </div>
+              )}
               <div className="flex items-center gap-3 mb-3">
                 <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-md">
                   <DollarSign className="h-5 w-5" />
@@ -1374,11 +1384,13 @@ table{width:100%;border-collapse:collapse}thead th{background:#1e3a5f;color:#fff
 
             {/* Caisse EUR */}
             <div className="relative group rounded-xl border-2 border-violet-200 bg-gradient-to-br from-violet-50 via-purple-50 to-violet-100/50 p-4 transition-all hover:shadow-lg hover:border-violet-300">
-              <div className="absolute top-2 right-2">
-                <Button variant="ghost" size="sm" className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => openUpdateCaisse("EUR")} title="Mettre à jour">
-                  <Pencil className="h-3.5 w-3.5 text-violet-600" />
-                </Button>
-              </div>
+              {canEditBalance && (
+                <div className="absolute top-2 right-2">
+                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => openUpdateCaisse("EUR")} title="Mettre à jour">
+                    <Pencil className="h-3.5 w-3.5 text-violet-600" />
+                  </Button>
+                </div>
+              )}
               <div className="flex items-center gap-3 mb-3">
                 <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 text-white shadow-md">
                   <Euro className="h-5 w-5" />
@@ -1400,11 +1412,13 @@ table{width:100%;border-collapse:collapse}thead th{background:#1e3a5f;color:#fff
 
             {/* Caisse GBP */}
             <div className="relative group rounded-xl border-2 border-amber-200 bg-gradient-to-br from-amber-50 via-orange-50 to-amber-100/50 p-4 transition-all hover:shadow-lg hover:border-amber-300">
-              <div className="absolute top-2 right-2">
-                <Button variant="ghost" size="sm" className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => openUpdateCaisse("GBP")} title="Mettre à jour">
-                  <Pencil className="h-3.5 w-3.5 text-amber-600" />
-                </Button>
-              </div>
+              {canEditBalance && (
+                <div className="absolute top-2 right-2">
+                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => openUpdateCaisse("GBP")} title="Mettre à jour">
+                    <Pencil className="h-3.5 w-3.5 text-amber-600" />
+                  </Button>
+                </div>
+              )}
               <div className="flex items-center gap-3 mb-3">
                 <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 text-white shadow-md">
                   <span className="text-lg font-bold">£</span>
