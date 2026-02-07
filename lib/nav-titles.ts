@@ -5,7 +5,7 @@ const TITLES: Record<Locale, Record<string, string>> = {
     "/dashboard": "Tableau de bord",
     "/cards": "Gestion des cartes prépayées",
     "/exchange": "Bureau de change",
-    "/exchange/management": "Gestion de change",
+    "/exchange/management": "Caisse",
     "/expenses": "Gestion des dépenses",
     "/transactions": "Opérations",
     "/cash": "Gestion de la Caisse",

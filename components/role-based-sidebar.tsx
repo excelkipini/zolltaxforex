@@ -52,6 +52,12 @@ export function RoleBasedSidebar({ user }: RoleBasedSidebarProps) {
       setOpenSubmenus(prev => ({ ...prev, "Bureau de change": true }))
     }
   }, [pathname])
+  // Ouvrir le sous-menu "Arrêtés de Caisse" quand on est sur /ria ou /ria/paris
+  React.useEffect(() => {
+    if (pathname === "/ria" || pathname.startsWith("/ria/")) {
+      setOpenSubmenus(prev => ({ ...prev, "Arrêtés de Caisse": true }))
+    }
+  }, [pathname])
 
   const toggleSubmenu = (itemTitle: string) => {
     setOpenSubmenus(prev => ({
@@ -94,7 +100,7 @@ export function RoleBasedSidebar({ user }: RoleBasedSidebarProps) {
       primary: false,
       submenu: [
         { title: "Nouvelle opération de change", href: "/exchange", permission: "view_exchange" as const },
-        { title: "Gestion de change", href: "/exchange/management", permission: "view_exchange" as const },
+        { title: "Caisse", href: "/exchange/management", permission: "view_exchange" as const },
       ],
     },
     {
@@ -126,11 +132,15 @@ export function RoleBasedSidebar({ user }: RoleBasedSidebarProps) {
       primary: user.role === "accounting" || user.role === "director" || user.role === "delegate",
     },
     {
-      title: "Gestion RIA",
+      title: "Arrêtés de Caisse",
       href: "/ria",
       icon: BarChart3,
       permission: "view_ria_dashboard" as const,
       primary: user.role === "cash_manager",
+      submenu: [
+        { title: "Congo", href: "/ria", permission: "view_ria_dashboard" as const },
+        { title: "Paris", href: "/ria/paris", permission: "view_ria_dashboard" as const },
+      ],
     },
     {
       title: "Rapports",
@@ -168,6 +178,7 @@ export function RoleBasedSidebar({ user }: RoleBasedSidebarProps) {
         menuItems.find((item) => item.href === "/dashboard"),
         menuItems.find((item) => item.href === "/transactions"),
         menuItems.find((item) => item.href === "/expenses"),
+        menuItems.find((item) => item.href === "/ria"),
         menuItems.find((item) => item.href === "/users"),
         menuItems.find((item) => item.href === "/rates")
       ].filter(Boolean) // Supprimer les undefined

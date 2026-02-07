@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { requireAuth } from "@/lib/auth"
 import { listTransactions, listTransactionsFiltered, listTransactionsCount, createTransaction, updateTransactionStatus, deleteAllTransactions, listTransactionFilterOptions } from "@/lib/transactions-queries"
+import { processExchangeTransaction } from "@/lib/exchange-caisse-queries"
 
 export async function GET(request: NextRequest) {
   await requireAuth()
@@ -83,11 +84,12 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const { user } = await requireAuth()
   
-  // Seuls les caissiers peuvent créer des transactions
-  const canCreate = user.role === "cashier"
+  // Rôles autorisés à créer des transactions
+  const allowedRoles = ["cashier", "director", "accounting", "super_admin"]
+  const canCreate = allowedRoles.includes(user.role)
   
   if (!canCreate) {
-    return NextResponse.json({ ok: false, error: "Seuls les caissiers peuvent créer des transactions" }, { status: 403 })
+    return NextResponse.json({ ok: false, error: "Vous n'avez pas les permissions pour créer des transactions" }, { status: 403 })
   }
 
   try {
@@ -96,6 +98,47 @@ export async function POST(request: NextRequest) {
 
     if (!type || !description || !amount || !details) {
       return NextResponse.json({ ok: false, error: "Tous les champs sont requis" }, { status: 400 })
+    }
+
+    // Si c'est une transaction de change, mettre à jour la caisse de l'agence
+    if (type === "exchange" && details?.exchange_type) {
+      // Déterminer l'agence à utiliser (celle de l'utilisateur ou celle spécifiée dans les détails)
+      const agencyName = details.agency_name || user.agency
+      
+      if (!agencyName) {
+        return NextResponse.json({ ok: false, error: "Aucune agence spécifiée pour cette opération de change. Votre compte doit être assigné à une agence." }, { status: 400 })
+      }
+      
+      const exchangeType = details.exchange_type as "buy" | "sell"
+      const rawCurrency = details.to_currency === "XAF" ? details.from_currency : details.to_currency
+      const foreignCurrency = (rawCurrency === "EUR" ? "EUR" : rawCurrency === "GBP" ? "GBP" : "USD") as "USD" | "EUR" | "GBP"
+      const amountForeign = Number(details.amount_foreign) || 0
+      const amountXaf = Number(details.amount_xaf) || 0
+      const commission = Number(details.commission) || 0
+      const exchangeRate = Number(details.exchange_rate) || 0
+      
+      // Traiter la transaction dans la caisse de l'agence
+      const caisseResult = await processExchangeTransaction(
+        {
+          type: exchangeType,
+          currency: foreignCurrency,
+          amountForeign,
+          amountXaf,
+          commission,
+          exchangeRate,
+          agencyName: agencyName,
+          clientName: details.client_name || null,
+          clientPhone: details.client_phone || null,
+          clientIdType: details.client_id_type || null,
+          clientIdTypeLabel: details.client_id_type_label || null,
+          clientIdNumber: details.client_id_number || null,
+        },
+        user.name
+      )
+      
+      if (!caisseResult.success) {
+        return NextResponse.json({ ok: false, error: caisseResult.error }, { status: 400 })
+      }
     }
 
     const transaction = await createTransaction({

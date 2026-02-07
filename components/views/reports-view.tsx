@@ -4,7 +4,14 @@ import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Calendar, Download, TrendingUp, TrendingDown, DollarSign, Activity, Loader2 } from "lucide-react"
+import { Calendar, Download, TrendingUp, TrendingDown, DollarSign, Activity, Loader2, FileText, FileSpreadsheet, ChevronDown } from "lucide-react"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { useToast } from "@/hooks/use-toast"
 import { PageLoader } from "@/components/ui/page-loader"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend } from "recharts"
 
@@ -62,6 +69,7 @@ type MonthlyStatusOperation = {
 }
 
 export function ReportsView({ user }: ReportsViewProps) {
+  const { toast } = useToast()
   const [selectedPeriod, setSelectedPeriod] = useState("year")
   const [expensesData, setExpensesData] = useState<ExpenseData[]>([])
   const [operationsData, setOperationsData] = useState<OperationData[]>([])
@@ -199,6 +207,32 @@ export function ReportsView({ user }: ReportsViewProps) {
     }
   }
 
+  const handleExportPdf = () => {
+    const periodLabels: Record<string, string> = { week: "Cette semaine", month: "Ce mois", quarter: "Ce trimestre", year: "Cette année" }
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Rapports</title>
+<style>
+@page{size:A4 landscape;margin:12mm}*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Segoe UI',Arial,sans-serif;font-size:10px;color:#1e293b;background:#fff}
+.header{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:12px;border-bottom:2px solid #2563eb;margin-bottom:10px}.header h1{font-size:18px;color:#1e3a5f;font-weight:700}.header .subtitle{font-size:11px;color:#64748b;margin-top:2px}.header .meta{text-align:right;font-size:10px;color:#64748b}
+.summary{display:flex;gap:16px;margin-bottom:14px;flex-wrap:wrap}.summary-card{background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:8px 14px;min-width:160px}.summary-card .label{font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.5px}.summary-card .value{font-size:16px;font-weight:700;color:#1e293b;margin-top:2px}
+.section{margin-bottom:16px}.section h2{font-size:13px;font-weight:700;color:#1e3a5f;margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid #e2e8f0}
+table{width:100%;border-collapse:collapse;margin-bottom:10px}thead th{background:#1e3a5f;color:#fff;padding:7px 8px;text-align:left;font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.3px}thead th:first-child{border-radius:4px 0 0 0}thead th:last-child{border-radius:0 4px 0 0}tbody tr{border-bottom:1px solid #f1f5f9}tbody tr:nth-child(even){background:#f8fafc}tbody td{padding:6px 8px;font-size:10px;vertical-align:middle}.amount{font-weight:600;text-align:right;white-space:nowrap}
+.footer{margin-top:12px;padding-top:8px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:9px;color:#94a3b8}
+@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+</style></head><body>
+<div class="header"><div><h1>ZOLL TAX FOREX</h1><div class="subtitle">Rapport Financier — ${periodLabels[selectedPeriod] || selectedPeriod}</div></div><div class="meta">Généré le ${new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"long",year:"numeric",hour:"2-digit",minute:"2-digit"})}<br/>Par : ${user.name}</div></div>
+<div class="summary">
+<div class="summary-card"><div class="label">Total Dépenses</div><div class="value">${formatCurrency(stats.totalExpenses)}</div></div>
+<div class="summary-card"><div class="label">Total Opérations</div><div class="value">${formatCurrency(stats.totalOperations)}</div></div>
+<div class="summary-card"><div class="label">Transactions</div><div class="value">${formatNumber(stats.totalTransactions)}</div></div>
+</div>
+${expensesData.length > 0 ? `<div class="section"><h2>Dépenses par période</h2><table><thead><tr><th>Date</th><th>Montant</th><th>Catégorie</th><th>Statut</th></tr></thead><tbody>${expensesData.map(d => `<tr><td>${d.date}</td><td class="amount">${Number(d.amount).toLocaleString("fr-FR")} XAF</td><td>${d.category||"-"}</td><td>${d.status||"-"}</td></tr>`).join("")}</tbody></table></div>` : ""}
+${operationsData.length > 0 ? `<div class="section"><h2>Opérations par période</h2><table><thead><tr><th>Date</th><th>Transactions</th><th>Montant total</th></tr></thead><tbody>${operationsData.map(d => `<tr><td>${d.date}</td><td>${d.transactions}</td><td class="amount">${Number(d.total_amount).toLocaleString("fr-FR")} XAF</td></tr>`).join("")}</tbody></table></div>` : ""}
+<div class="footer"><span>ZOLL TAX FOREX © ${new Date().getFullYear()} — Document confidentiel</span><span>Période : ${periodLabels[selectedPeriod] || selectedPeriod}</span></div>
+</body></html>`
+    const w = window.open("", "_blank"); if (w) { w.document.write(html); w.document.close(); setTimeout(() => w.print(), 400) }
+    toast({ title: "Export PDF prêt", description: "Rapport prêt à imprimer en PDF" })
+  }
+
   if (loading) {
     return <PageLoader message="Chargement des données..." overlay={false} className="min-h-[320px]" />
   }
@@ -239,10 +273,25 @@ export function ReportsView({ user }: ReportsViewProps) {
               <SelectItem value="year">Cette année</SelectItem>
             </SelectContent>
           </Select>
-          <Button variant="outline" onClick={handleExport}>
-            <Download className="h-4 w-4 mr-2" />
-            Exporter
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="gap-2">
+                <Download className="h-4 w-4" />
+                Exporter
+                <ChevronDown className="h-3.5 w-3.5 opacity-60" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-44">
+              <DropdownMenuItem onClick={handleExport} className="gap-2 cursor-pointer">
+                <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
+                Exporter en CSV
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleExportPdf} className="gap-2 cursor-pointer">
+                <FileText className="h-4 w-4 text-red-500" />
+                Exporter en PDF
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 

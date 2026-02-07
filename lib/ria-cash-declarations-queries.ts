@@ -4,6 +4,8 @@ import { getUserById } from "./users-queries"
 
 export type CashDeclarationStatus = 'pending' | 'submitted' | 'rejected' | 'validated'
 
+export type CashDeclarationRegion = 'congo' | 'paris'
+
 export type CashDeclaration = {
   id: string
   user_id: string
@@ -28,6 +30,10 @@ export type CashDeclaration = {
   created_at: string
   updated_at: string
   submitted_at?: string
+  region?: CashDeclarationRegion
+  total_western_union?: number
+  total_ria?: number
+  total_moneygram?: number
 }
 
 export type CashDeclarationWithUser = CashDeclaration & {
@@ -55,20 +61,29 @@ export async function createCashDeclaration(data: {
     uploaded_at: string
   }>
   autoSubmit?: boolean
+  region?: CashDeclarationRegion
+  total_western_union?: number
+  total_ria?: number
+  total_moneygram?: number
 }): Promise<CashDeclaration> {
+  const region = data.region || 'congo'
+  const totalWu = data.total_western_union || 0
+  const totalRia = data.total_ria || 0
+  const totalMg = data.total_moneygram || 0
+
   // Si autoSubmit est true, créer directement en statut 'submitted'
   if (data.autoSubmit) {
     const [result] = await sql`
       INSERT INTO ria_cash_declarations (
         user_id, guichetier, declaration_date, montant_brut, 
         total_delestage, excedents, delestage_comment, justificatif_file_path, justificatif_files, status,
-        submitted_at
+        submitted_at, region, total_western_union, total_ria, total_moneygram
       )
       VALUES (
         ${data.user_id}, ${data.guichetier}, ${data.declaration_date}, 
         ${data.montant_brut}, ${data.total_delestage}, ${data.excedents}, ${data.delestage_comment || null}, 
         ${data.justificatif_file_path || null}, ${JSON.stringify(data.justificatif_files || [])}, 'submitted',
-        CURRENT_TIMESTAMP
+        CURRENT_TIMESTAMP, ${region}, ${totalWu}, ${totalRia}, ${totalMg}
       )
       RETURNING *
     `
@@ -77,12 +92,14 @@ export async function createCashDeclaration(data: {
     const [result] = await sql`
       INSERT INTO ria_cash_declarations (
         user_id, guichetier, declaration_date, montant_brut, 
-        total_delestage, excedents, delestage_comment, justificatif_file_path, justificatif_files, status
+        total_delestage, excedents, delestage_comment, justificatif_file_path, justificatif_files, status,
+        region, total_western_union, total_ria, total_moneygram
       )
       VALUES (
         ${data.user_id}, ${data.guichetier}, ${data.declaration_date}, 
         ${data.montant_brut}, ${data.total_delestage}, ${data.excedents}, ${data.delestage_comment || null}, 
-        ${data.justificatif_file_path || null}, ${JSON.stringify(data.justificatif_files || [])}, 'pending'
+        ${data.justificatif_file_path || null}, ${JSON.stringify(data.justificatif_files || [])}, 'pending',
+        ${region}, ${totalWu}, ${totalRia}, ${totalMg}
       )
       RETURNING *
     `
@@ -154,10 +171,11 @@ export async function getCashDeclarationById(id: string): Promise<CashDeclaratio
 /**
  * Récupérer les arrêtés de caisse d'un utilisateur
  */
-export async function getCashDeclarationsByUser(userId: string): Promise<CashDeclaration[]> {
+export async function getCashDeclarationsByUser(userId: string, region?: CashDeclarationRegion): Promise<CashDeclaration[]> {
+  const regionFilter = region || 'congo'
   const results = await sql`
     SELECT * FROM ria_cash_declarations
-    WHERE user_id = ${userId}
+    WHERE user_id = ${userId} AND COALESCE(region, 'congo') = ${regionFilter}
     ORDER BY declaration_date DESC, created_at DESC
   `
   return results
@@ -166,7 +184,8 @@ export async function getCashDeclarationsByUser(userId: string): Promise<CashDec
 /**
  * Récupérer tous les arrêtés de caisse en attente de validation
  */
-export async function getPendingCashDeclarations(): Promise<CashDeclarationWithUser[]> {
+export async function getPendingCashDeclarations(region?: CashDeclarationRegion): Promise<CashDeclarationWithUser[]> {
+  const regionFilter = region || 'congo'
   const results = await sql`
     SELECT 
       cd.*,
@@ -176,7 +195,7 @@ export async function getPendingCashDeclarations(): Promise<CashDeclarationWithU
     FROM ria_cash_declarations cd
     JOIN users u ON cd.user_id = u.id
     LEFT JOIN users v ON cd.validated_by = v.id
-    WHERE cd.status = 'submitted'
+    WHERE cd.status = 'submitted' AND COALESCE(cd.region, 'congo') = ${regionFilter}
     ORDER BY cd.submitted_at DESC, cd.declaration_date DESC
   `
   return results
@@ -185,7 +204,8 @@ export async function getPendingCashDeclarations(): Promise<CashDeclarationWithU
 /**
  * Récupérer tous les arrêtés de caisse (pour le Responsable caisses)
  */
-export async function getAllCashDeclarations(): Promise<CashDeclarationWithUser[]> {
+export async function getAllCashDeclarations(region?: CashDeclarationRegion): Promise<CashDeclarationWithUser[]> {
+  const regionFilter = region || 'congo'
   const results = await sql`
     SELECT 
       cd.*,
@@ -195,6 +215,7 @@ export async function getAllCashDeclarations(): Promise<CashDeclarationWithUser[
     FROM ria_cash_declarations cd
     JOIN users u ON cd.user_id = u.id
     LEFT JOIN users v ON cd.validated_by = v.id
+    WHERE COALESCE(cd.region, 'congo') = ${regionFilter}
     ORDER BY cd.declaration_date DESC, cd.created_at DESC
   `
   return results
@@ -203,7 +224,7 @@ export async function getAllCashDeclarations(): Promise<CashDeclarationWithUser[
 /**
  * Récupérer les statistiques des arrêtés de caisse
  */
-export async function getCashDeclarationsStats(userId?: string): Promise<{
+export async function getCashDeclarationsStats(userId?: string, region?: CashDeclarationRegion): Promise<{
   total_pending: number
   total_validated_today: number
   total_delestage_today: number
@@ -219,12 +240,15 @@ export async function getCashDeclarationsStats(userId?: string): Promise<{
   total_excedents_available?: number
 }>{
   try {
-    console.log('📊 getCashDeclarationsStats appelée avec userId:', userId)
+    console.log('📊 getCashDeclarationsStats appelée avec userId:', userId, 'region:', region)
 
     const today = new Date().toISOString().split('T')[0]
+    const regionFilter = region || 'congo'
 
-    // Construire la requête avec ou sans filtre utilisateur
-    const userFilter = userId ? sql`WHERE user_id = ${userId}` : sql``
+    // Construire la requête avec ou sans filtre utilisateur + region
+    const userFilter = userId 
+      ? sql`WHERE user_id = ${userId} AND COALESCE(region, 'congo') = ${regionFilter}` 
+      : sql`WHERE COALESCE(region, 'congo') = ${regionFilter}`
     console.log('📊 userFilter:', userFilter)
 
     // Requête complète pour la base de données réelle
@@ -255,7 +279,7 @@ export async function getCashDeclarationsStats(userId?: string): Promise<{
         WITH declared AS (
           SELECT COALESCE(SUM(COALESCE(excedents,0)),0) AS total_declared
           FROM ria_cash_declarations
-          WHERE user_id = ${userId}
+          WHERE user_id = ${userId} AND COALESCE(region, 'congo') = ${regionFilter}
         ),
         deducted AS (
           SELECT COALESCE(SUM(amount),0) AS total_deducted
@@ -275,6 +299,7 @@ export async function getCashDeclarationsStats(userId?: string): Promise<{
           WITH declared AS (
             SELECT user_id, COALESCE(SUM(COALESCE(excedents,0)),0) AS total_declared
             FROM ria_cash_declarations
+            WHERE COALESCE(region, 'congo') = ${regionFilter}
             GROUP BY user_id
           ),
           deducted AS (

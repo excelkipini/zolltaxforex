@@ -58,7 +58,11 @@ type CashDeclarationWithUser = CashDeclaration & {
   validator_name?: string
 }
 
-export function RiaCashClosure() {
+interface RiaCashClosureProps {
+  region?: 'congo' | 'paris'
+}
+
+export function RiaCashClosure({ region = 'congo' }: RiaCashClosureProps) {
   const { toast } = useToast()
   const [user, setUser] = useState<any>(null)
   const [declarations, setDeclarations] = useState<CashDeclaration[]>([])
@@ -78,6 +82,11 @@ export function RiaCashClosure() {
   const [searchTerm, setSearchTerm] = useState<string>('')
   const [guichetierFilter, setGuichetierFilter] = useState<string>('')
   
+  // Configuration selon la région
+  const isParis = region === 'paris'
+  const currencySymbol = isParis ? '€' : 'FCFA'
+  const currencyLabel = isParis ? 'EUR' : 'FCFA'
+
   // État du formulaire
   const [formData, setFormData] = useState({
     guichetier: '',
@@ -87,6 +96,10 @@ export function RiaCashClosure() {
     excedents: '0',
     delestage_comment: '',
     justificatif_files: [] as File[],
+    // Paris-specific fields
+    total_western_union: '0',
+    total_ria: '0',
+    total_moneygram: '0',
   })
 
   // État pour la gestion du responsable
@@ -110,8 +123,9 @@ export function RiaCashClosure() {
     if (user) {
       loadDeclarations()
       loadStats()
-      // Charger les arrêtés en attente pour Responsable caisse, Directeur et Comptable
-      if (['cash_manager', 'director', 'delegate', 'accounting'].includes(user.role)) {
+      // Charger les arrêtés en attente pour les managers
+      const managerRoles = ['cash_manager', 'director', 'delegate', 'accounting', 'auditor', 'executor']
+      if (managerRoles.includes(user.role)) {
         loadPendingDeclarations()
       }
     }
@@ -148,7 +162,7 @@ export function RiaCashClosure() {
   
   const loadStats = async () => {
     try {
-      const response = await fetch('/api/ria-cash-declarations?type=stats')
+      const response = await fetch(`/api/ria-cash-declarations?type=stats&region=${region}`)
       const result = await response.json()
       if (result.data) {
         setStats(result.data)
@@ -165,10 +179,11 @@ export function RiaCashClosure() {
 
   const loadDeclarations = async () => {
     try {
-      // Pour le Responsable caisses, Directeur et Comptable, charger tous les arrêtés
-      const url = ['cash_manager', 'director', 'delegate', 'accounting'].includes(user?.role || '')
-        ? '/api/ria-cash-declarations?type=all'
-        : '/api/ria-cash-declarations'
+      // Pour les managers, charger tous les arrêtés
+      const managerRoles = ['cash_manager', 'director', 'delegate', 'accounting', 'auditor', 'executor']
+      const url = managerRoles.includes(user?.role || '')
+        ? `/api/ria-cash-declarations?type=all&region=${region}`
+        : `/api/ria-cash-declarations?region=${region}`
       
       const response = await fetch(url)
       const result = await response.json()
@@ -184,7 +199,7 @@ export function RiaCashClosure() {
 
   const loadPendingDeclarations = async () => {
     try {
-      const response = await fetch('/api/ria-cash-declarations?type=pending')
+      const response = await fetch(`/api/ria-cash-declarations?type=pending&region=${region}`)
       const result = await response.json()
       if (result.data) {
         setPendingDeclarations(result.data)
@@ -197,13 +212,28 @@ export function RiaCashClosure() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    if (!formData.guichetier || !formData.declaration_date || !formData.montant_brut || formData.montant_brut === '0') {
-      toast({
-        title: "Erreur",
-        description: "Veuillez remplir tous les champs obligatoires.",
-        variant: "destructive",
-      })
-      return
+    // Validation selon la région
+    if (isParis) {
+      const totalWu = parseFloat(formData.total_western_union) || 0
+      const totalRia = parseFloat(formData.total_ria) || 0
+      const totalMg = parseFloat(formData.total_moneygram) || 0
+      if (!formData.guichetier || !formData.declaration_date || (totalWu + totalRia + totalMg) === 0) {
+        toast({
+          title: "Erreur",
+          description: "Veuillez remplir tous les champs obligatoires (au moins un montant WU, Ria ou MoneyGram).",
+          variant: "destructive",
+        })
+        return
+      }
+    } else {
+      if (!formData.guichetier || !formData.declaration_date || !formData.montant_brut || formData.montant_brut === '0') {
+        toast({
+          title: "Erreur",
+          description: "Veuillez remplir tous les champs obligatoires.",
+          variant: "destructive",
+        })
+        return
+      }
     }
 
     try {
@@ -268,17 +298,29 @@ export function RiaCashClosure() {
         setUploadProgress(null) // Réinitialiser le progrès
       }
 
+      // Calculer le montant brut pour Paris
+      const parisWu = parseFloat(formData.total_western_union) || 0
+      const parisRia = parseFloat(formData.total_ria) || 0
+      const parisMg = parseFloat(formData.total_moneygram) || 0
+      const computedMontantBrut = isParis 
+        ? (parisWu + parisRia + parisMg)
+        : parseFloat(formData.montant_brut)
+
       const response = await fetch('/api/ria-cash-declarations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           guichetier: formData.guichetier,
           declaration_date: formData.declaration_date,
-          montant_brut: parseFloat(formData.montant_brut),
+          montant_brut: computedMontantBrut,
           total_delestage: parseFloat(formData.total_delestage) || 0,
           excedents: parseFloat(formData.excedents) || 0,
           delestage_comment: formData.delestage_comment || undefined,
           justificatif_files: justificatifFiles,
+          region: region,
+          total_western_union: parisWu,
+          total_ria: parisRia,
+          total_moneygram: parisMg,
         }),
       })
 
@@ -303,6 +345,9 @@ export function RiaCashClosure() {
         excedents: '0',
         delestage_comment: '',
         justificatif_files: [],
+        total_western_union: '0',
+        total_ria: '0',
+        total_moneygram: '0',
       })
       
       setIsDialogOpen(false)
@@ -310,7 +355,7 @@ export function RiaCashClosure() {
       // Recharger les données en parallèle
       console.log('🔄 Rechargement des données en parallèle...')
       const reloadPromises = [loadDeclarations()]
-      if (['cash_manager', 'director', 'delegate', 'accounting'].includes(user?.role || '')) {
+      if (['cash_manager', 'director', 'delegate', 'accounting', 'auditor', 'executor'].includes(user?.role || '')) {
         reloadPromises.push(loadPendingDeclarations())
       }
       await Promise.all(reloadPromises)
@@ -348,7 +393,7 @@ export function RiaCashClosure() {
       })
 
       loadDeclarations()
-      if (['cash_manager', 'director', 'delegate', 'accounting'].includes(user?.role || '')) {
+      if (['cash_manager', 'director', 'delegate', 'accounting', 'auditor', 'executor'].includes(user?.role || '')) {
         loadPendingDeclarations()
       }
       
@@ -450,6 +495,9 @@ export function RiaCashClosure() {
         excedents: '0',
         delestage_comment: '',
         justificatif_files: [],
+        total_western_union: '0',
+        total_ria: '0',
+        total_moneygram: '0',
       })
       loadDeclarations()
       
@@ -463,6 +511,13 @@ export function RiaCashClosure() {
   }
 
   const formatAmount = (amount: number) => {
+    if (isParis) {
+      return new Intl.NumberFormat('fr-FR', {
+        style: 'decimal',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }).format(amount) + ' €'
+    }
     return new Intl.NumberFormat('fr-FR', {
       style: 'decimal',
       minimumFractionDigits: 0,
@@ -508,8 +563,13 @@ export function RiaCashClosure() {
     )
   }
 
-  // Vérifier si l'utilisateur est un manager (Responsable caisse, Directeur ou Comptable)
-  const isManager = ['cash_manager', 'director', 'delegate', 'accounting'].includes(user?.role || '')
+  // Vérifier si l'utilisateur est un manager (Responsable caisse, Directeur, Comptable, Auditeur, Exécuteur)
+  const isManager = ['cash_manager', 'director', 'delegate', 'accounting', 'auditor', 'executor'].includes(user?.role || '')
+  
+  // Pour Paris, les auditeurs et exécuteurs peuvent aussi créer des arrêtés
+  const canCreateArrete = isParis 
+    ? ['cashier', 'cash_manager', 'auditor', 'executor', 'director', 'delegate', 'accounting'].includes(user?.role || '')
+    : !isManager // Congo: seulement les caissiers
 
   // Filtrer les déclarations
   const filteredDeclarations = declarations.filter(declaration => {
@@ -756,7 +816,7 @@ export function RiaCashClosure() {
       )}
 
       {/* Bouton pour créer un nouvel arrêté */}
-      {!isManager && (
+      {canCreateArrete && (
         <div className="flex justify-end">
           <Button onClick={() => {
             setEditingDeclaration(null)
@@ -765,12 +825,16 @@ export function RiaCashClosure() {
               declaration_date: new Date().toISOString().split('T')[0],
               montant_brut: '',
               total_delestage: '',
+              excedents: '',
               delestage_comment: '',
-              justificatif_file: null,
+              justificatif_files: [],
+              total_western_union: '',
+              total_ria: '',
+              total_moneygram: '',
             })
             setIsDialogOpen(true)
           }}>
-            Nouvel Arrêté de Caisse
+            Nouvel Arrêté de Caisse {isParis ? '(Paris)' : ''}
           </Button>
         </div>
       )}
@@ -936,6 +1000,15 @@ export function RiaCashClosure() {
                   <TableHead className="font-semibold">ID</TableHead>
                   <TableHead className="font-semibold">Date</TableHead>
                   <TableHead className="font-semibold">Guichetier</TableHead>
+                  {isParis ? (
+                    <>
+                      <TableHead className="font-semibold">Western Union</TableHead>
+                      <TableHead className="font-semibold">Ria</TableHead>
+                      <TableHead className="font-semibold">MoneyGram</TableHead>
+                    </>
+                  ) : (
+                    <TableHead className="font-semibold">Montant Brut</TableHead>
+                  )}
                   <TableHead className="font-semibold">Montant Brut</TableHead>
                   <TableHead className="font-semibold">Délestage</TableHead>
                   <TableHead className="font-semibold">Excédents</TableHead>
@@ -947,7 +1020,7 @@ export function RiaCashClosure() {
               <TableBody>
               {filteredDeclarations.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={isParis ? 12 : 10} className="text-center text-muted-foreground py-8">
                     {declarations.length === 0 
                       ? "Aucun arrêté de caisse pour le moment"
                       : "Aucun résultat ne correspond aux filtres sélectionnés"
@@ -985,6 +1058,25 @@ export function RiaCashClosure() {
                         {new Date(declaration.declaration_date).toLocaleDateString('fr-FR')}
                       </TableCell>
                       <TableCell className="font-medium">{declaration.guichetier}</TableCell>
+                      {isParis ? (
+                        <>
+                          <TableCell>
+                            <div className="text-purple-600 font-semibold">
+                              {formatAmount(Number(declaration.total_western_union) || 0)}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="text-indigo-600 font-semibold">
+                              {formatAmount(Number(declaration.total_ria) || 0)}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="text-cyan-600 font-semibold">
+                              {formatAmount(Number(declaration.total_moneygram) || 0)}
+                            </div>
+                          </TableCell>
+                        </>
+                      ) : null}
                       <TableCell>
                         <div className="text-blue-600 font-semibold">
                           {formatAmount(declaration.montant_brut)}
@@ -1156,30 +1248,81 @@ export function RiaCashClosure() {
                   disabled={!!editingDeclaration}
                 />
               </div>
+              {isParis ? (
+                <>
+                  <div>
+                    <Label htmlFor="total_western_union">Total Western Union (€) *</Label>
+                    <Input
+                      id="total_western_union"
+                      type="number"
+                      step="0.01"
+                      value={formData.total_western_union}
+                      onChange={(e) => setFormData({ ...formData, total_western_union: e.target.value })}
+                      placeholder="0.00"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="total_ria">Total Ria (€) *</Label>
+                    <Input
+                      id="total_ria"
+                      type="number"
+                      step="0.01"
+                      value={formData.total_ria}
+                      onChange={(e) => setFormData({ ...formData, total_ria: e.target.value })}
+                      placeholder="0.00"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="total_moneygram">Total MoneyGram (€) *</Label>
+                    <Input
+                      id="total_moneygram"
+                      type="number"
+                      step="0.01"
+                      value={formData.total_moneygram}
+                      onChange={(e) => setFormData({ ...formData, total_moneygram: e.target.value })}
+                      placeholder="0.00"
+                    />
+                  </div>
+                  {/* Montant brut calculé automatiquement */}
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                    <div className="text-sm text-blue-800 font-medium">Montant Brut (calculé)</div>
+                    <div className="text-lg font-bold text-blue-700">
+                      {new Intl.NumberFormat('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(
+                        (parseFloat(formData.total_western_union) || 0) + 
+                        (parseFloat(formData.total_ria) || 0) + 
+                        (parseFloat(formData.total_moneygram) || 0)
+                      )} €
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div>
+                  <Label htmlFor="montant_brut">Montant Brut (FCFA) *</Label>
+                  <Input
+                    id="montant_brut"
+                    type="number"
+                    value={formData.montant_brut}
+                    onChange={(e) => setFormData({ ...formData, montant_brut: e.target.value })}
+                    required
+                  />
+                </div>
+              )}
               <div>
-                <Label htmlFor="montant_brut">Montant Brut (FCFA) *</Label>
-                <Input
-                  id="montant_brut"
-                  type="number"
-                  value={formData.montant_brut}
-                  onChange={(e) => setFormData({ ...formData, montant_brut: e.target.value })}
-                  required
-                />
-              </div>
-              <div>
-                <Label htmlFor="total_delestage">Total Délestage (FCFA)</Label>
+                <Label htmlFor="total_delestage">Total Délestage ({currencyLabel})</Label>
                 <Input
                   id="total_delestage"
                   type="number"
+                  step={isParis ? "0.01" : "1"}
                   value={formData.total_delestage}
                   onChange={(e) => setFormData({ ...formData, total_delestage: e.target.value })}
                 />
               </div>
               <div>
-                <Label htmlFor="excedents">Excédents (FCFA)</Label>
+                <Label htmlFor="excedents">Excédents ({currencyLabel})</Label>
                 <Input
                   id="excedents"
                   type="number"
+                  step={isParis ? "0.01" : "1"}
                   value={formData.excedents}
                   onChange={(e) => setFormData({ ...formData, excedents: e.target.value })}
                   placeholder="Montant des excédents"

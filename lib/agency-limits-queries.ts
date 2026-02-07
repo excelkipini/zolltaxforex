@@ -20,6 +20,12 @@ export type EffectiveSettings = {
   usd: number
   eur: number
   gbp: number
+  usd_buy: number
+  usd_sell: number
+  eur_buy: number
+  eur_sell: number
+  gbp_buy: number
+  gbp_sell: number
   transfer_limit: number
   daily_limit: number
   card_limit: number
@@ -66,6 +72,12 @@ export async function getEffectiveSettings(agencyId?: string | null): Promise<Ef
     usd: Number(s.usd),
     eur: Number(s.eur),
     gbp: Number(s.gbp),
+    usd_buy: Number(s.usd_buy ?? s.usd),
+    usd_sell: Number(s.usd_sell ?? s.usd),
+    eur_buy: Number(s.eur_buy ?? s.eur),
+    eur_sell: Number(s.eur_sell ?? s.eur),
+    gbp_buy: Number(s.gbp_buy ?? s.gbp),
+    gbp_sell: Number(s.gbp_sell ?? s.gbp),
     transfer_limit: Number(s.transfer_limit),
     daily_limit: Number(s.daily_limit),
     card_limit: Number(s.card_limit),
@@ -95,6 +107,12 @@ export async function getEffectiveSettings(agencyId?: string | null): Promise<Ef
       usd: Number(s.usd),
       eur: Number(s.eur),
       gbp: Number(s.gbp),
+      usd_buy: Number(s.usd_buy ?? s.usd),
+      usd_sell: Number(s.usd_sell ?? s.usd),
+      eur_buy: Number(s.eur_buy ?? s.eur),
+      eur_sell: Number(s.eur_sell ?? s.eur),
+      gbp_buy: Number(s.gbp_buy ?? s.gbp),
+      gbp_sell: Number(s.gbp_sell ?? s.gbp),
       transfer_limit: r.transfer_limit === null ? Number(s.transfer_limit) : Number(r.transfer_limit),
       daily_limit: r.daily_limit === null ? Number(s.daily_limit) : Number(r.daily_limit),
       card_limit: r.card_limit === null ? Number(s.card_limit) : Number(r.card_limit),

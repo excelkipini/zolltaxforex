@@ -112,7 +112,7 @@ export function RiaUnifiedView({ initialDashboardData }: RiaUnifiedViewProps) {
     <div className="space-y-6">
       {/* En-tête */}
       <div>
-        <h1 className="text-2xl font-bold">Gestion RIA</h1>
+        <h1 className="text-2xl font-bold">Arrêtés de Caisse</h1>
         <p className="text-gray-600">
           Tableau de bord et gestion des opérations RIA
         </p>

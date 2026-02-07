@@ -10,10 +10,12 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
-import { CheckCircle, Eye, X, AlertTriangle, Clock, FileDown, Edit, Trash2, CheckCircle2, Calendar as CalendarIcon } from "lucide-react"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { CheckCircle, Eye, X, AlertTriangle, Clock, FileDown, Edit, Trash2, CheckCircle2, Calendar as CalendarIcon, Printer, ChevronLeft, ChevronRight } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { format } from "date-fns"
 import { fr } from "date-fns/locale"
+import { printExchangeReceipt, generateReceiptId, type ExchangeReceiptData } from "@/lib/exchange-receipts"
 
 type Transaction = {
   id: string
@@ -56,6 +58,8 @@ export function DailyOperations({ operationType, user, title }: DailyOperationsP
   const [realAmountEUR, setRealAmountEUR] = React.useState("")
   const [selectedDate, setSelectedDate] = React.useState<Date | null>(new Date())
   const [loading, setLoading] = React.useState(false)
+  const [currentPage, setCurrentPage] = React.useState(1)
+  const [itemsPerPage, setItemsPerPage] = React.useState(10)
   const { toast } = useToast()
 
   // Charger les transactions depuis l'API (filtrées par type et date côté serveur pour plus de rapidité)
@@ -67,7 +71,16 @@ export function DailyOperations({ operationType, user, title }: DailyOperationsP
     setLoading(true)
     try {
       const dateStr = format(selectedDate, 'yyyy-MM-dd')
-      const url = `/api/transactions?type=${encodeURIComponent(operationType)}&from=${dateStr}&to=${dateStr}`
+      // Élargir la plage d'un jour avant et après pour couvrir les décalages de fuseau horaire
+      // (la base de données stocke en UTC, mais l'utilisateur voit la date locale)
+      const prevDate = new Date(selectedDate)
+      prevDate.setDate(prevDate.getDate() - 1)
+      const nextDate = new Date(selectedDate)
+      nextDate.setDate(nextDate.getDate() + 1)
+      const fromStr = format(prevDate, 'yyyy-MM-dd')
+      const toStr = format(nextDate, 'yyyy-MM-dd')
+      
+      const url = `/api/transactions?type=${encodeURIComponent(operationType)}&from=${fromStr}&to=${toStr}`
       const res = await fetch(url)
       const data = await res.json()
 
@@ -81,6 +94,12 @@ export function DailyOperations({ operationType, user, title }: DailyOperationsP
           }
         }))
 
+        // Filtrer par date locale (pour corriger le décalage UTC)
+        list = list.filter((t: Transaction) => {
+          const txLocalDate = format(new Date(t.created_at), 'yyyy-MM-dd')
+          return txLocalDate === dateStr
+        })
+
         // Pour les reçus, garder seulement completed et pending_delete
         if (operationType === "receipt") {
           list = list.filter((t: Transaction) => t.status === "completed" || t.status === "pending_delete")
@@ -89,6 +108,7 @@ export function DailyOperations({ operationType, user, title }: DailyOperationsP
         if (user.role === "cashier") {
           list = list.filter((t: Transaction) => t.created_by === user.name)
         }
+        
         setTransactions(list)
       } else {
         setTransactions([])
@@ -472,6 +492,69 @@ export function DailyOperations({ operationType, user, title }: DailyOperationsP
     }
   }
 
+  // Réinitialiser la page quand les transactions changent
+  React.useEffect(() => {
+    setCurrentPage(1)
+  }, [transactions.length, itemsPerPage])
+
+  // Pagination
+  const totalPages = Math.max(1, Math.ceil(transactions.length / itemsPerPage))
+  const paginatedTransactions = transactions.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  )
+  const startIndex = (currentPage - 1) * itemsPerPage + 1
+  const endIndex = Math.min(currentPage * itemsPerPage, transactions.length)
+
+  // Générer les numéros de pages à afficher
+  const getPageNumbers = () => {
+    const pages: (number | "...")[] = []
+    if (totalPages <= 7) {
+      for (let i = 1; i <= totalPages; i++) pages.push(i)
+    } else {
+      pages.push(1)
+      if (currentPage > 3) pages.push("...")
+      const start = Math.max(2, currentPage - 1)
+      const end = Math.min(totalPages - 1, currentPage + 1)
+      for (let i = start; i <= end; i++) pages.push(i)
+      if (currentPage < totalPages - 2) pages.push("...")
+      pages.push(totalPages)
+    }
+    return pages
+  }
+
+  // Impression du reçu pour une transaction de change
+  const handlePrintExchangeReceipt = (transaction: Transaction) => {
+    const d = transaction.details || {}
+    const isAchat = d.exchange_type === "buy"
+    
+    const ID_TYPES_MAP: Record<string, string> = {
+      passport: "Passeport",
+      cni: "Carte d'identité nationale",
+      niu: "NIU",
+      permis: "Permis de conduire",
+    }
+    
+    const receiptData: ExchangeReceiptData = {
+      type: isAchat ? "change_achat" : "change_vente",
+      receiptId: generateReceiptId("EXC"),
+      date: new Date(transaction.created_at).toLocaleString("fr-FR"),
+      agent: transaction.created_by,
+      clientName: d.client_name || undefined,
+      clientPhone: d.client_phone || undefined,
+      clientIdType: d.client_id_type_label || ID_TYPES_MAP[d.client_id_type] || d.client_id_type || undefined,
+      clientIdNumber: d.client_id_number || undefined,
+      operationType: isAchat ? "Achat devise" : "Vente devise",
+      currency: isAchat ? (d.from_currency !== "XAF" ? d.from_currency : d.to_currency) : (d.to_currency !== "XAF" ? d.to_currency : d.from_currency),
+      amountForeign: Number(d.amount_foreign) || 0,
+      amountXaf: Number(d.amount_xaf) || 0,
+      exchangeRate: Number(d.exchange_rate) || 0,
+      commission: Number(d.commission) || 0,
+    }
+    
+    printExchangeReceipt(receiptData)
+  }
+
   return (
     <div className="space-y-4">
       <Card>
@@ -515,7 +598,7 @@ export function DailyOperations({ operationType, user, title }: DailyOperationsP
             </div>
           ) : (
             <div className="space-y-3">
-              {transactions.map((transaction) => (
+              {paginatedTransactions.map((transaction) => (
                 <div key={transaction.id} className="border rounded-lg p-4 hover:bg-gray-50 transition-colors">
                   <div className="flex items-center justify-between">
                     <div className="flex-1">
@@ -544,6 +627,18 @@ export function DailyOperations({ operationType, user, title }: DailyOperationsP
                       </div>
                     </div>
                     <div className="flex gap-2">
+                      {/* Bouton Reçu pour les transactions de change */}
+                      {operationType === "exchange" && transaction.status === "completed" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-blue-600 border-blue-600 hover:bg-blue-50"
+                          onClick={() => handlePrintExchangeReceipt(transaction)}
+                        >
+                          <Printer className="h-4 w-4 mr-1" />
+                          Reçu
+                        </Button>
+                      )}
                       <Button
                         size="sm"
                         variant="outline"
@@ -631,6 +726,61 @@ export function DailyOperations({ operationType, user, title }: DailyOperationsP
                   </div>
                 </div>
               ))}
+              {/* Pagination */}
+              {transactions.length > itemsPerPage && (
+                <div className="flex items-center justify-between pt-4 border-t mt-4">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <span>Par page</span>
+                    <Select value={String(itemsPerPage)} onValueChange={(v) => setItemsPerPage(Number(v))}>
+                      <SelectTrigger className="w-[70px] h-8">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="5">5</SelectItem>
+                        <SelectItem value="10">10</SelectItem>
+                        <SelectItem value="20">20</SelectItem>
+                        <SelectItem value="50">50</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <span>{startIndex} – {endIndex} sur {transactions.length}</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                      Précédent
+                    </Button>
+                    {getPageNumbers().map((page, idx) =>
+                      page === "..." ? (
+                        <span key={`dots-${idx}`} className="px-2 text-muted-foreground">…</span>
+                      ) : (
+                        <Button
+                          key={page}
+                          variant={currentPage === page ? "default" : "outline"}
+                          size="sm"
+                          className="w-8 h-8 p-0"
+                          onClick={() => setCurrentPage(page as number)}
+                        >
+                          {page}
+                        </Button>
+                      )
+                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                      disabled={currentPage === totalPages}
+                    >
+                      Suivant
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </CardContent>

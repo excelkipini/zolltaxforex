@@ -9,6 +9,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -40,6 +46,12 @@ import {
   Trash2,
   Receipt,
   Pencil,
+  Building2,
+  CalendarDays,
+  RotateCcw,
+  FileText,
+  FileSpreadsheet,
+  ChevronDown,
 } from "lucide-react"
 import { ActionGuard } from "@/components/permission-guard"
 import { PDFReceipt } from "@/components/pdf-receipt"
@@ -58,6 +70,8 @@ export function ExpensesView({ user }: ExpensesViewProps) {
   const [requesterFilter, setRequesterFilter] = useState("all")
   const [agencyFilter, setAgencyFilter] = useState("all")
   const [periodFilter, setPeriodFilter] = useState("all")
+  const [dateFrom, setDateFrom] = useState("")
+  const [dateTo, setDateTo] = useState("")
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage, setItemsPerPage] = useState(10)
   
@@ -132,16 +146,31 @@ export function ExpensesView({ user }: ExpensesViewProps) {
   const [editAgency, setEditAgency] = useState("")
   const [editComment, setEditComment] = useState("")
   const [loading, setLoading] = useState(true)
+  const [ubaBalance, setUbaBalance] = useState<number | null>(null)
 
   const expenses = items
 
-  // Load from API when DB is configured (limit=200 pour premier chargement plus rapide)
+  // Charger le solde du Compte UBA
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("/api/cash?action=accounts")
+        const data = await res.json()
+        if (data.success && Array.isArray(data.accounts)) {
+          const uba = data.accounts.find((a: any) => a.account_type === "uba")
+          if (uba) setUbaBalance(Number(uba.current_balance))
+        }
+      } catch {}
+    })()
+  }, [])
+
+  // Load from API when DB is configured
   useEffect(() => {
     let cancelled = false
     ;(async () => {
       setLoading(true)
       try {
-        const res = await fetch("/api/expenses?limit=200")
+        const res = await fetch("/api/expenses?limit=1000")
         const data = await res.json()
         if (cancelled) return
         if (res.ok && data?.ok && Array.isArray(data.data)) {
@@ -197,7 +226,7 @@ export function ExpensesView({ user }: ExpensesViewProps) {
       filtered = filtered.filter((e) => e.agency === agencyFilter)
     }
     
-    // Filtre par période
+    // Filtre par période prédéfinie
     if (periodFilter !== "all") {
       const now = new Date()
       filtered = filtered.filter((e) => {
@@ -224,6 +253,22 @@ export function ExpensesView({ user }: ExpensesViewProps) {
         }
       })
     }
+
+    // Filtre par plage de dates personnalisée
+    if (dateFrom || dateTo) {
+      filtered = filtered.filter((e) => {
+        const expenseDate = new Date(e.date)
+        if (dateFrom) {
+          const from = new Date(dateFrom + "T00:00:00")
+          if (expenseDate < from) return false
+        }
+        if (dateTo) {
+          const to = new Date(dateTo + "T23:59:59")
+          if (expenseDate > to) return false
+        }
+        return true
+      })
+    }
     
     // Filtre par recherche textuelle
     if (searchTerm) {
@@ -235,7 +280,7 @@ export function ExpensesView({ user }: ExpensesViewProps) {
     }
     
     return filtered
-  }, [expenses, canViewAll, user.name, filter, categoryFilter, requesterFilter, agencyFilter, periodFilter, searchTerm])
+  }, [expenses, canViewAll, user.name, filter, categoryFilter, requesterFilter, agencyFilter, periodFilter, dateFrom, dateTo, searchTerm])
 
   const stats = useMemo(() => {
     const total = visibleExpenses.length
@@ -253,6 +298,10 @@ export function ExpensesView({ user }: ExpensesViewProps) {
       .filter((e) => e.status === "director_approved" || e.status === "approved")
       .reduce((sum, e) => sum + e.amount, 0)
     
+    const pendingTotalCost = visibleExpenses
+      .filter((e) => e.status === "pending" || e.status === "accounting_approved")
+      .reduce((sum, e) => sum + e.amount, 0)
+    
     return { 
       total, 
       pending, 
@@ -262,6 +311,7 @@ export function ExpensesView({ user }: ExpensesViewProps) {
       directorRejected,
       approved, // Pour compatibilité
       rejected, // Pour compatibilité
+      pendingTotalCost,
       totalCost 
     }
   }, [visibleExpenses])
@@ -275,7 +325,7 @@ export function ExpensesView({ user }: ExpensesViewProps) {
   // Réinitialiser la page quand les filtres changent
   useEffect(() => {
     setCurrentPage(1)
-  }, [filter, categoryFilter, requesterFilter, agencyFilter, periodFilter, searchTerm])
+  }, [filter, categoryFilter, requesterFilter, agencyFilter, periodFilter, dateFrom, dateTo, searchTerm])
 
   // Réinitialiser la page quand le nombre d'éléments par page change
   useEffect(() => {
@@ -350,31 +400,40 @@ export function ExpensesView({ user }: ExpensesViewProps) {
     setItemsPerPage(Number(value))
   }
 
+  function buildExportFilename(ext: string) {
+    const now = new Date()
+    const dateStr = now.toISOString().split('T')[0]
+    let filename = `depenses_${dateStr}`
+    if (dateFrom || dateTo) {
+      filename += `_${dateFrom || "debut"}_${dateTo || "fin"}`
+    } else if (periodFilter !== "all") {
+      filename += `_${periodFilter}`
+    }
+    if (filter !== "all") filename += `_${filter}`
+    if (categoryFilter !== "all") filename += `_${categoryFilter}`
+    if (searchTerm) filename += `_recherche`
+    return filename + ext
+  }
+
+  function downloadBlob(blob: Blob, filename: string) {
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    link.href = url
+    link.download = filename
+    link.style.visibility = "hidden"
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
+
   function exportCsv() {
     if (visibleExpenses.length === 0) {
-      toast({
-        title: "Aucune donnée à exporter",
-        description: "Aucune dépense ne correspond aux filtres appliqués.",
-        variant: "destructive"
-      })
+      toast({ title: "Aucune donnée à exporter", description: "Aucune dépense ne correspond aux filtres appliqués.", variant: "destructive" })
       return
     }
-
     try {
-      // Créer les en-têtes CSV
-      const headers = [
-        "ID",
-        "Libellé",
-        "Montant",
-        "Catégorie",
-        "Statut",
-        "Demandeur",
-        "Agence",
-        "Date",
-        "Commentaire"
-      ]
-
-      // Créer les lignes de données
+      const headers = ["ID", "Libellé", "Montant", "Catégorie", "Statut", "Demandeur", "Agence", "Date", "Commentaire"]
       const csvRows = [
         headers.join(","),
         ...visibleExpenses.map(expense => [
@@ -382,63 +441,129 @@ export function ExpensesView({ user }: ExpensesViewProps) {
           `"${expense.description.replace(/"/g, '""')}"`,
           expense.amount,
           `"${expense.category}"`,
-          `"${expense.status}"`,
+          `"${getStatusLabel(expense.status)}"`,
           `"${expense.requestedBy}"`,
           `"${expense.agency}"`,
           `"${expense.date}"`,
           `"${((expense as any).comment || "").replace(/"/g, '""')}"`
         ].join(","))
       ]
+      const filename = buildExportFilename(".csv")
+      downloadBlob(new Blob([csvRows.join("\n")], { type: "text/csv;charset=utf-8;" }), filename)
+      toast({ title: "Export CSV réussi", description: `${visibleExpenses.length} dépenses exportées vers ${filename}` })
+    } catch {
+      toast({ title: "Erreur d'export", description: "Une erreur est survenue lors de l'exportation.", variant: "destructive" })
+    }
+  }
 
-      // Créer le contenu CSV
-      const csvContent = csvRows.join("\n")
+  function exportPdf() {
+    if (visibleExpenses.length === 0) {
+      toast({ title: "Aucune donnée à exporter", description: "Aucune dépense ne correspond aux filtres appliqués.", variant: "destructive" })
+      return
+    }
+    try {
+      const filename = buildExportFilename(".pdf")
+      const totalAmount = visibleExpenses.reduce((s, e) => s + e.amount, 0)
 
-      // Créer le nom de fichier avec la date et les filtres
-      const now = new Date()
-      const dateStr = now.toISOString().split('T')[0]
-      let filename = `depenses_${dateStr}`
-      
-      // Ajouter des suffixes selon les filtres
-      if (periodFilter !== "all") {
-        filename += `_${periodFilter}`
+      // Construire le résumé des filtres actifs
+      const activeFilters: string[] = []
+      if (dateFrom || dateTo) activeFilters.push(`Période : ${dateFrom || "..."} au ${dateTo || "..."}`)
+      else if (periodFilter !== "all") {
+        const labels: Record<string, string> = { today: "Aujourd'hui", week: "Cette semaine", month: "Ce mois", year: "Cette année", last_year: "L'année dernière" }
+        activeFilters.push(`Période : ${labels[periodFilter] || periodFilter}`)
       }
-      if (filter !== "all") {
-        filename += `_${filter}`
-      }
-      if (categoryFilter !== "all") {
-        filename += `_${categoryFilter}`
-      }
-      if (searchTerm) {
-        filename += `_recherche`
-      }
-      
-      filename += ".csv"
+      if (filter !== "all") activeFilters.push(`Statut : ${getStatusLabel(filter)}`)
+      if (categoryFilter !== "all") activeFilters.push(`Catégorie : ${categoryFilter}`)
+      if (requesterFilter !== "all") activeFilters.push(`Demandeur : ${requesterFilter}`)
+      if (agencyFilter !== "all") activeFilters.push(`Agence : ${agencyFilter}`)
+      if (searchTerm) activeFilters.push(`Recherche : "${searchTerm}"`)
 
-      // Créer et télécharger le fichier
-      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
-      const link = document.createElement("a")
-      
-      if (link.download !== undefined) {
-    const url = URL.createObjectURL(blob)
-        link.setAttribute("href", url)
-        link.setAttribute("download", filename)
-        link.style.visibility = "hidden"
-        document.body.appendChild(link)
-        link.click()
-        document.body.removeChild(link)
-    URL.revokeObjectURL(url)
+      const statusColors: Record<string, string> = {
+        pending: "#f59e0b",
+        accounting_approved: "#3b82f6",
+        accounting_rejected: "#ef4444",
+        director_approved: "#10b981",
+        director_rejected: "#ef4444",
+        approved: "#10b981",
+        rejected: "#ef4444",
       }
 
-      toast({
-        title: "Export réussi",
-        description: `${visibleExpenses.length} dépenses exportées vers ${filename}`,
-      })
-    } catch (error) {
-      toast({
-        title: "Erreur d'export",
-        description: "Une erreur est survenue lors de l'exportation des données.",
-        variant: "destructive"
-      })
+      const html = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>${filename}</title>
+<style>
+  @page { size: A4 landscape; margin: 12mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 10px; color: #1e293b; background: #fff; }
+  .header { display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 12px; border-bottom: 2px solid #2563eb; margin-bottom: 10px; }
+  .header h1 { font-size: 18px; color: #1e3a5f; font-weight: 700; }
+  .header .subtitle { font-size: 11px; color: #64748b; margin-top: 2px; }
+  .header .meta { text-align: right; font-size: 10px; color: #64748b; }
+  .summary { display: flex; gap: 16px; margin-bottom: 10px; flex-wrap: wrap; }
+  .summary-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px 14px; min-width: 140px; }
+  .summary-card .label { font-size: 9px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; }
+  .summary-card .value { font-size: 16px; font-weight: 700; color: #1e293b; margin-top: 2px; }
+  .filters { font-size: 9px; color: #64748b; margin-bottom: 10px; }
+  .filters span { background: #eff6ff; color: #2563eb; padding: 2px 6px; border-radius: 3px; margin-right: 4px; display: inline-block; margin-bottom: 2px; }
+  table { width: 100%; border-collapse: collapse; }
+  thead th { background: #1e3a5f; color: #fff; padding: 7px 8px; text-align: left; font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; }
+  thead th:first-child { border-radius: 4px 0 0 0; }
+  thead th:last-child { border-radius: 0 4px 0 0; }
+  tbody tr { border-bottom: 1px solid #f1f5f9; }
+  tbody tr:nth-child(even) { background: #f8fafc; }
+  tbody td { padding: 6px 8px; font-size: 10px; vertical-align: middle; }
+  .amount { font-weight: 600; text-align: right; white-space: nowrap; }
+  .status { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 9px; font-weight: 600; color: #fff; }
+  .footer { margin-top: 12px; padding-top: 8px; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; font-size: 9px; color: #94a3b8; }
+  @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+</style></head><body>
+<div class="header">
+  <div>
+    <h1>ZOLL TAX FOREX</h1>
+    <div class="subtitle">Rapport des Dépenses</div>
+  </div>
+  <div class="meta">
+    Généré le ${new Date().toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })}<br/>
+    Par : ${user.name}
+  </div>
+</div>
+<div class="summary">
+  <div class="summary-card"><div class="label">Total dépenses</div><div class="value">${visibleExpenses.length}</div></div>
+  <div class="summary-card"><div class="label">Montant total</div><div class="value">${totalAmount.toLocaleString("fr-FR")} XAF</div></div>
+  <div class="summary-card"><div class="label">Approuvées</div><div class="value" style="color:#10b981">${visibleExpenses.filter(e => e.status === "director_approved" || e.status === "approved").length}</div></div>
+  <div class="summary-card"><div class="label">En attente</div><div class="value" style="color:#f59e0b">${visibleExpenses.filter(e => e.status === "pending" || e.status === "accounting_approved").length}</div></div>
+  <div class="summary-card"><div class="label">Rejetées</div><div class="value" style="color:#ef4444">${visibleExpenses.filter(e => e.status === "director_rejected" || e.status === "accounting_rejected" || e.status === "rejected").length}</div></div>
+</div>
+${activeFilters.length > 0 ? `<div class="filters">Filtres : ${activeFilters.map(f => `<span>${f}</span>`).join("")}</div>` : ""}
+<table>
+<thead><tr><th>#</th><th>Date</th><th>Libellé</th><th>Catégorie</th><th>Montant</th><th>Statut</th><th>Demandeur</th><th>Agence</th></tr></thead>
+<tbody>
+${visibleExpenses.map((e, i) => `<tr>
+  <td>${i + 1}</td>
+  <td>${new Date(e.date).toLocaleDateString("fr-FR")}</td>
+  <td>${e.description}</td>
+  <td>${e.category}</td>
+  <td class="amount">${e.amount.toLocaleString("fr-FR")} XAF</td>
+  <td><span class="status" style="background:${statusColors[e.status] || "#64748b"}">${getStatusLabel(e.status)}</span></td>
+  <td>${e.requestedBy}</td>
+  <td>${e.agency}</td>
+</tr>`).join("")}
+</tbody>
+</table>
+<div class="footer">
+  <span>ZOLL TAX FOREX © ${new Date().getFullYear()} — Document confidentiel</span>
+  <span>${visibleExpenses.length} enregistrements • Total : ${totalAmount.toLocaleString("fr-FR")} XAF</span>
+</div>
+</body></html>`
+
+      const printWindow = window.open("", "_blank")
+      if (printWindow) {
+        printWindow.document.write(html)
+        printWindow.document.close()
+        setTimeout(() => { printWindow.print() }, 400)
+      }
+      toast({ title: "Export PDF prêt", description: `${visibleExpenses.length} dépenses prêtes à imprimer en PDF` })
+    } catch {
+      toast({ title: "Erreur d'export", description: "Une erreur est survenue lors de la génération du PDF.", variant: "destructive" })
     }
   }
 
@@ -847,7 +972,7 @@ export function ExpensesView({ user }: ExpensesViewProps) {
         // Recharger les données depuis l'API pour s'assurer de la synchronisation
         setTimeout(async () => {
           try {
-            const res = await fetch("/api/expenses?limit=200")
+            const res = await fetch("/api/expenses?limit=1000")
             const data = await res.json()
             if (res.ok && data?.ok && Array.isArray(data.data)) {
               const apiData = data.data.map((item: any) => ({
@@ -976,6 +1101,158 @@ export function ExpensesView({ user }: ExpensesViewProps) {
           </Button>
         </div>
 
+        {/* Filters and Search */}
+        <Card className="rounded-xl border bg-card shadow-sm">
+          <CardHeader className="pb-4">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted">
+                <Filter className="h-4 w-4 text-muted-foreground" />
+              </div>
+              Filtres et recherche
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {/* Barre de recherche + Export */}
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="Rechercher par description, demandeur ou agence..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="h-9 pl-9 rounded-lg bg-muted/50 text-sm"
+                />
+              </div>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="shrink-0 rounded-lg h-9 gap-2">
+                    <Download className="h-4 w-4" />
+                    Exporter
+                    <ChevronDown className="h-3.5 w-3.5 opacity-60" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-44">
+                  <DropdownMenuItem onClick={exportCsv} className="gap-2 cursor-pointer">
+                    <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
+                    Exporter en CSV
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={exportPdf} className="gap-2 cursor-pointer">
+                    <FileText className="h-4 w-4 text-red-500" />
+                    Exporter en PDF
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+
+            {/* Tous les filtres sur une seule ligne */}
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Plage de dates en premier */}
+              <div className="flex items-center gap-1.5">
+                <Input
+                  type="date"
+                  value={dateFrom}
+                  onChange={(e) => { setDateFrom(e.target.value); if (e.target.value) setPeriodFilter("all") }}
+                  className="input-date-centered h-8 w-[130px] min-w-0 text-xs rounded-md"
+                />
+                <span className="text-xs text-muted-foreground shrink-0">au</span>
+                <Input
+                  type="date"
+                  value={dateTo}
+                  onChange={(e) => { setDateTo(e.target.value); if (e.target.value) setPeriodFilter("all") }}
+                  className="input-date-centered h-8 w-[130px] min-w-0 text-xs rounded-md"
+                />
+              </div>
+
+              <div className="h-5 w-px bg-border shrink-0 hidden sm:block" />
+
+              <Select value={filter} onValueChange={setFilter}>
+                <SelectTrigger className="h-8 w-auto min-w-0 rounded-md text-xs px-2.5 gap-1 [&>span]:truncate [&>span]:max-w-[100px]">
+                  <SelectValue placeholder="Statut" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Tous les statuts</SelectItem>
+                  <SelectItem value="pending">En attente</SelectItem>
+                  <SelectItem value="accounting_approved">Approuvées comptabilité</SelectItem>
+                  <SelectItem value="accounting_rejected">Rejetées comptabilité</SelectItem>
+                  <SelectItem value="director_approved">Approuvées directeur</SelectItem>
+                  <SelectItem value="director_rejected">Rejetées directeur</SelectItem>
+                  <SelectItem value="approved">Approuvées (ancien)</SelectItem>
+                  <SelectItem value="rejected">Rejetées (ancien)</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                <SelectTrigger className="h-8 w-auto min-w-0 rounded-md text-xs px-2.5 gap-1 [&>span]:truncate [&>span]:max-w-[100px]">
+                  <SelectValue placeholder="Catégorie" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Toutes les catégories</SelectItem>
+                  {expenseCategories.map(category => (
+                    <SelectItem key={category} value={category}>{category}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select value={requesterFilter} onValueChange={setRequesterFilter}>
+                <SelectTrigger className="h-8 w-auto min-w-0 rounded-md text-xs px-2.5 gap-1 [&>span]:truncate [&>span]:max-w-[100px]">
+                  <SelectValue placeholder="Demandeur" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Tous les demandeurs</SelectItem>
+                  {Array.from(new Set(expenses.map(e => e.requestedBy))).map(requester => (
+                    <SelectItem key={requester} value={requester}>{requester}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select value={agencyFilter} onValueChange={setAgencyFilter}>
+                <SelectTrigger className="h-8 w-auto min-w-0 rounded-md text-xs px-2.5 gap-1 [&>span]:truncate [&>span]:max-w-[100px]">
+                  <SelectValue placeholder="Agence" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Toutes les agences</SelectItem>
+                  {Array.from(new Set(expenses.map(e => e.agency))).map(agency => (
+                    <SelectItem key={agency} value={agency}>{agency}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select value={periodFilter} onValueChange={(v) => {
+                setPeriodFilter(v)
+                if (v !== "all") { setDateFrom(""); setDateTo("") }
+              }}>
+                <SelectTrigger className="h-8 w-auto min-w-0 rounded-md text-xs px-2.5 gap-1 [&>span]:truncate [&>span]:max-w-[100px]">
+                  <SelectValue placeholder="Période" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Toutes les périodes</SelectItem>
+                  <SelectItem value="today">Aujourd&apos;hui</SelectItem>
+                  <SelectItem value="week">Cette semaine</SelectItem>
+                  <SelectItem value="month">Ce mois</SelectItem>
+                  <SelectItem value="year">Cette année</SelectItem>
+                  <SelectItem value="last_year">L&apos;année dernière</SelectItem>
+                </SelectContent>
+              </Select>
+
+              {(dateFrom || dateTo || filter !== "all" || categoryFilter !== "all" || requesterFilter !== "all" || agencyFilter !== "all" || periodFilter !== "all" || searchTerm) && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setDateFrom(""); setDateTo(""); setPeriodFilter("all")
+                    setFilter("all"); setCategoryFilter("all"); setRequesterFilter("all")
+                    setAgencyFilter("all"); setSearchTerm("")
+                  }}
+                  className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground rounded-md"
+                >
+                  <RotateCcw className="h-3 w-3 mr-1" />
+                  Réinitialiser
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Alerts for director role */}
         {isDirectorDelegate && stats.pending > 0 && (
           <Alert className="border-amber-200 bg-amber-50 dark:border-amber-900/50 dark:bg-amber-950/30 text-amber-900 dark:text-amber-100">
@@ -994,180 +1271,94 @@ export function ExpensesView({ user }: ExpensesViewProps) {
         )}
 
         {/* Statistics */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
-          <Card className="overflow-hidden rounded-xl border bg-card shadow-sm transition-shadow hover:shadow">
-            <CardContent className="p-5">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400">
-                  <DollarSign className="h-5 w-5" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-muted-foreground">Total</p>
-                  <p className="text-2xl font-bold tabular-nums text-blue-600 dark:text-blue-400">{stats.total}</p>
-                  <p className="text-xs text-muted-foreground">dépenses</p>
-                </div>
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
+          {/* Total */}
+          <div className="relative overflow-hidden rounded-xl border bg-gradient-to-br from-blue-500/10 via-blue-500/5 to-transparent p-4 shadow-sm hover:shadow-md transition-all">
+            <div className="flex items-start justify-between">
+              <div className="h-10 w-10 rounded-lg bg-blue-100 dark:bg-blue-500/20 flex items-center justify-center shadow-sm">
+                <DollarSign className="h-5 w-5 text-blue-700 dark:text-blue-400" />
               </div>
-            </CardContent>
-          </Card>
+            </div>
+            <p className="text-sm font-semibold text-foreground mt-3">Total</p>
+            <p className="text-2xl font-bold tabular-nums text-blue-700 dark:text-blue-400 mt-0.5">{stats.total}</p>
+            <p className="text-xs text-muted-foreground mt-1">dépenses</p>
+          </div>
 
-          <Card className="overflow-hidden rounded-xl border bg-card shadow-sm transition-shadow hover:shadow">
-            <CardContent className="p-5">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
-                  <Clock className="h-5 w-5" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-muted-foreground">
-                    {isDirectorDelegate ? "En attente" : "En attente comptable"}
-                  </p>
-                  <p className="text-2xl font-bold tabular-nums text-amber-600 dark:text-amber-400">
-                    {isDirectorDelegate ? stats.pending + stats.accountingApproved : stats.pending}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {isDirectorDelegate ? "Comptable ou directeur" : "À valider"}
-                  </p>
-                </div>
+          {/* En attente */}
+          <div className="relative overflow-hidden rounded-xl border bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-transparent p-4 shadow-sm hover:shadow-md transition-all">
+            <div className="flex items-start justify-between">
+              <div className="h-10 w-10 rounded-lg bg-amber-100 dark:bg-amber-500/20 flex items-center justify-center shadow-sm">
+                <Clock className="h-5 w-5 text-amber-700 dark:text-amber-400" />
               </div>
-            </CardContent>
-          </Card>
+              {(isDirectorDelegate ? stats.pending + stats.accountingApproved : stats.pending) > 0 && (
+                <span className="flex h-2.5 w-2.5 rounded-full bg-amber-500 animate-pulse" />
+              )}
+            </div>
+            <p className="text-sm font-semibold text-foreground mt-3">
+              {isDirectorDelegate ? "En attente" : "En attente comptable"}
+            </p>
+            <p className="text-2xl font-bold tabular-nums text-amber-700 dark:text-amber-400 mt-0.5">
+              {isDirectorDelegate ? stats.pending + stats.accountingApproved : stats.pending}
+            </p>
+            <p className="text-xs mt-1">
+              {isDirectorDelegate
+                ? <span className="font-bold text-amber-800 dark:text-amber-300">Montant Total : {stats.pendingTotalCost.toLocaleString("fr-FR")} XAF</span>
+                : <span className="text-muted-foreground">À valider</span>}
+            </p>
+          </div>
 
-          <Card className="overflow-hidden rounded-xl border bg-card shadow-sm transition-shadow hover:shadow">
-            <CardContent className="p-5">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                  <CheckCircle className="h-5 w-5" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-muted-foreground">Approuvées</p>
-                  <p className="text-2xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400">{stats.directorApproved}</p>
-                  <p className="text-xs text-muted-foreground">par directeur</p>
-                </div>
+          {/* Approuvées */}
+          <div className="relative overflow-hidden rounded-xl border bg-gradient-to-br from-emerald-500/10 via-emerald-500/5 to-transparent p-4 shadow-sm hover:shadow-md transition-all">
+            <div className="flex items-start justify-between">
+              <div className="h-10 w-10 rounded-lg bg-emerald-100 dark:bg-emerald-500/20 flex items-center justify-center shadow-sm">
+                <CheckCircle className="h-5 w-5 text-emerald-700 dark:text-emerald-400" />
               </div>
-            </CardContent>
-          </Card>
+            </div>
+            <p className="text-sm font-semibold text-foreground mt-3">Approuvées</p>
+            <p className="text-2xl font-bold tabular-nums text-emerald-700 dark:text-emerald-400 mt-0.5">{stats.directorApproved}</p>
+            <p className="text-xs text-muted-foreground mt-1">par directeur</p>
+          </div>
 
-          <Card className="overflow-hidden rounded-xl border bg-card shadow-sm transition-shadow hover:shadow">
-            <CardContent className="p-5">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-red-500/10 text-red-600 dark:text-red-400">
-                  <XCircle className="h-5 w-5" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-muted-foreground">Rejetées</p>
-                  <p className="text-2xl font-bold tabular-nums text-red-600 dark:text-red-400">{stats.accountingRejected + stats.directorRejected}</p>
-                  <p className="text-xs text-muted-foreground">comptable ou directeur</p>
-                </div>
+          {/* Rejetées */}
+          <div className="relative overflow-hidden rounded-xl border bg-gradient-to-br from-red-500/10 via-red-500/5 to-transparent p-4 shadow-sm hover:shadow-md transition-all">
+            <div className="flex items-start justify-between">
+              <div className="h-10 w-10 rounded-lg bg-red-100 dark:bg-red-500/20 flex items-center justify-center shadow-sm">
+                <XCircle className="h-5 w-5 text-red-700 dark:text-red-400" />
               </div>
-            </CardContent>
-          </Card>
+            </div>
+            <p className="text-sm font-semibold text-foreground mt-3">Rejetées</p>
+            <p className="text-2xl font-bold tabular-nums text-red-700 dark:text-red-400 mt-0.5">{stats.accountingRejected + stats.directorRejected}</p>
+            <p className="text-xs text-muted-foreground mt-1">comptable ou directeur</p>
+          </div>
 
-          <Card className="overflow-hidden rounded-xl border bg-card shadow-sm transition-shadow hover:shadow">
-            <CardContent className="p-5">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-violet-500/10 text-violet-600 dark:text-violet-400">
-                  <TrendingUp className="h-5 w-5" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-muted-foreground">Coût total</p>
-                  <p className="text-xl font-bold tabular-nums text-violet-600 dark:text-violet-400">{stats.totalCost.toLocaleString()}</p>
-                  <p className="text-xs text-muted-foreground">XAF (validées)</p>
-                </div>
+          {/* Coût total */}
+          <div className="relative overflow-hidden rounded-xl border bg-gradient-to-br from-violet-500/10 via-violet-500/5 to-transparent p-4 shadow-sm hover:shadow-md transition-all col-span-2 lg:col-span-1">
+            <div className="flex items-start justify-between">
+              <div className="h-10 w-10 rounded-lg bg-violet-100 dark:bg-violet-500/20 flex items-center justify-center shadow-sm">
+                <TrendingUp className="h-5 w-5 text-violet-700 dark:text-violet-400" />
               </div>
-            </CardContent>
-          </Card>
+            </div>
+            <p className="text-sm font-semibold text-foreground mt-3">Coût total</p>
+            <p className="text-xl font-bold tabular-nums text-violet-700 dark:text-violet-400 mt-0.5">{stats.totalCost.toLocaleString()} <span className="text-sm font-medium text-muted-foreground">XAF</span></p>
+            <p className="text-xs text-muted-foreground mt-1">dépenses validées</p>
+          </div>
         </div>
 
-        {/* Filters and Search */}
-        <Card className="rounded-xl border bg-card shadow-sm">
-          <CardHeader className="pb-4">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted">
-                <Filter className="h-4 w-4 text-muted-foreground" />
-              </div>
-              Filtres et recherche
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="Rechercher par description, demandeur ou agence..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="h-10 pl-9 rounded-lg bg-muted/50"
-                />
-              </div>
-              <Button variant="outline" size="sm" onClick={exportCsv} className="shrink-0 rounded-lg">
-                <Download className="h-4 w-4 mr-2" />
-                Exporter CSV
-              </Button>
+        {/* Disponibilité Compte UBA */}
+        {ubaBalance !== null && (
+          <div className="flex items-center gap-3 rounded-lg border bg-blue-50/60 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900/40 px-4 py-3">
+            <div className="h-8 w-8 rounded-lg bg-blue-100 dark:bg-blue-500/20 flex items-center justify-center shrink-0">
+              <Building2 className="h-4 w-4 text-blue-700 dark:text-blue-400" />
             </div>
-            <div className="flex flex-wrap gap-3">
-              <Select value={filter} onValueChange={setFilter}>
-                <SelectTrigger className="w-full rounded-lg sm:w-44">
-                  <SelectValue placeholder="Statut" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Tous les statuts</SelectItem>
-                  <SelectItem value="pending">En attente</SelectItem>
-                  <SelectItem value="accounting_approved">Approuvées comptabilité</SelectItem>
-                  <SelectItem value="accounting_rejected">Rejetées comptabilité</SelectItem>
-                  <SelectItem value="director_approved">Approuvées directeur</SelectItem>
-                  <SelectItem value="director_rejected">Rejetées directeur</SelectItem>
-                  <SelectItem value="approved">Approuvées (ancien)</SelectItem>
-                  <SelectItem value="rejected">Rejetées (ancien)</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                <SelectTrigger className="w-full rounded-lg sm:w-44">
-                  <SelectValue placeholder="Catégorie" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Toutes les catégories</SelectItem>
-                  {expenseCategories.map(category => (
-                    <SelectItem key={category} value={category}>{category}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={requesterFilter} onValueChange={setRequesterFilter}>
-                <SelectTrigger className="w-full rounded-lg sm:w-44">
-                  <SelectValue placeholder="Demandeur" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Tous les demandeurs</SelectItem>
-                  {Array.from(new Set(expenses.map(e => e.requestedBy))).map(requester => (
-                    <SelectItem key={requester} value={requester}>{requester}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={agencyFilter} onValueChange={setAgencyFilter}>
-                <SelectTrigger className="w-full rounded-lg sm:w-44">
-                  <SelectValue placeholder="Agence" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Toutes les agences</SelectItem>
-                  {Array.from(new Set(expenses.map(e => e.agency))).map(agency => (
-                    <SelectItem key={agency} value={agency}>{agency}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={periodFilter} onValueChange={setPeriodFilter}>
-                <SelectTrigger className="w-full rounded-lg sm:w-44">
-                  <SelectValue placeholder="Période" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Toutes les périodes</SelectItem>
-                  <SelectItem value="today">Aujourd'hui</SelectItem>
-                  <SelectItem value="week">Cette semaine</SelectItem>
-                  <SelectItem value="month">Ce mois</SelectItem>
-                  <SelectItem value="year">Cette année</SelectItem>
-                  <SelectItem value="last_year">L'année dernière</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-sm text-blue-800 dark:text-blue-300 font-medium">Caisse de débit — Compte UBA :</span>
+              <span className="text-sm font-bold text-blue-900 dark:text-blue-200 tabular-nums">
+                {Number(ubaBalance).toLocaleString("fr-FR")} XAF
+              </span>
+              <span className="text-xs text-blue-600/70 dark:text-blue-400/60">disponible</span>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        )}
 
         {/* Expenses List - Table */}
         <Card className="rounded-xl border bg-card shadow-sm overflow-hidden">

@@ -315,7 +315,8 @@ export async function createTransaction(input: CreateTransactionInput): Promise<
   const transactionId = generateTransactionId()
   
   // Définir le statut par défaut selon le type
-  const defaultStatus = input.type === "receipt" ? "completed" : "pending"
+  // Les reçus et les opérations de change sont directement terminés (pas de workflow de validation)
+  const defaultStatus = (input.type === "receipt" || input.type === "exchange") ? "completed" : "pending"
   
   const rows = await sql<Transaction[]>`
     INSERT INTO transactions (id, type, status, description, amount, currency, created_by, agency, details)

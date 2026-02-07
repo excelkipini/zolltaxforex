@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
         approved,
         user.name,
         rejectionReason,
-        approved ? (debitAccount ?? 'receipt_commissions') : undefined
+        approved ? (debitAccount ?? 'uba') : undefined
       )
     } else if (validationType === 'director') {
       // Seuls les directeurs peuvent valider au niveau directeur

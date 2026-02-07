@@ -43,17 +43,28 @@ export async function GET(request: NextRequest) {
         { status: 401 }
       )
     }
+    // Ensure new columns exist
+    try {
+      await sql`ALTER TABLE ria_cash_declarations ADD COLUMN IF NOT EXISTS region TEXT DEFAULT 'congo'`
+      await sql`ALTER TABLE ria_cash_declarations ADD COLUMN IF NOT EXISTS total_western_union NUMERIC DEFAULT 0`
+      await sql`ALTER TABLE ria_cash_declarations ADD COLUMN IF NOT EXISTS total_ria NUMERIC DEFAULT 0`
+      await sql`ALTER TABLE ria_cash_declarations ADD COLUMN IF NOT EXISTS total_moneygram NUMERIC DEFAULT 0`
+    } catch (e) {
+      // Columns may already exist
+    }
+
     const searchParams = request.nextUrl.searchParams
     const type = searchParams.get('type') // 'all', 'pending', 'user', 'stats', 'cashiers-with-excedents'
+    const region = (searchParams.get('region') || 'congo') as 'congo' | 'paris'
     
     // Vérifier les permissions - étendre l'accès pour certains types
     const baseAllowed = ['cashier', 'cash_manager']
-    const extendedAllowed = ['cashier', 'cash_manager', 'director', 'delegate', 'accounting']
-    // Pour les types 'all', 'pending', 'stats', permettre aussi director et accounting
-    const managerAllowed = ['cash_manager', 'director', 'delegate', 'accounting']
+    const extendedAllowed = ['cashier', 'cash_manager', 'director', 'delegate', 'accounting', 'auditor', 'executor']
+    // Pour les types 'all', 'pending', 'stats', permettre aussi director, accounting, auditor, executor
+    const managerAllowed = ['cash_manager', 'director', 'delegate', 'accounting', 'auditor', 'executor']
     const allowedRoles = (type === 'cashiers-with-excedents' || type === 'all' || type === 'pending' || type === 'stats') 
       ? extendedAllowed 
-      : baseAllowed
+      : [...baseAllowed, 'auditor', 'executor']
     if (!allowedRoles.includes(user.role)) {
       console.log('❌ Accès refusé pour le rôle:', user.role, 'type:', type)
       return NextResponse.json(
@@ -76,11 +87,11 @@ export async function GET(request: NextRequest) {
     // Statistiques (pour le Responsable caisses ou caissier)
     if (type === 'stats') {
       try {
-        console.log('📊 Récupération des statistiques pour user:', user.id, 'role:', user.role)
+        console.log('📊 Récupération des statistiques pour user:', user.id, 'role:', user.role, 'region:', region)
         // Si le rôle est cashier, on filtre par user_id, sinon on récupère toutes les stats
         const userId = user.role === 'cashier' ? user.id : undefined
         console.log('📊 userId pour stats:', userId)
-        const stats = await getCashDeclarationsStats(userId)
+        const stats = await getCashDeclarationsStats(userId, region)
         console.log('📊 Stats récupérées:', stats)
         return NextResponse.json({ data: stats })
       } catch (error) {
@@ -132,24 +143,24 @@ export async function GET(request: NextRequest) {
 
     // Tous les arrêtés en attente (pour le Responsable caisses)
     if (type === 'pending') {
-      const declarations = await getPendingCashDeclarations()
+      const declarations = await getPendingCashDeclarations(region)
       return NextResponse.json({ data: declarations })
     }
 
     // Tous les arrêtés (pour le Responsable caisses)
     if (type === 'all') {
-      const declarations = await getAllCashDeclarations()
+      const declarations = await getAllCashDeclarations(region)
       return NextResponse.json({ data: declarations })
     }
 
     // Arrêtés d'un utilisateur spécifique
     if (userId) {
-      const declarations = await getCashDeclarationsByUser(userId)
+      const declarations = await getCashDeclarationsByUser(userId, region)
       return NextResponse.json({ data: declarations })
     }
 
     // Par défaut, arrêtés de l'utilisateur connecté
-    const declarations = await getCashDeclarationsByUser(user.id)
+    const declarations = await getCashDeclarationsByUser(user.id, region)
     return NextResponse.json({ data: declarations })
 
   } catch (error) {
@@ -179,20 +190,31 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Seuls les caissiers et cash_manager peuvent créer des arrêtés
+    // Vérifier les rôles autorisés à créer des arrêtés
     const user = session.user
-    if (!['cashier', 'cash_manager'].includes(user.role)) {
+    const body = await request.json()
+    const region = body.region || 'congo'
+    
+    // Congo: cashier/cash_manager ; Paris: auditor/executor/cashier/cash_manager/director/delegate/accounting
+    const allowedRolesForCreate = region === 'paris' 
+      ? ['cashier', 'cash_manager', 'auditor', 'executor', 'director', 'delegate', 'accounting']
+      : ['cashier', 'cash_manager']
+    
+    if (!allowedRolesForCreate.includes(user.role)) {
       return NextResponse.json(
         { error: "Accès non autorisé" },
         { status: 403 }
       )
     }
 
-    const body = await request.json()
-    const { guichetier, declaration_date, montant_brut, total_delestage, excedents, delestage_comment, justificatif_files } = body
+    const { guichetier, declaration_date, montant_brut, total_delestage, excedents, delestage_comment, justificatif_files, total_western_union, total_ria, total_moneygram } = body
 
-    // Validation
-    if (!guichetier || !declaration_date || !montant_brut) {
+    // Validation - pour Paris, montant_brut est calculé depuis WU+Ria+MG
+    const computedMontantBrut = region === 'paris' 
+      ? (Number(total_western_union) || 0) + (Number(total_ria) || 0) + (Number(total_moneygram) || 0)
+      : montant_brut
+    
+    if (!guichetier || !declaration_date || !computedMontantBrut) {
       return NextResponse.json(
         { error: "Données manquantes" },
         { status: 400 }
@@ -203,12 +225,16 @@ export async function POST(request: NextRequest) {
       user_id: user.id,
       guichetier,
       declaration_date,
-      montant_brut,
+      montant_brut: computedMontantBrut,
       total_delestage: total_delestage || 0,
       excedents: excedents || 0,
       delestage_comment: delestage_comment || undefined,
       justificatif_files: justificatif_files || [],
       autoSubmit: true, // Soumettre automatiquement
+      region,
+      total_western_union: total_western_union || 0,
+      total_ria: total_ria || 0,
+      total_moneygram: total_moneygram || 0,
     })
     
     console.log('📦 Arrêté créé avec auto-submit:', declaration.id, 'status:', declaration.status)

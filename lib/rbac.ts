@@ -203,12 +203,16 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "view_rates", // Consultation seule - pas d'edit
     "view_expenses",
     "view_reports",
+    "view_ria_dashboard",
+    "view_ria_transactions",
   ],
   executor: [
     "view_dashboard",
     "view_transactions",
     "execute_transactions", // Pour exécuter les transactions validées
     "view_expenses",
+    "view_ria_dashboard",
+    "view_ria_transactions",
   ],
   cash_manager: [
     "view_dashboard",

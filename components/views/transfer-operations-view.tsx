@@ -33,7 +33,17 @@ import {
   Ban,
   Archive,
   Loader2,
+  Download,
+  FileText,
+  FileSpreadsheet,
+  ChevronDown,
 } from "lucide-react"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { PageLoader } from "@/components/ui/page-loader"
 import { useToast } from "@/hooks/use-toast"
 import { useExchangeRates } from "@/hooks/use-exchange-rates"
@@ -376,6 +386,115 @@ export function TransferOperationsView({ user }: TransferOperationsViewProps) {
     if (open) setPendingDateRange(dateRange.from && dateRange.to ? { from: dateRange.from, to: dateRange.to } : getTodayRange())
   }
 
+  // --- Export CSV ---
+  const handleExportCsv = () => {
+    if (filteredTransfers.length === 0) {
+      toast({ title: "Aucune donnée", description: "Aucun transfert à exporter.", variant: "destructive" })
+      return
+    }
+    try {
+      const headers = ["ID","Date","Caissier","Agence","Mode","Bénéficiaire","Pays","Montant reçu","Devise","Montant réel envoyé (EUR)","Commission (XAF)","Statut"]
+      const rows = filteredTransfers.map(t => [
+        t.id,
+        `"${formatDate(t.created_at)}"`,
+        `"${t.created_by}"`,
+        `"${t.agency}"`,
+        `"${t.details?.transfer_method || "Autre"}"`,
+        `"${t.details?.beneficiary_name || ""}"`,
+        `"${t.details?.destination_country || ""}"`,
+        t.amount,
+        t.currency,
+        t.real_amount_eur ?? "",
+        t.commission_amount ?? "",
+        `"${STATUS_LABELS[t.status] || t.status}"`,
+      ])
+      const csv = [headers.join(","), ...rows.map(r => r.join(","))].join("\n")
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `transferts-${new Date().toISOString().split("T")[0]}.csv`
+      a.click()
+      URL.revokeObjectURL(url)
+      toast({ title: "Export CSV réussi", description: `${filteredTransfers.length} transferts exportés.` })
+    } catch {
+      toast({ title: "Erreur d'export", description: "Impossible d'exporter les données.", variant: "destructive" })
+    }
+  }
+
+  // --- Export PDF ---
+  const handleExportPdf = () => {
+    if (filteredTransfers.length === 0) {
+      toast({ title: "Aucune donnée", description: "Aucun transfert à exporter.", variant: "destructive" })
+      return
+    }
+    try {
+      const fmt = (n: number) => n.toLocaleString("fr-FR")
+      const fmtDec = (n: number) => n.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      const filterInfo: string[] = []
+      if (dateRange.from && dateRange.to) filterInfo.push(`Dates : ${format(dateRange.from, "dd/MM/yyyy")} – ${format(dateRange.to, "dd/MM/yyyy")}`)
+      if (cashierFilter !== "all") filterInfo.push(`Caissier : ${cashierFilter}`)
+      if (statusFilter !== "all") filterInfo.push(`Statut : ${STATUS_LABELS[statusFilter] || statusFilter}`)
+      if (modeFilter !== "all") filterInfo.push(`Mode : ${modeFilter}`)
+      if (searchTerm) filterInfo.push(`Recherche : "${searchTerm}"`)
+
+      const statusColors: Record<string, string> = {
+        completed: "#10b981", executed: "#8b5cf6", validated: "#3b82f6",
+        pending: "#f59e0b", rejected: "#ef4444", cancelled: "#64748b", pending_delete: "#f97316",
+      }
+
+      const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Transferts</title>
+<style>
+@page{size:A4 landscape;margin:12mm}*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',Arial,sans-serif;font-size:10px;color:#1e293b;background:#fff}
+.header{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:12px;border-bottom:2px solid #2563eb;margin-bottom:10px}
+.header h1{font-size:18px;color:#1e3a5f;font-weight:700}.header .sub{font-size:11px;color:#64748b;margin-top:2px}
+.header .meta{text-align:right;font-size:10px;color:#64748b}
+.filters{font-size:9px;color:#64748b;margin-bottom:10px}.filters span{background:#eff6ff;color:#2563eb;padding:2px 6px;border-radius:3px;margin-right:4px;display:inline-block;margin-bottom:2px}
+.cards{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+.card{background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:8px 14px;min-width:140px}
+.card .label{font-size:8px;color:#64748b;text-transform:uppercase;letter-spacing:.5px}.card .val{font-size:15px;font-weight:700;color:#1e293b;margin-top:2px}
+table{width:100%;border-collapse:collapse}
+thead th{background:#1e3a5f;color:#fff;padding:6px 6px;text-align:left;font-size:8px;font-weight:600;text-transform:uppercase}
+thead th:first-child{border-radius:4px 0 0 0}thead th:last-child{border-radius:0 4px 0 0}
+tbody tr{border-bottom:1px solid #f1f5f9}tbody tr:nth-child(even){background:#f8fafc}
+tbody td{padding:5px 6px;font-size:9px}.r{text-align:right;font-weight:600}
+.status{display:inline-block;padding:2px 8px;border-radius:10px;font-size:8px;font-weight:600;color:#fff}
+.footer{margin-top:12px;padding-top:8px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:9px;color:#94a3b8}
+@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+</style></head><body>
+<div class="header"><div><h1>ZOLL TAX FOREX</h1><div class="sub">Opérations - Transfert d'argent</div></div>
+<div class="meta">Généré le ${new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"long",year:"numeric",hour:"2-digit",minute:"2-digit"})}</div></div>
+${filterInfo.length ? `<div class="filters">Filtres : ${filterInfo.map(f=>`<span>${f}</span>`).join("")}</div>` : ""}
+<div class="cards">
+<div class="card"><div class="label">Total transferts</div><div class="val">${fmt(filteredTransfers.length)}</div></div>
+<div class="card"><div class="label">Montant reçu (exécutés)</div><div class="val">${fmt(totalReceivedXAF)} XAF</div></div>
+<div class="card"><div class="label">Montant envoyé (exécutés)</div><div class="val">${fmtDec(totalRealSentEUR)} EUR</div></div>
+<div class="card"><div class="label">Commissions (exécutés)</div><div class="val">${fmt(totalCommissionXAF)} XAF</div></div>
+</div>
+<table><thead><tr><th>#</th><th>Date</th><th>Caissier</th><th>Mode</th><th>Bénéficiaire</th><th>Pays</th><th style="text-align:right">Montant reçu</th><th style="text-align:right">Envoyé (EUR)</th><th style="text-align:right">Commission</th><th>Statut</th></tr></thead>
+<tbody>${filteredTransfers.map((t,i)=>`<tr>
+<td>${i+1}</td>
+<td>${formatDate(t.created_at)}</td>
+<td>${t.created_by}</td>
+<td>${t.details?.transfer_method||"Autre"}</td>
+<td>${t.details?.beneficiary_name||"-"}</td>
+<td>${t.details?.destination_country||"-"}</td>
+<td class="r">${fmt(t.amount)} ${t.currency}</td>
+<td class="r">${t.real_amount_eur != null ? fmtDec(Number(t.real_amount_eur)) : "-"}</td>
+<td class="r">${t.commission_amount != null ? fmt(Number(t.commission_amount)) : "-"}</td>
+<td><span class="status" style="background:${statusColors[t.status]||"#64748b"}">${STATUS_LABELS[t.status]||t.status}</span></td>
+</tr>`).join("")}</tbody></table>
+<div class="footer"><span>ZOLL TAX FOREX © ${new Date().getFullYear()} — Document confidentiel</span><span>${fmt(filteredTransfers.length)} transferts • Reçu : ${fmt(totalReceivedXAF)} XAF • Envoyé : ${fmtDec(totalRealSentEUR)} EUR</span></div>
+</body></html>`
+      const w = window.open("", "_blank")
+      if (w) { w.document.write(html); w.document.close(); setTimeout(() => w.print(), 400) }
+      toast({ title: "Export PDF prêt", description: `${filteredTransfers.length} transferts prêts à imprimer.` })
+    } catch {
+      toast({ title: "Erreur d'export", description: "Impossible de générer le PDF.", variant: "destructive" })
+    }
+  }
+
   return (
     <div className="relative min-h-[200px]">
       {loading && <PageLoader message="Chargement..." overlay />}
@@ -392,10 +511,31 @@ export function TransferOperationsView({ user }: TransferOperationsViewProps) {
             <Filter className="h-4 w-4" />
             Filtres
           </CardTitle>
-          <Button variant="outline" size="sm" onClick={resetFilters} className="gap-2">
-            <RotateCcw className="h-4 w-4" />
-            Réinitialiser les filtres
-          </Button>
+          <div className="flex items-center gap-2">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-2">
+                  <Download className="h-4 w-4" />
+                  Exporter
+                  <ChevronDown className="h-3.5 w-3.5 opacity-60" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-44">
+                <DropdownMenuItem onClick={handleExportCsv} className="gap-2 cursor-pointer">
+                  <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
+                  Exporter en CSV
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleExportPdf} className="gap-2 cursor-pointer">
+                  <FileText className="h-4 w-4 text-red-500" />
+                  Exporter en PDF
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <Button variant="outline" size="sm" onClick={resetFilters} className="gap-2">
+              <RotateCcw className="h-4 w-4" />
+              Réinitialiser les filtres
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-wrap gap-4 items-end">

@@ -15,6 +15,12 @@ export async function GET(request: NextRequest) {
         usd: settings.usd,
         eur: settings.eur,
         gbp: settings.gbp,
+        usd_buy: settings.usd_buy,
+        usd_sell: settings.usd_sell,
+        eur_buy: settings.eur_buy,
+        eur_sell: settings.eur_sell,
+        gbp_buy: settings.gbp_buy,
+        gbp_sell: settings.gbp_sell,
         commission: settings.commission,
         transfer_commission_min_xaf: settings.transfer_commission_min_xaf,
         card_fee_xaf: settings.card_fee_xaf,
@@ -70,6 +76,13 @@ export async function PUT(request: NextRequest) {
     const u = toNum(body.usd); if (u !== null && u > 0) updates.usd = u
     const e = toNum(body.eur); if (e !== null && e > 0) updates.eur = e
     const g = toNum(body.gbp); if (g !== null && g > 0) updates.gbp = g
+    // Taux d'achat/vente - Bureau de change
+    const uBuy = toNum(body.usd_buy); if (uBuy !== null && uBuy > 0) updates.usd_buy = uBuy
+    const uSell = toNum(body.usd_sell); if (uSell !== null && uSell > 0) updates.usd_sell = uSell
+    const eBuy = toNum(body.eur_buy); if (eBuy !== null && eBuy > 0) updates.eur_buy = eBuy
+    const eSell = toNum(body.eur_sell); if (eSell !== null && eSell > 0) updates.eur_sell = eSell
+    const gBuy = toNum(body.gbp_buy); if (gBuy !== null && gBuy > 0) updates.gbp_buy = gBuy
+    const gSell = toNum(body.gbp_sell); if (gSell !== null && gSell > 0) updates.gbp_sell = gSell
     const tl = toInt(body.transfer_limit); if (tl !== null && tl >= 0) updates.transfer_limit = tl
     const dl = toInt(body.daily_limit); if (dl !== null && dl >= 0) updates.daily_limit = dl
     const cl = toInt(body.card_limit); if (cl !== null && cl >= 0) updates.card_limit = cl

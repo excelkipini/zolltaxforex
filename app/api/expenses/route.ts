@@ -45,7 +45,7 @@ export async function GET(request: NextRequest) {
 
     // Liste complète (avec limite optionnelle pour premier chargement plus rapide)
     const parsed = limitParam ? parseInt(limitParam, 10) : NaN
-    const limit = Number.isNaN(parsed) ? 500 : Math.min(500, Math.max(1, parsed))
+    const limit = Number.isNaN(parsed) ? 1000 : Math.min(2000, Math.max(1, parsed))
     if (canViewAll) {
       const allExpenses = await listExpensesForUser(user.name, true, limit)
       return NextResponse.json({ ok: true, data: allExpenses, type: "all_expenses" })

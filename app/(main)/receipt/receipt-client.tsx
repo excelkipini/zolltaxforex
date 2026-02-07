@@ -11,7 +11,13 @@ import { Separator } from "@/components/ui/separator"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { Receipt, Download, QrCode, History, Search, FileText, Eye } from "lucide-react"
+import { Receipt, Download, QrCode, History, Search, FileText, Eye, Filter, RotateCcw, FileSpreadsheet, ChevronDown, CalendarDays, ChevronLeft, ChevronRight } from "lucide-react"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { toast } from "sonner"
 
 interface ReceiptData {
@@ -74,6 +80,13 @@ export default function ReceiptClient() {
   const [receiptHistory, setReceiptHistory] = useState<ReceiptHistoryItem[]>([])
   const [searchQuery, setSearchQuery] = useState("")
   const [isLoadingHistory, setIsLoadingHistory] = useState(false)
+  const [filterDateFrom, setFilterDateFrom] = useState("")
+  const [filterDateTo, setFilterDateTo] = useState("")
+  const [filterOperation, setFilterOperation] = useState("all")
+  const [filterCreator, setFilterCreator] = useState("all")
+  const [filterClient, setFilterClient] = useState("all")
+  const [historyPage, setHistoryPage] = useState(1)
+  const [historyPerPage, setHistoryPerPage] = useState(10)
 
   // Générer un numéro de reçu automatique
   const generateReceiptNumber = () => {
@@ -152,6 +165,128 @@ export default function ReceiptClient() {
       loadReceiptHistory()
     }
   }, [showHistory, searchQuery])
+
+  const OPERATION_LABELS: Record<string, string> = {
+    transfer: "Transfert", exchange: "Bureau de change", card_recharge: "Recharge carte",
+    cash_deposit: "Dépôt espèces", cash_withdrawal: "Retrait espèces", other: "Autre",
+  }
+
+  // Filtered history
+  const filteredHistory = receiptHistory.filter((r) => {
+    if (filterDateFrom) {
+      const d = new Date(r.created_at)
+      if (d < new Date(filterDateFrom + "T00:00:00")) return false
+    }
+    if (filterDateTo) {
+      const d = new Date(r.created_at)
+      if (d > new Date(filterDateTo + "T23:59:59")) return false
+    }
+    if (filterOperation !== "all" && r.operation_type !== filterOperation) return false
+    if (filterCreator !== "all" && (r.created_by_name || "Système") !== filterCreator) return false
+    if (filterClient !== "all" && r.client_name !== filterClient) return false
+    return true
+  })
+
+  const uniqueCreators = [...new Set(receiptHistory.map((r) => r.created_by_name || "Système"))].sort()
+  const uniqueClients = [...new Set(receiptHistory.map((r) => r.client_name))].sort()
+  const totalHistoryPages = Math.max(1, Math.ceil(filteredHistory.length / historyPerPage))
+  const paginatedHistory = filteredHistory.slice((historyPage - 1) * historyPerPage, historyPage * historyPerPage)
+
+  useEffect(() => { setHistoryPage(1) }, [filterDateFrom, filterDateTo, filterOperation, filterCreator, filterClient, searchQuery, historyPerPage])
+
+  const hasActiveFilters = filterDateFrom || filterDateTo || filterOperation !== "all" || filterCreator !== "all" || filterClient !== "all" || searchQuery
+  const resetFilters = () => {
+    setFilterDateFrom(""); setFilterDateTo(""); setFilterOperation("all"); setFilterCreator("all"); setFilterClient("all"); setSearchQuery("")
+  }
+
+  // --- Export CSV ---
+  const handleExportHistoryCsv = () => {
+    if (filteredHistory.length === 0) { toast.error("Aucune donnée à exporter"); return }
+    try {
+      const headers = ["N° Reçu","Client","Téléphone","Opération","Montant reçu","Montant envoyé","Commission","Devise","Créé par","Date"]
+      const rows = filteredHistory.map(r => [
+        r.receipt_number,
+        `"${r.client_name}"`,
+        `"${r.client_phone || ""}"`,
+        `"${OPERATION_LABELS[r.operation_type] || r.operation_type}"`,
+        r.amount_received,
+        r.amount_sent,
+        r.commission,
+        r.currency,
+        `"${r.created_by_name || "Système"}"`,
+        `"${new Date(r.created_at).toLocaleString("fr-FR")}"`,
+      ])
+      const csv = [headers.join(","), ...rows.map(r => r.join(","))].join("\n")
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url; a.download = `recus-transfert-${new Date().toISOString().split("T")[0]}.csv`
+      a.click(); URL.revokeObjectURL(url)
+      toast.success(`${filteredHistory.length} reçus exportés en CSV`)
+    } catch { toast.error("Erreur lors de l'exportation") }
+  }
+
+  // --- Export PDF ---
+  const handleExportHistoryPdf = () => {
+    if (filteredHistory.length === 0) { toast.error("Aucune donnée à exporter"); return }
+    try {
+      const fmt = (n: number) => n.toLocaleString("fr-FR", { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+      const totalReceived = filteredHistory.reduce((s, r) => s + Number(r.amount_received), 0)
+      const totalSent = filteredHistory.reduce((s, r) => s + Number(r.amount_sent), 0)
+      const totalComm = filteredHistory.reduce((s, r) => s + Number(r.commission), 0)
+      const filterInfo: string[] = []
+      if (filterDateFrom || filterDateTo) filterInfo.push(`Dates : ${filterDateFrom || "..."} au ${filterDateTo || "..."}`)
+      if (filterOperation !== "all") filterInfo.push(`Opération : ${OPERATION_LABELS[filterOperation] || filterOperation}`)
+      if (filterCreator !== "all") filterInfo.push(`Créé par : ${filterCreator}`)
+      if (filterClient !== "all") filterInfo.push(`Client : ${filterClient}`)
+      if (searchQuery) filterInfo.push(`Recherche : "${searchQuery}"`)
+
+      const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Historique Reçus</title>
+<style>
+@page{size:A4 landscape;margin:12mm}*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',Arial,sans-serif;font-size:10px;color:#1e293b;background:#fff}
+.header{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:12px;border-bottom:2px solid #2563eb;margin-bottom:10px}
+.header h1{font-size:18px;color:#1e3a5f;font-weight:700}.header .sub{font-size:11px;color:#64748b;margin-top:2px}
+.header .meta{text-align:right;font-size:10px;color:#64748b}
+.filters{font-size:9px;color:#64748b;margin-bottom:10px}.filters span{background:#eff6ff;color:#2563eb;padding:2px 6px;border-radius:3px;margin-right:4px;display:inline-block;margin-bottom:2px}
+.cards{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+.card{background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:8px 14px;min-width:130px}
+.card .label{font-size:8px;color:#64748b;text-transform:uppercase;letter-spacing:.5px}.card .val{font-size:15px;font-weight:700;color:#1e293b;margin-top:2px}
+table{width:100%;border-collapse:collapse}
+thead th{background:#1e3a5f;color:#fff;padding:6px 6px;text-align:left;font-size:8px;font-weight:600;text-transform:uppercase}
+thead th:first-child{border-radius:4px 0 0 0}thead th:last-child{border-radius:0 4px 0 0}
+tbody tr{border-bottom:1px solid #f1f5f9}tbody tr:nth-child(even){background:#f8fafc}
+tbody td{padding:5px 6px;font-size:9px}.r{text-align:right;font-weight:600}
+.footer{margin-top:12px;padding-top:8px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:9px;color:#94a3b8}
+@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+</style></head><body>
+<div class="header"><div><h1>ZOLL TAX FOREX</h1><div class="sub">Historique des reçus - Transfert International</div></div>
+<div class="meta">Généré le ${new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"long",year:"numeric",hour:"2-digit",minute:"2-digit"})}</div></div>
+${filterInfo.length ? `<div class="filters">Filtres : ${filterInfo.map(f=>`<span>${f}</span>`).join("")}</div>` : ""}
+<div class="cards">
+<div class="card"><div class="label">Total reçus</div><div class="val">${fmt(filteredHistory.length)}</div></div>
+<div class="card"><div class="label">Total reçu</div><div class="val">${fmt(totalReceived)} XAF</div></div>
+<div class="card"><div class="label">Total envoyé</div><div class="val">${fmt(totalSent)} XAF</div></div>
+<div class="card"><div class="label">Total commissions</div><div class="val">${fmt(totalComm)} XAF</div></div>
+</div>
+<table><thead><tr><th>#</th><th>N° Reçu</th><th>Date</th><th>Client</th><th>Opération</th><th style="text-align:right">Montant reçu</th><th style="text-align:right">Montant envoyé</th><th style="text-align:right">Commission</th><th>Créé par</th></tr></thead>
+<tbody>${filteredHistory.map((r,i)=>`<tr>
+<td>${i+1}</td><td style="font-size:8px">${r.receipt_number}</td>
+<td>${new Date(r.created_at).toLocaleDateString("fr-FR")}</td>
+<td>${r.client_name}</td>
+<td>${OPERATION_LABELS[r.operation_type]||r.operation_type}</td>
+<td class="r">${fmt(Number(r.amount_received))} ${r.currency}</td>
+<td class="r">${fmt(Number(r.amount_sent))} ${r.currency}</td>
+<td class="r">${fmt(Number(r.commission))} ${r.currency}</td>
+<td>${r.created_by_name||"Système"}</td>
+</tr>`).join("")}</tbody></table>
+<div class="footer"><span>ZOLL TAX FOREX © ${new Date().getFullYear()} — Document confidentiel</span><span>${fmt(filteredHistory.length)} reçus • Reçu : ${fmt(totalReceived)} XAF • Envoyé : ${fmt(totalSent)} XAF</span></div>
+</body></html>`
+      const w = window.open("", "_blank")
+      if (w) { w.document.write(html); w.document.close(); setTimeout(() => w.print(), 400) }
+      toast.success(`${filteredHistory.length} reçus prêts à imprimer`)
+    } catch { toast.error("Erreur lors de la génération du PDF") }
+  }
 
   // Charger le taux de commission Transfert International depuis Taux & Plafonds
   useEffect(() => {
@@ -519,34 +654,130 @@ export default function ReceiptClient() {
       {/* Historique des reçus */}
       {showHistory && (
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center space-x-2">
-              <History className="h-5 w-5" />
-              <span>Historique des reçus</span>
-            </CardTitle>
-            <CardDescription>
-              Liste de tous les reçus générés
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {/* Barre de recherche */}
-            <div className="flex items-center space-x-2 mb-4">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <Input
-                  placeholder="Rechercher par numéro, client, téléphone..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10"
-                />
+          <CardHeader className="pb-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center space-x-2">
+                  <History className="h-5 w-5" />
+                  <span>Historique des reçus</span>
+                </CardTitle>
+                <CardDescription>
+                  Liste de tous les reçus générés
+                  {filteredHistory.length > 0 && <span className="ml-1 font-medium">({filteredHistory.length})</span>}
+                </CardDescription>
               </div>
-              <Button
-                onClick={loadReceiptHistory}
-                disabled={isLoadingHistory}
-                variant="outline"
-              >
-                {isLoadingHistory ? "Chargement..." : "Rechercher"}
-              </Button>
+              <div className="flex items-center gap-2">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" className="gap-2">
+                      <Download className="h-4 w-4" />
+                      Exporter
+                      <ChevronDown className="h-3.5 w-3.5 opacity-60" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-44">
+                    <DropdownMenuItem onClick={handleExportHistoryCsv} className="gap-2 cursor-pointer">
+                      <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
+                      Exporter en CSV
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleExportHistoryPdf} className="gap-2 cursor-pointer">
+                      <FileText className="h-4 w-4 text-red-500" />
+                      Exporter en PDF
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                {hasActiveFilters && (
+                  <Button variant="ghost" size="sm" onClick={resetFilters} className="gap-1.5 text-muted-foreground hover:text-foreground">
+                    <RotateCcw className="h-3.5 w-3.5" />
+                    Réinitialiser
+                  </Button>
+                )}
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Filtres */}
+            <div className="space-y-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Input
+                    placeholder="Rechercher par numéro, client, téléphone..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-10 h-9 text-sm rounded-lg"
+                  />
+                </div>
+                <Button
+                  onClick={loadReceiptHistory}
+                  disabled={isLoadingHistory}
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0 h-9 rounded-lg"
+                >
+                  {isLoadingHistory ? "Chargement..." : "Rechercher"}
+                </Button>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2.5">
+                {/* Date range */}
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="date"
+                    value={filterDateFrom}
+                    onChange={(e) => setFilterDateFrom(e.target.value)}
+                    className="input-date-centered h-9 w-[140px] min-w-0 text-sm rounded-lg"
+                  />
+                  <span className="text-sm text-muted-foreground shrink-0">au</span>
+                  <Input
+                    type="date"
+                    value={filterDateTo}
+                    onChange={(e) => setFilterDateTo(e.target.value)}
+                    className="input-date-centered h-9 w-[140px] min-w-0 text-sm rounded-lg"
+                  />
+                </div>
+
+                <div className="h-6 w-px bg-border shrink-0 hidden sm:block" />
+
+                <Select value={filterOperation} onValueChange={setFilterOperation}>
+                  <SelectTrigger className="h-9 w-auto min-w-[140px] rounded-lg text-sm px-3 gap-1.5">
+                    <SelectValue placeholder="Opération" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Toutes les opérations</SelectItem>
+                    <SelectItem value="transfer">Transfert</SelectItem>
+                    <SelectItem value="exchange">Bureau de change</SelectItem>
+                    <SelectItem value="card_recharge">Recharge carte</SelectItem>
+                    <SelectItem value="cash_deposit">Dépôt espèces</SelectItem>
+                    <SelectItem value="cash_withdrawal">Retrait espèces</SelectItem>
+                    <SelectItem value="other">Autre</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                <Select value={filterClient} onValueChange={setFilterClient}>
+                  <SelectTrigger className="h-9 w-auto min-w-[130px] rounded-lg text-sm px-3 gap-1.5">
+                    <SelectValue placeholder="Client" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Tous les clients</SelectItem>
+                    {uniqueClients.map(c => (
+                      <SelectItem key={c} value={c}>{c}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                <Select value={filterCreator} onValueChange={setFilterCreator}>
+                  <SelectTrigger className="h-9 w-auto min-w-[130px] rounded-lg text-sm px-3 gap-1.5">
+                    <SelectValue placeholder="Créé par" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Tous les agents</SelectItem>
+                    {uniqueCreators.map(c => (
+                      <SelectItem key={c} value={c}>{c}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             {/* Tableau des reçus */}
@@ -574,14 +805,14 @@ export default function ReceiptClient() {
                         </div>
                       </TableCell>
                     </TableRow>
-                  ) : receiptHistory.length === 0 ? (
+                  ) : paginatedHistory.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={8} className="text-center py-8 text-gray-500">
                         Aucun reçu trouvé
                       </TableCell>
                     </TableRow>
                   ) : (
-                    receiptHistory.map((receipt) => (
+                    paginatedHistory.map((receipt) => (
                       <TableRow key={receipt.id}>
                         <TableCell className="font-mono text-sm">
                           {receipt.receipt_number}
@@ -739,6 +970,37 @@ export default function ReceiptClient() {
                 </TableBody>
               </Table>
             </div>
+
+            {/* Pagination */}
+            {filteredHistory.length > 0 && (
+              <div className="flex flex-wrap items-center justify-between gap-4 pt-3 border-t">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground whitespace-nowrap">Éléments par page :</span>
+                  <Select value={String(historyPerPage)} onValueChange={(v) => setHistoryPerPage(Number(v))}>
+                    <SelectTrigger className="h-8 w-[70px] text-sm rounded-md">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="5">5</SelectItem>
+                      <SelectItem value="10">10</SelectItem>
+                      <SelectItem value="20">20</SelectItem>
+                      <SelectItem value="50">50</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <span className="text-sm text-muted-foreground">
+                  Affichage de <strong>{filteredHistory.length === 0 ? 0 : (historyPage - 1) * historyPerPage + 1}</strong> à <strong>{Math.min(historyPage * historyPerPage, filteredHistory.length)}</strong> sur <strong>{filteredHistory.length}</strong> reçus
+                </span>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" disabled={historyPage <= 1} onClick={() => setHistoryPage(p => p - 1)} className="h-8 text-sm px-3 rounded-md">
+                    Précédent
+                  </Button>
+                  <Button variant="outline" size="sm" disabled={historyPage >= totalHistoryPages} onClick={() => setHistoryPage(p => p + 1)} className="h-8 text-sm px-3 rounded-md">
+                    Suivant
+                  </Button>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

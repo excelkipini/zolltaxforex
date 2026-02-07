@@ -11,7 +11,13 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Search, Filter, Eye, Download, FileDown, CheckCircle, Check, X, AlertTriangle, ArrowUpDown, ArrowUp, ArrowDown, ChevronLeft, ChevronRight, Printer, Trash2, Clock, Play, FileUp, Upload, Calendar as CalendarIcon } from "lucide-react"
+import { Search, Filter, Eye, Download, FileDown, CheckCircle, Check, X, AlertTriangle, ArrowUpDown, ArrowUp, ArrowDown, ChevronLeft, ChevronRight, Printer, Trash2, Clock, Play, FileUp, Upload, Calendar as CalendarIcon, FileText, FileSpreadsheet, ChevronDown as ChevronDownIcon } from "lucide-react"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { PageLoader } from "@/components/ui/page-loader"
 import { useToast } from "@/hooks/use-toast"
 import { format } from "date-fns"
@@ -281,31 +287,39 @@ export function TransactionsView({ user }: TransactionsViewProps = {}) {
       <ArrowDown className="h-4 w-4 text-blue-600" />
   }
 
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case "completed": return "Terminé"
+      case "executed": return "Exécuté"
+      case "validated": return "Validé"
+      case "pending": return "En attente"
+      case "rejected": return "Rejeté"
+      case "exception": return "Exceptionnel"
+      case "cancelled": return "Annulé"
+      case "pending_delete": return "Suppression"
+      default: return status
+    }
+  }
+
+  const buildTransFilename = (ext: string) => {
+    const dateStr = new Date().toISOString().split('T')[0]
+    let filename = `operations_${dateStr}`
+    if (statusFilter !== "all") filename += `_${statusFilter}`
+    if (typeFilter !== "all") filename += `_${typeFilter}`
+    if (cashierFilter !== "all") filename += `_${cashierFilter}`
+    if (dateFilter?.from) filename += `_from-${dateFilter.from.toISOString().split('T')[0]}`
+    if (dateFilter?.to) filename += `_to-${dateFilter.to.toISOString().split('T')[0]}`
+    if (searchTerm) filename += `_recherche`
+    return filename + ext
+  }
+
   const handleExportTransactions = () => {
     if (filteredTransactions.length === 0) {
-      toast({
-        title: "Aucune donnée à exporter",
-        description: "Aucune transaction ne correspond aux filtres appliqués.",
-        variant: "destructive"
-      })
+      toast({ title: "Aucune donnée à exporter", description: "Aucune transaction ne correspond aux filtres appliqués.", variant: "destructive" })
       return
     }
-
     try {
-      // Créer les en-têtes CSV
-      const headers = [
-        "ID",
-        "Type",
-        "Description", 
-        "Montant",
-        "Devise",
-        "Caissier",
-        "Statut",
-        "Agence",
-        "Date de création"
-      ]
-
-      // Créer les lignes de données
+      const headers = ["ID", "Type", "Description", "Montant", "Devise", "Caissier", "Statut", "Agence", "Date de création"]
       const csvRows = [
         headers.join(","),
         ...filteredTransactions.map(transaction => [
@@ -315,64 +329,59 @@ export function TransactionsView({ user }: TransactionsViewProps = {}) {
           transaction.amount,
           transaction.currency,
           `"${transaction.created_by}"`,
-          `"${transaction.status}"`,
+          `"${getStatusLabel(transaction.status)}"`,
           `"${transaction.agency}"`,
           `"${formatDate(transaction.created_at)}"`
         ].join(","))
       ]
-
-      // Créer le contenu CSV
-      const csvContent = csvRows.join("\n")
-
-      // Créer le nom de fichier avec la date et les filtres
-      const now = new Date()
-      const dateStr = now.toISOString().split('T')[0]
-      let filename = `operations_${dateStr}`
-      
-      // Ajouter des suffixes selon les filtres
-      if (periodFilter !== "all") {
-        filename += `_${periodFilter}`
-      }
-      if (statusFilter !== "all") {
-        filename += `_${statusFilter}`
-      }
-      if (typeFilter !== "all") {
-        filename += `_${typeFilter}`
-      }
-      if (cashierFilter !== "all") {
-        filename += `_${cashierFilter}`
-      }
-      if (searchTerm) {
-        filename += `_recherche`
-      }
-      
-      filename += ".csv"
-
-      // Créer et télécharger le fichier
-      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
+      const filename = buildTransFilename(".csv")
+      const blob = new Blob([csvRows.join("\n")], { type: "text/csv;charset=utf-8;" })
+      const url = URL.createObjectURL(blob)
       const link = document.createElement("a")
-      
-      if (link.download !== undefined) {
-        const url = URL.createObjectURL(blob)
-        link.setAttribute("href", url)
-        link.setAttribute("download", filename)
-        link.style.visibility = "hidden"
-        document.body.appendChild(link)
-        link.click()
-        document.body.removeChild(link)
-        URL.revokeObjectURL(url)
-      }
+      link.href = url; link.download = filename; link.style.visibility = "hidden"
+      document.body.appendChild(link); link.click(); document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+      toast({ title: "Export CSV réussi", description: `${filteredTransactions.length} opérations exportées vers ${filename}` })
+    } catch {
+      toast({ title: "Erreur d'export", description: "Une erreur est survenue lors de l'exportation.", variant: "destructive" })
+    }
+  }
 
-      toast({
-        title: "Export réussi",
-        description: `${filteredTransactions.length} opérations exportées vers ${filename}`,
-      })
-    } catch (error) {
-      toast({
-        title: "Erreur d'export",
-        description: "Une erreur est survenue lors de l'exportation des données.",
-        variant: "destructive"
-      })
+  const handleExportTransactionsPdf = () => {
+    if (filteredTransactions.length === 0) {
+      toast({ title: "Aucune donnée à exporter", description: "Aucune transaction ne correspond aux filtres appliqués.", variant: "destructive" })
+      return
+    }
+    try {
+      const totalAmount = filteredTransactions.reduce((s, t) => s + t.amount, 0)
+      const statusColors: Record<string, string> = { completed: "#10b981", executed: "#8b5cf6", validated: "#3b82f6", pending: "#f59e0b", rejected: "#ef4444", exception: "#f97316", cancelled: "#ef4444", pending_delete: "#f97316" }
+
+      const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Opérations</title>
+<style>
+@page{size:A4 landscape;margin:12mm}*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Segoe UI',Arial,sans-serif;font-size:10px;color:#1e293b;background:#fff}
+.header{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:12px;border-bottom:2px solid #2563eb;margin-bottom:10px}.header h1{font-size:18px;color:#1e3a5f;font-weight:700}.header .subtitle{font-size:11px;color:#64748b;margin-top:2px}.header .meta{text-align:right;font-size:10px;color:#64748b}
+.summary{display:flex;gap:16px;margin-bottom:10px;flex-wrap:wrap}.summary-card{background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:8px 14px;min-width:140px}.summary-card .label{font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.5px}.summary-card .value{font-size:16px;font-weight:700;color:#1e293b;margin-top:2px}
+table{width:100%;border-collapse:collapse}thead th{background:#1e3a5f;color:#fff;padding:7px 8px;text-align:left;font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.3px}thead th:first-child{border-radius:4px 0 0 0}thead th:last-child{border-radius:0 4px 0 0}tbody tr{border-bottom:1px solid #f1f5f9}tbody tr:nth-child(even){background:#f8fafc}tbody td{padding:6px 8px;font-size:10px;vertical-align:middle}
+.amount{font-weight:600;text-align:right;white-space:nowrap}.status{display:inline-block;padding:2px 8px;border-radius:10px;font-size:9px;font-weight:600;color:#fff}
+.footer{margin-top:12px;padding-top:8px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:9px;color:#94a3b8}
+@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+</style></head><body>
+<div class="header"><div><h1>ZOLL TAX FOREX</h1><div class="subtitle">Rapport des Opérations</div></div><div class="meta">Généré le ${new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"long",year:"numeric",hour:"2-digit",minute:"2-digit"})}</div></div>
+<div class="summary">
+<div class="summary-card"><div class="label">Total opérations</div><div class="value">${filteredTransactions.length}</div></div>
+<div class="summary-card"><div class="label">Montant total</div><div class="value">${totalAmount.toLocaleString("fr-FR")} XAF</div></div>
+<div class="summary-card"><div class="label">Terminées</div><div class="value" style="color:#10b981">${filteredTransactions.filter(t => t.status === "completed" || t.status === "validated").length}</div></div>
+<div class="summary-card"><div class="label">En attente</div><div class="value" style="color:#f59e0b">${filteredTransactions.filter(t => t.status === "pending").length}</div></div>
+<div class="summary-card"><div class="label">Rejetées/Annulées</div><div class="value" style="color:#ef4444">${filteredTransactions.filter(t => t.status === "rejected" || t.status === "cancelled").length}</div></div>
+</div>
+<table><thead><tr><th>#</th><th>ID</th><th>Date</th><th>Type</th><th>Description</th><th>Montant</th><th>Statut</th><th>Caissier</th><th>Agence</th></tr></thead>
+<tbody>${filteredTransactions.map((t, i) => `<tr><td>${i+1}</td><td style="font-size:9px">${t.id}</td><td>${formatDate(t.created_at)}</td><td>${getTypeLabel(t.type)}</td><td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.description}</td><td class="amount">${t.amount.toLocaleString("fr-FR")} ${t.currency}</td><td><span class="status" style="background:${statusColors[t.status]||"#64748b"}">${getStatusLabel(t.status)}</span></td><td>${t.created_by}</td><td>${t.agency}</td></tr>`).join("")}</tbody></table>
+<div class="footer"><span>ZOLL TAX FOREX © ${new Date().getFullYear()} — Document confidentiel</span><span>${filteredTransactions.length} enregistrements • Total : ${totalAmount.toLocaleString("fr-FR")} XAF</span></div>
+</body></html>`
+      const w = window.open("", "_blank"); if (w) { w.document.write(html); w.document.close(); setTimeout(() => w.print(), 400) }
+      toast({ title: "Export PDF prêt", description: `${filteredTransactions.length} opérations prêtes à imprimer en PDF` })
+    } catch {
+      toast({ title: "Erreur d'export", description: "Une erreur est survenue lors de la génération du PDF.", variant: "destructive" })
     }
   }
 
@@ -1798,10 +1807,25 @@ export function TransactionsView({ user }: TransactionsViewProps = {}) {
           <h2 className="text-2xl font-bold text-gray-800">Opérations des Caissiers</h2>
           <p className="text-gray-600 mt-1">Suivi et consultation des opérations effectuées par les caissiers</p>
         </div>
-        <Button onClick={handleExportTransactions} variant="outline">
-          <Download className="mr-2 h-4 w-4" />
-          Exporter
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" className="gap-2">
+              <Download className="h-4 w-4" />
+              Exporter
+              <ChevronDownIcon className="h-3.5 w-3.5 opacity-60" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-44">
+            <DropdownMenuItem onClick={handleExportTransactions} className="gap-2 cursor-pointer">
+              <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
+              Exporter en CSV
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={handleExportTransactionsPdf} className="gap-2 cursor-pointer">
+              <FileText className="h-4 w-4 text-red-500" />
+              Exporter en PDF
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       {/* Filtres */}

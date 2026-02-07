@@ -4,6 +4,7 @@ import { GeistMono } from 'geist/font/mono'
 import { Analytics } from '@vercel/analytics/next'
 import './globals.css'
 import { GlobalLogout } from '@/components/global-logout'
+import { Toaster } from '@/components/ui/toaster'
 
 export const metadata: Metadata = {
   title: {
@@ -32,6 +33,7 @@ export default function RootLayout({
       <body className="font-sans">
         <GlobalLogout />
         {children}
+        <Toaster />
         <Analytics />
       </body>
     </html>

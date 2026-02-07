@@ -150,7 +150,7 @@ export async function validateExpenseByAccounting(
         rejection_reason = ${rejection_reason || null}, 
         accounting_validated_by = ${validatedBy},
         accounting_validated_at = NOW(),
-        debit_account_type = COALESCE(${debitAccount}, debit_account_type, 'receipt_commissions'),
+        debit_account_type = COALESCE(${debitAccount}, debit_account_type, 'uba'),
         updated_at = NOW()
       WHERE id = ${id}::uuid AND status = 'pending'
       RETURNING 
@@ -274,7 +274,7 @@ export async function validateExpenseByDirector(
           validatedBy
         )
       } else {
-        const debitAccount = (expense.debit_account_type || "receipt_commissions") as import("./cash-queries").ExpenseDebitAccountType
+        const debitAccount = (expense.debit_account_type || "uba") as import("./cash-queries").ExpenseDebitAccountType
         await deductExpenseFromAccount(
           debitAccount,
           expense.id,
@@ -354,12 +354,12 @@ const DASHBOARD_SELECT_NO_DEBIT = `
 
 async function runDashboardPendingQuery(selectCols: string, whereClause: ReturnType<typeof sql>): Promise<Expense[]> {
   try {
-    const rows = await sql<Expense[]>`SELECT ${sql.unsafe(selectCols)} FROM expenses ${whereClause} ORDER BY created_at DESC LIMIT 50`
+    const rows = await sql<Expense[]>`SELECT ${sql.unsafe(selectCols)} FROM expenses ${whereClause} ORDER BY created_at DESC LIMIT 500`
     return rows
   } catch (err: any) {
     const msg = err?.message ?? String(err)
     if ((msg.includes("debit_account_type") || msg.includes("column")) && msg.includes("does not exist")) {
-      const rows = await sql<Expense[]>`SELECT ${sql.unsafe(DASHBOARD_SELECT_NO_DEBIT)} FROM expenses ${whereClause} ORDER BY created_at DESC LIMIT 50`
+      const rows = await sql<Expense[]>`SELECT ${sql.unsafe(DASHBOARD_SELECT_NO_DEBIT)} FROM expenses ${whereClause} ORDER BY created_at DESC LIMIT 500`
       return rows.map((r) => ({ ...r, debit_account_type: null }))
     }
     throw err

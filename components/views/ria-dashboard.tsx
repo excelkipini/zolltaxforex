@@ -18,8 +18,17 @@ import {
   RefreshCw,
   Download,
   Filter,
-  Calendar
+  Calendar,
+  FileText,
+  FileSpreadsheet,
+  ChevronDown
 } from "lucide-react"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, Legend } from "recharts"
 import { RiaCsvImport } from "./ria-csv-import"
 import { useToast } from "@/hooks/use-toast"
@@ -263,6 +272,128 @@ export function RiaDashboard({ initialData, onImportSuccess }: RiaDashboardProps
     color: COLORS[index % COLORS.length]
   }))
 
+  // --- Export CSV ---
+  const handleExportCsv = () => {
+    try {
+      const d = dashboardData
+      const rows = [
+        ["Indicateur", "Valeur"],
+        ["Montant principal total", d.montant_principal_total],
+        ["Montant brut", d.montant_brut],
+        ["Total frais", d.total_frais],
+        ["Remboursements", d.remboursements],
+        ["Versement banque", d.versement_banque],
+        ["Montant à débiter", d.montant_a_debiter],
+        ["Montant en coffre", d.montant_en_coffre],
+        ["Commission RIA", d.commissions_ria],
+        ["TVA RIA", d.tva_ria],
+        ["Commission UBA", d.commissions_uba],
+        ["TVA UBA", d.tva_uba],
+        ["Commission ZTF", d.commissions_ztf],
+        ["TVA ZTF", d.tva_ztf],
+        ["CA ZTF", d.ca_ztf],
+        ["CTE", d.cte],
+        ["TTF", d.ttf],
+        ["Nb transactions", d.nb_transactions],
+        ["Nb paiements", d.nb_paiements],
+        ["Nb annulations", d.nb_annulations],
+        ["Nb remboursements", d.nb_remboursements],
+        ["Montant moyen", d.montant_moyen],
+        ["Total délestage", d.total_delestage],
+        [],
+        ["--- Statistiques par guichetier ---"],
+        ["Guichetier", "Agence", "Nb transactions", "Montant total", "Montant moyen", "Commissions"],
+        ...guichetierStats.map(g => [g.guichetier, g.agence, g.nb_transactions, g.montant_total, g.montant_moyen, g.commissions_generes]),
+        [],
+        ["--- Statistiques par agence ---"],
+        ["Agence", "Nb transactions", "Montant total", "Montant moyen", "Commissions"],
+        ...agenceStats.map(a => [a.agence, a.nb_transactions, a.montant_total, a.montant_moyen, a.commissions_generes]),
+      ]
+      const csv = rows.map(r => (r as any[]).map(c => `"${String(c ?? "").replace(/"/g, '""')}"`).join(",")).join("\n")
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `ria-dashboard-${new Date().toISOString().split("T")[0]}.csv`
+      a.click()
+      URL.revokeObjectURL(url)
+      toast({ title: "Export CSV réussi", description: "Données du tableau de bord RIA exportées." })
+    } catch {
+      toast({ title: "Erreur d'export", description: "Impossible d'exporter les données.", variant: "destructive" })
+    }
+  }
+
+  // --- Export PDF ---
+  const handleExportPdf = () => {
+    try {
+      const d = dashboardData
+      const fmt = (n: number) => n.toLocaleString("fr-FR")
+      const filterInfo: string[] = []
+      if (dateFrom || dateTo) filterInfo.push(`Période : ${dateFrom || "..."} au ${dateTo || "..."}`)
+      if (selectedAgence !== "Toutes") filterInfo.push(`Agence : ${selectedAgence}`)
+      if (selectedGuichetier !== "Tous") filterInfo.push(`Guichetier : ${selectedGuichetier}`)
+
+      const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>RIA Dashboard</title>
+<style>
+@page{size:A4 landscape;margin:12mm}*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',Arial,sans-serif;font-size:10px;color:#1e293b;background:#fff}
+.header{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:12px;border-bottom:2px solid #2563eb;margin-bottom:10px}
+.header h1{font-size:18px;color:#1e3a5f;font-weight:700}.header .sub{font-size:11px;color:#64748b;margin-top:2px}
+.header .meta{text-align:right;font-size:10px;color:#64748b}
+.filters{font-size:9px;color:#64748b;margin-bottom:10px}.filters span{background:#eff6ff;color:#2563eb;padding:2px 6px;border-radius:3px;margin-right:4px}
+.cards{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+.card{background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:8px 14px;min-width:130px}
+.card .label{font-size:8px;color:#64748b;text-transform:uppercase;letter-spacing:.5px}.card .val{font-size:15px;font-weight:700;color:#1e293b;margin-top:2px}
+h2{font-size:13px;color:#1e3a5f;margin:12px 0 6px;border-bottom:1px solid #e2e8f0;padding-bottom:4px}
+table{width:100%;border-collapse:collapse;margin-bottom:12px}
+thead th{background:#1e3a5f;color:#fff;padding:6px 8px;text-align:left;font-size:9px;font-weight:600;text-transform:uppercase}
+thead th:first-child{border-radius:4px 0 0 0}thead th:last-child{border-radius:0 4px 0 0}
+tbody tr{border-bottom:1px solid #f1f5f9}tbody tr:nth-child(even){background:#f8fafc}
+tbody td{padding:5px 8px;font-size:10px}.r{text-align:right;font-weight:600}
+.footer{margin-top:12px;padding-top:8px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:9px;color:#94a3b8}
+@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+</style></head><body>
+<div class="header"><div><h1>ZOLL TAX FOREX</h1><div class="sub">Tableau de bord RIA</div></div>
+<div class="meta">Généré le ${new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"long",year:"numeric",hour:"2-digit",minute:"2-digit"})}</div></div>
+${filterInfo.length ? `<div class="filters">Filtres : ${filterInfo.map(f=>`<span>${f}</span>`).join("")}</div>` : ""}
+<div class="cards">
+<div class="card"><div class="label">Transactions</div><div class="val">${fmt(d.nb_transactions)}</div></div>
+<div class="card"><div class="label">Montant principal</div><div class="val">${fmt(d.montant_principal_total)} XAF</div></div>
+<div class="card"><div class="label">Montant brut</div><div class="val">${fmt(d.montant_brut)} XAF</div></div>
+<div class="card"><div class="label">Total frais</div><div class="val">${fmt(d.total_frais)} XAF</div></div>
+<div class="card"><div class="label">Remboursements</div><div class="val">${fmt(d.remboursements)} XAF</div></div>
+<div class="card"><div class="label">Délestage</div><div class="val">${fmt(d.total_delestage)} XAF</div></div>
+</div>
+<h2>Répartition des commissions</h2>
+<table><thead><tr><th>Élément</th><th style="text-align:right">Montant (FCFA)</th></tr></thead><tbody>
+<tr><td>Commission RIA</td><td class="r">${fmt(d.commissions_ria)}</td></tr>
+<tr><td>TVA RIA</td><td class="r">${fmt(d.tva_ria)}</td></tr>
+<tr><td>Commission UBA</td><td class="r">${fmt(d.commissions_uba)}</td></tr>
+<tr><td>TVA UBA</td><td class="r">${fmt(d.tva_uba)}</td></tr>
+<tr><td>Commission ZTF</td><td class="r">${fmt(d.commissions_ztf)}</td></tr>
+<tr><td>CA ZTF</td><td class="r">${fmt(d.ca_ztf)}</td></tr>
+<tr><td>TVA ZTF</td><td class="r">${fmt(d.tva_ztf)}</td></tr>
+<tr><td>CTE</td><td class="r">${fmt(d.cte)}</td></tr>
+<tr><td>TTF</td><td class="r">${fmt(d.ttf)}</td></tr>
+</tbody></table>
+${guichetierStats.length > 0 ? `<h2>Statistiques par guichetier</h2>
+<table><thead><tr><th>#</th><th>Guichetier</th><th>Agence</th><th style="text-align:right">Transactions</th><th style="text-align:right">Montant total</th><th style="text-align:right">Commissions</th></tr></thead><tbody>
+${guichetierStats.map((g,i)=>`<tr><td>${i+1}</td><td>${g.guichetier}</td><td>${g.agence}</td><td class="r">${fmt(g.nb_transactions)}</td><td class="r">${fmt(g.montant_total)} XAF</td><td class="r">${fmt(g.commissions_generes)} XAF</td></tr>`).join("")}
+</tbody></table>` : ""}
+${agenceStats.length > 0 ? `<h2>Statistiques par agence</h2>
+<table><thead><tr><th>#</th><th>Agence</th><th style="text-align:right">Transactions</th><th style="text-align:right">Montant total</th><th style="text-align:right">Commissions</th></tr></thead><tbody>
+${agenceStats.map((a,i)=>`<tr><td>${i+1}</td><td>${a.agence}</td><td class="r">${fmt(a.nb_transactions)}</td><td class="r">${fmt(a.montant_total)} XAF</td><td class="r">${fmt(a.commissions_generes)} XAF</td></tr>`).join("")}
+</tbody></table>` : ""}
+<div class="footer"><span>ZOLL TAX FOREX © ${new Date().getFullYear()} — Document confidentiel</span><span>${fmt(d.nb_transactions)} transactions • Montant principal : ${fmt(d.montant_principal_total)} XAF</span></div>
+</body></html>`
+      const w = window.open("", "_blank")
+      if (w) { w.document.write(html); w.document.close(); setTimeout(() => w.print(), 400) }
+      toast({ title: "Export PDF prêt", description: "Le rapport RIA est prêt à imprimer." })
+    } catch {
+      toast({ title: "Erreur d'export", description: "Impossible de générer le PDF.", variant: "destructive" })
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Section Arrêtés en Attente de Validation (au-dessus du header) */}
@@ -366,10 +497,25 @@ export function RiaDashboard({ initialData, onImportSuccess }: RiaDashboardProps
             <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
             Actualiser
           </Button>
-          <Button variant="outline">
-            <Download className="h-4 w-4 mr-2" />
-            Exporter
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="gap-2">
+                <Download className="h-4 w-4" />
+                Exporter
+                <ChevronDown className="h-3.5 w-3.5 opacity-60" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-44">
+              <DropdownMenuItem onClick={handleExportCsv} className="gap-2 cursor-pointer">
+                <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
+                Exporter en CSV
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleExportPdf} className="gap-2 cursor-pointer">
+                <FileText className="h-4 w-4 text-red-500" />
+                Exporter en PDF
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 

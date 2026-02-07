@@ -12,7 +12,8 @@ import {
   syncExistingReceiptCommissions,
   reconcileCommissionsBalance,
   reconcileReceiptCommissionsBalance,
-  reconcileRiaExcedentsBalance
+  reconcileRiaExcedentsBalance,
+  transferReceiptCommissionsToUba
 } from "@/lib/cash-queries"
 import { sql } from "@/lib/db"
 
@@ -26,6 +27,10 @@ export async function GET(request: NextRequest) {
       case 'accounts':
         // Initialiser les comptes s'ils n'existent pas
         await initializeCashAccounts()
+        // Migration: basculer les dépenses en attente de receipt_commissions vers uba
+        try {
+          await sql`UPDATE expenses SET debit_account_type = 'uba' WHERE status = 'accounting_approved' AND debit_account_type = 'receipt_commissions'`
+        } catch { /* colonne peut ne pas exister */ }
         // Réconciliation automatique du solde des commissions (transferts et reçus)
         await reconcileCommissionsBalance('system_auto')
         await reconcileReceiptCommissionsBalance('system_auto')
@@ -36,7 +41,7 @@ export async function GET(request: NextRequest) {
 
       case 'transactions':
         const accountType = searchParams.get('accountType') as any
-        const limit = parseInt(searchParams.get('limit') || '50')
+        const limit = Math.min(2000, parseInt(searchParams.get('limit') || '1000'))
         const transactions = await getCashTransactions(accountType, limit)
         return NextResponse.json({ success: true, transactions })
 
@@ -141,6 +146,29 @@ export async function POST(request: NextRequest) {
           success: true,
           message: "Commission ajoutée avec succès"
         })
+
+      case 'transfer-funds': {
+        const { amount: transferAmount, description: transferDesc, updatedBy: transferBy } = body
+        if (!transferAmount || !transferDesc || !transferBy) {
+          return NextResponse.json(
+            { success: false, error: "Paramètres manquants: amount, description, updatedBy" },
+            { status: 400 }
+          )
+        }
+        const parsedAmount = Number(transferAmount)
+        if (isNaN(parsedAmount) || parsedAmount <= 0) {
+          return NextResponse.json(
+            { success: false, error: "Le montant doit être un nombre positif" },
+            { status: 400 }
+          )
+        }
+        const transferResult = await transferReceiptCommissionsToUba(parsedAmount, transferDesc, transferBy)
+        return NextResponse.json({
+          success: true,
+          ...transferResult,
+          message: `Transfert de ${parsedAmount.toLocaleString("fr-FR")} XAF effectué de Commissions Reçus vers Compte UBA`
+        })
+      }
 
       case 'adjust-receipt-commissions': {
         const { amount: adjAmount } = body

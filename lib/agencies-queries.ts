@@ -1,5 +1,6 @@
 import "server-only"
 import { sql } from "./db"
+import { createAgencyExchangeCaisse, deleteAgencyExchangeCaisse } from "./exchange-caisse-queries"
 
 export type Agency = {
   id: string
@@ -63,7 +64,19 @@ export async function createAgency(input: CreateAgencyInput): Promise<Agency> {
       0 as users, 
       created_at::text as created_at
   `
-  return rows[0]
+  
+  const agency = rows[0]
+  
+  // Créer automatiquement les caisses de change pour la nouvelle agence
+  if (agency && agency.id) {
+    try {
+      await createAgencyExchangeCaisse(agency.id, 'system')
+    } catch (e) {
+      console.error('Erreur lors de la création des caisses de change pour l\'agence:', e)
+    }
+  }
+  
+  return agency
 }
 
 export async function updateAgency(input: UpdateAgencyInput): Promise<Agency> {

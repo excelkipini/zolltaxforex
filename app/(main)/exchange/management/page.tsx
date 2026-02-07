@@ -5,7 +5,7 @@ import { ExchangeManagementView } from "@/components/views/exchange-management-v
 import type { Metadata } from "next"
 
 export const metadata: Metadata = {
-  title: "Gestion de change",
+  title: "Caisse",
   description: "Caisses XAF, USD, EUR - Appro, Vente et Cession de devises",
 }
 

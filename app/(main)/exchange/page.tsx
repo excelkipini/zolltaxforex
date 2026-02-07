@@ -22,7 +22,11 @@ export default async function ExchangePage({ searchParams }: { searchParams?: { 
 
   return (
     <PermissionGuard user={user} route="/exchange">
-      <ExchangeView rates={{ USD: eff.usd, EUR: eff.eur, GBP: eff.gbp }} commissionPercent={eff.commission} />
+      <ExchangeView 
+        buyRates={{ USD: eff.usd_buy, EUR: eff.eur_buy, GBP: eff.gbp_buy }} 
+        sellRates={{ USD: eff.usd_sell, EUR: eff.eur_sell, GBP: eff.gbp_sell }} 
+        commissionPercent={eff.commission} 
+      />
     </PermissionGuard>
   )
 }

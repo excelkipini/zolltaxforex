@@ -585,6 +585,62 @@ export async function reconcileRiaExcedentsBalance(updatedBy: string = 'system')
   return total
 }
 
+// Transférer des fonds de Commissions Reçus vers Compte UBA
+export async function transferReceiptCommissionsToUba(
+  amount: number,
+  description: string,
+  updatedBy: string
+): Promise<{ success: boolean; newReceiptBalance: number; newUbaBalance: number }> {
+  // Vérifier que le montant est positif
+  if (amount <= 0) {
+    throw new Error("Le montant du transfert doit être supérieur à 0")
+  }
+
+  // Récupérer le solde actuel des commissions des reçus
+  const receiptAccount = await sql<CashAccount[]>`
+    SELECT id::text, account_type, account_name, current_balance::bigint as current_balance,
+           last_updated::text as last_updated, updated_by, created_at::text as created_at
+    FROM cash_accounts WHERE account_type = 'receipt_commissions'
+  `
+  if (receiptAccount.length === 0) {
+    throw new Error("Compte Commissions Reçus non trouvé")
+  }
+
+  const receiptBalance = Number(receiptAccount[0].current_balance)
+  if (receiptBalance < amount) {
+    throw new Error(`Solde insuffisant dans Commissions Reçus. Disponible: ${receiptBalance.toLocaleString("fr-FR")} XAF, demandé: ${amount.toLocaleString("fr-FR")} XAF`)
+  }
+
+  // Récupérer le solde actuel du Compte UBA
+  const ubaAccount = await sql<CashAccount[]>`
+    SELECT id::text, account_type, account_name, current_balance::bigint as current_balance,
+           last_updated::text as last_updated, updated_by, created_at::text as created_at
+    FROM cash_accounts WHERE account_type = 'uba'
+  `
+  if (ubaAccount.length === 0) {
+    throw new Error("Compte UBA non trouvé")
+  }
+
+  const ubaBalance = Number(ubaAccount[0].current_balance)
+  const newReceiptBalance = receiptBalance - amount
+  const newUbaBalance = ubaBalance + amount
+  const roundedAmount = Math.round(amount)
+
+  // Transaction atomique : débiter Commissions Reçus + créditer UBA + enregistrer les deux mouvements
+  await sql.transaction([
+    // Débiter Commissions Reçus
+    sql`UPDATE cash_accounts SET current_balance = ${newReceiptBalance}, last_updated = NOW(), updated_by = ${updatedBy} WHERE account_type = 'receipt_commissions'`,
+    // Créditer Compte UBA
+    sql`UPDATE cash_accounts SET current_balance = ${newUbaBalance}, last_updated = NOW(), updated_by = ${updatedBy} WHERE account_type = 'uba'`,
+    // Enregistrer le retrait sur Commissions Reçus
+    sql`INSERT INTO cash_transactions (account_type, transaction_type, amount, description, created_by) VALUES ('receipt_commissions', 'transfer', ${roundedAmount}, ${description}, ${updatedBy})`,
+    // Enregistrer le dépôt sur Compte UBA
+    sql`INSERT INTO cash_transactions (account_type, transaction_type, amount, description, created_by) VALUES ('uba', 'transfer', ${roundedAmount}, ${description}, ${updatedBy})`,
+  ])
+
+  return { success: true, newReceiptBalance, newUbaBalance }
+}
+
 // Récupérer l'historique des transactions de caisse
 export async function getCashTransactions(
   accountType?: CashAccount["account_type"],
@@ -745,6 +801,7 @@ export async function getTotalReceiptCommissions(): Promise<number> {
         WHEN transaction_type = 'deposit' THEN amount
         WHEN transaction_type = 'withdrawal' THEN -amount
         WHEN transaction_type = 'expense' THEN -amount
+        WHEN transaction_type = 'transfer' THEN -amount
         ELSE 0
       END
     ), 0) as total
