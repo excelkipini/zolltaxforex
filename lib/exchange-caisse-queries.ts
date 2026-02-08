@@ -186,7 +186,7 @@ export async function getExchangeCaisseBalances(agencyId?: string | null): Promi
   
   if (agencyId) {
     const rows = await sql<ExchangeCaisseRow[]>`
-      SELECT ec.currency, ec.balance::numeric as balance, ec.last_appro_rate::numeric as last_appro_rate,
+      SELECT ec.currency, ec.balance::float8 as balance, ec.last_appro_rate::float8 as last_appro_rate,
              ec.last_updated::text as last_updated, ec.updated_by, ec.last_manual_motif,
              ec.agency_id::text as agency_id, a.name as agency_name
       FROM exchange_caisse ec
@@ -194,20 +194,20 @@ export async function getExchangeCaisseBalances(agencyId?: string | null): Promi
       WHERE ec.agency_id = ${agencyId}::uuid
       ORDER BY ec.currency
     `
-    return rows
+    return rows.map(r => ({ ...r, balance: Number(r.balance) || 0 }))
   }
   
   // Caisse principale (agency_id IS NULL)
   // DISTINCT ON pour ne garder qu'une ligne par devise (celle avec le solde le plus élevé)
   const rows = await sql<ExchangeCaisseRow[]>`
-    SELECT DISTINCT ON (currency) currency, balance::numeric as balance, last_appro_rate::numeric as last_appro_rate,
+    SELECT DISTINCT ON (currency) currency, balance::float8 as balance, last_appro_rate::float8 as last_appro_rate,
            last_updated::text as last_updated, updated_by, last_manual_motif,
            agency_id::text as agency_id, NULL as agency_name
     FROM exchange_caisse
     WHERE agency_id IS NULL
     ORDER BY currency, balance DESC, last_updated DESC
   `
-  return rows
+  return rows.map(r => ({ ...r, balance: Number(r.balance) || 0 }))
 }
 
 /** Récupérer toutes les agences avec leurs caisses de change */
@@ -225,8 +225,8 @@ export async function getAllAgenciesWithCaisses(): Promise<AgencyCaisseInfo[]> {
       a.id::text as agency_id,
       a.name as agency_name,
       ec.currency,
-      COALESCE(ec.balance, 0)::numeric as balance,
-      ec.last_appro_rate::numeric as last_appro_rate
+      COALESCE(ec.balance, 0)::float8 as balance,
+      ec.last_appro_rate::float8 as last_appro_rate
     FROM agencies a
     LEFT JOIN exchange_caisse ec ON ec.agency_id = a.id
     WHERE a.status = 'active'
@@ -248,9 +248,9 @@ export async function getAllAgenciesWithCaisses(): Promise<AgencyCaisseInfo[]> {
     
     const info = agencyMap.get(row.agency_id)!
     if (row.currency) {
-      info.balances[row.currency] = row.balance || 0
+      info.balances[row.currency] = Number(row.balance) || 0
       if (row.currency === 'USD' || row.currency === 'EUR' || row.currency === 'GBP') {
-        info.last_appro_rates[row.currency] = row.last_appro_rate
+        info.last_appro_rates[row.currency] = row.last_appro_rate != null ? Number(row.last_appro_rate) : null
       }
     }
   }
@@ -260,11 +260,24 @@ export async function getAllAgenciesWithCaisses(): Promise<AgencyCaisseInfo[]> {
 
 async function getCaisseBalance(currency: ExchangeCaisseCurrency, agencyId?: string | null): Promise<number> {
   if (agencyId) {
+    // S'assurer que la ligne existe
+    await sql`
+      INSERT INTO exchange_caisse (currency, balance, updated_by, agency_id)
+      VALUES (${currency}, 0, 'system', ${agencyId}::uuid)
+      ON CONFLICT (currency, agency_id) DO NOTHING
+    `
     const rows = await sql<{ balance: string }[]>`
       SELECT balance::text FROM exchange_caisse WHERE currency = ${currency} AND agency_id = ${agencyId}::uuid ORDER BY balance DESC LIMIT 1
     `
     return rows.length ? Number(rows[0].balance) : 0
   }
+  
+  // Caisse principale: s'assurer que la ligne existe
+  await sql`
+    INSERT INTO exchange_caisse (currency, balance, updated_by, agency_id)
+    SELECT ${currency}, 0, 'system', NULL
+    WHERE NOT EXISTS (SELECT 1 FROM exchange_caisse WHERE currency = ${currency} AND agency_id IS NULL)
+  `
   
   // ORDER BY balance DESC pour toujours récupérer la ligne avec le solde le plus élevé (protection anti-doublons NULL)
   const rows = await sql<{ balance: string }[]>`
@@ -340,6 +353,13 @@ async function updateCaisseBalance(
   agencyId?: string | null
 ): Promise<void> {
   if (agencyId) {
+    // S'assurer que la ligne existe
+    await sql`
+      INSERT INTO exchange_caisse (currency, balance, updated_by, agency_id)
+      VALUES (${currency}, 0, 'system', ${agencyId}::uuid)
+      ON CONFLICT (currency, agency_id) DO NOTHING
+    `
+    
     if (lastApproRate !== undefined) {
       await sql`
         UPDATE exchange_caisse
@@ -357,7 +377,13 @@ async function updateCaisseBalance(
     return
   }
   
-  // Caisse principale
+  // Caisse principale: s'assurer que la ligne existe
+  await sql`
+    INSERT INTO exchange_caisse (currency, balance, updated_by, agency_id)
+    SELECT ${currency}, 0, 'system', NULL
+    WHERE NOT EXISTS (SELECT 1 FROM exchange_caisse WHERE currency = ${currency} AND agency_id IS NULL)
+  `
+  
   if (lastApproRate !== undefined) {
     await sql`
       UPDATE exchange_caisse
@@ -383,35 +409,80 @@ export async function updateExchangeCaisseBalanceManual(
   agencyId?: string | null
 ): Promise<void> {
   await ensureExchangeCaisseTables()
-  const previousBalance = await getCaisseBalance(currency, agencyId)
   
   if (agencyId) {
+    // S'assurer que la ligne existe pour cette agence
     await sql`
+      INSERT INTO exchange_caisse (currency, balance, updated_by, agency_id)
+      VALUES (${currency}, 0, 'system', ${agencyId}::uuid)
+      ON CONFLICT (currency, agency_id) DO NOTHING
+    `
+    
+    const previousRows = await sql<{ balance: string }[]>`
+      SELECT balance::text FROM exchange_caisse WHERE currency = ${currency} AND agency_id = ${agencyId}::uuid LIMIT 1
+    `
+    const previousBalance = previousRows.length ? Number(previousRows[0].balance) : 0
+    
+    const updated = await sql<{ balance: string }[]>`
       UPDATE exchange_caisse
       SET balance = ${newBalance}, last_updated = NOW(), updated_by = ${updatedBy},
           last_manual_motif = ${motif ?? null}
       WHERE currency = ${currency} AND agency_id = ${agencyId}::uuid
+      RETURNING balance::text as balance
     `
+    
+    if (updated.length === 0) {
+      throw new Error(`Échec de la mise à jour: aucune ligne trouvée pour ${currency} (agence ${agencyId})`)
+    }
+    
+    await recordExchangeOperation(
+      "maj_manuelle",
+      {
+        currency,
+        previous_balance: previousBalance,
+        new_balance: Number(updated[0].balance),
+        motif: motif ?? null,
+      },
+      updatedBy,
+      agencyId
+    )
   } else {
+    // Caisse principale: s'assurer que la ligne existe (agency_id IS NULL)
     await sql`
+      INSERT INTO exchange_caisse (currency, balance, updated_by, agency_id)
+      SELECT ${currency}, 0, 'system', NULL
+      WHERE NOT EXISTS (SELECT 1 FROM exchange_caisse WHERE currency = ${currency} AND agency_id IS NULL)
+    `
+    
+    const previousRows = await sql<{ balance: string }[]>`
+      SELECT balance::text FROM exchange_caisse WHERE currency = ${currency} AND agency_id IS NULL ORDER BY balance DESC LIMIT 1
+    `
+    const previousBalance = previousRows.length ? Number(previousRows[0].balance) : 0
+    
+    const updated = await sql<{ balance: string }[]>`
       UPDATE exchange_caisse
       SET balance = ${newBalance}, last_updated = NOW(), updated_by = ${updatedBy},
           last_manual_motif = ${motif ?? null}
       WHERE currency = ${currency} AND agency_id IS NULL
+      RETURNING balance::text as balance
     `
+    
+    if (updated.length === 0) {
+      throw new Error(`Échec de la mise à jour: aucune ligne trouvée pour ${currency} (caisse principale)`)
+    }
+    
+    await recordExchangeOperation(
+      "maj_manuelle",
+      {
+        currency,
+        previous_balance: previousBalance,
+        new_balance: Number(updated[0].balance),
+        motif: motif ?? null,
+      },
+      updatedBy,
+      null
+    )
   }
-  
-  await recordExchangeOperation(
-    "maj_manuelle",
-    {
-      currency,
-      previous_balance: previousBalance,
-      new_balance: newBalance,
-      motif: motif ?? null,
-    },
-    updatedBy,
-    agencyId
-  )
 }
 
 export async function recordExchangeOperation(
