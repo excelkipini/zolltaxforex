@@ -27,7 +27,9 @@ import {
   ArrowDown,
   Copy,
   Check,
-  FileText
+  FileText,
+  Undo2,
+  Loader2
 } from "lucide-react"
 import { format } from "date-fns"
 import { fr } from "date-fns/locale"
@@ -82,6 +84,8 @@ export default function CardsHistoryPage() {
   const [showJsonMetadata, setShowJsonMetadata] = React.useState(false)
   const [showJsonOldValues, setShowJsonOldValues] = React.useState(false)
   const [showJsonNewValues, setShowJsonNewValues] = React.useState(false)
+  const [cancelling, setCancelling] = React.useState(false)
+  const [cancelConfirmOpen, setCancelConfirmOpen] = React.useState(false)
 
   const loadHistory = async (pageNum = 1) => {
     setLoading(true)
@@ -491,6 +495,53 @@ export default function CardsHistoryPage() {
     } catch (error) {
       console.error('Erreur lors de l\'export:', error)
     }
+  }
+
+  const handleCancelDistribution = async (actionId: string) => {
+    setCancelling(true)
+    try {
+      const res = await fetch('/api/cards/distribute/cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ actionId })
+      })
+
+      const data = await res.json()
+
+      if (!res.ok || !data?.ok) {
+        alert(`Erreur: ${data?.error || 'Erreur lors de l\'annulation'}`)
+        return
+      }
+
+      alert(
+        `Distribution annulée avec succès !\n\n` +
+        `Cartes restaurées: ${data.data.cards_updated}\n` +
+        `Montant reversé: ${data.data.total_reversed.toLocaleString('fr-FR')} XAF\n` +
+        `Recharges supprimées: ${data.data.recharges_deleted}`
+      )
+
+      setCancelConfirmOpen(false)
+      setDetailsOpen(false)
+      setSelectedAction(null)
+      loadHistory(page)
+      loadStats()
+    } catch (error) {
+      console.error('Erreur lors de l\'annulation:', error)
+      alert('Erreur lors de l\'annulation de la distribution')
+    } finally {
+      setCancelling(false)
+    }
+  }
+
+  const isDistributionCancellable = (action: ActionHistoryEntry): boolean => {
+    return (
+      action.action_type === 'distribute' &&
+      !action.action_description?.startsWith('[ANNULÉE]') &&
+      action.new_values?.action !== 'cancellation' &&
+      !!action.metadata?.distributions &&
+      Array.isArray(action.metadata.distributions) &&
+      action.metadata.distributions.length > 0
+    )
   }
 
   return (
@@ -1074,10 +1125,10 @@ export default function CardsHistoryPage() {
                 </div>
               </div>
 
-              {/* Bouton de téléchargement PDF pour les actions de distribution */}
+              {/* Boutons pour les actions de distribution */}
               {selectedAction.action_type === 'distribute' && (
-                <div className="pt-4 border-t mt-4">
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3">
+                <div className="pt-4 border-t mt-4 space-y-3">
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                     <p className="text-sm text-blue-800 font-medium mb-1">
                       📄 Rapport PDF disponible
                     </p>
@@ -1085,26 +1136,94 @@ export default function CardsHistoryPage() {
                       Téléchargez le PDF détaillé de cette distribution avec la liste complète des cartes
                     </p>
                   </div>
-                  <Button
-                    onClick={() => {
-                      console.log('📄 Génération PDF pour action:', {
-                        id: selectedAction.id,
-                        action_type: selectedAction.action_type,
-                        metadata: selectedAction.metadata,
-                        new_values: selectedAction.new_values,
-                        description: selectedAction.action_description,
-                        hasMetadata: selectedAction.metadata && Object.keys(selectedAction.metadata).length > 0,
-                        hasNewValues: selectedAction.new_values && Object.keys(selectedAction.new_values).length > 0,
-                        distributionsCount: selectedAction.metadata?.distributions?.length || 0
-                      })
-                      generateDistributionPDF(selectedAction)
-                    }}
-                    className="w-full bg-red-600 hover:bg-red-700 text-white"
-                    size="lg"
-                  >
-                    <Download className="h-5 w-5 mr-2" />
-                    Télécharger le PDF de Distribution
-                  </Button>
+
+                  <div className="flex gap-3">
+                    <Button
+                      onClick={() => generateDistributionPDF(selectedAction)}
+                      className="flex-1 bg-red-600 hover:bg-red-700 text-white"
+                      size="lg"
+                    >
+                      <Download className="h-5 w-5 mr-2" />
+                      Télécharger le PDF
+                    </Button>
+
+                    {isDistributionCancellable(selectedAction) && (
+                      <>
+                        {!cancelConfirmOpen ? (
+                          <Button
+                            onClick={() => setCancelConfirmOpen(true)}
+                            variant="outline"
+                            size="lg"
+                            className="flex-1 border-orange-300 text-orange-700 hover:bg-orange-50 hover:text-orange-800"
+                            disabled={cancelling}
+                          >
+                            <Undo2 className="h-5 w-5 mr-2" />
+                            Annuler cette distribution
+                          </Button>
+                        ) : (
+                          <Button
+                            onClick={() => setCancelConfirmOpen(false)}
+                            variant="outline"
+                            size="lg"
+                            className="flex-1"
+                            disabled={cancelling}
+                          >
+                            Non, garder
+                          </Button>
+                        )}
+                      </>
+                    )}
+                  </div>
+
+                  {cancelConfirmOpen && selectedAction && isDistributionCancellable(selectedAction) && (
+                    <div className="bg-orange-50 border border-orange-300 rounded-lg p-4">
+                      <p className="text-sm text-orange-900 font-semibold mb-2">
+                        Confirmer l'annulation de cette distribution ?
+                      </p>
+                      <p className="text-xs text-orange-700 mb-1">
+                        Cette action va :
+                      </p>
+                      <ul className="text-xs text-orange-700 list-disc ml-4 mb-3 space-y-1">
+                        <li>Reverser le montant distribué sur chaque carte ({selectedAction.metadata?.distributions?.length || 0} cartes)</li>
+                        <li>Supprimer les recharges associées</li>
+                        <li>Restaurer les soldes à leur état précédent</li>
+                      </ul>
+                      <div className="flex gap-2">
+                        <Button
+                          onClick={() => handleCancelDistribution(selectedAction.id)}
+                          disabled={cancelling}
+                          className="bg-orange-600 hover:bg-orange-700 text-white"
+                        >
+                          {cancelling ? (
+                            <>
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              Annulation en cours...
+                            </>
+                          ) : (
+                            <>
+                              <Undo2 className="h-4 w-4 mr-2" />
+                              Oui, annuler la distribution
+                            </>
+                          )}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={() => setCancelConfirmOpen(false)}
+                          disabled={cancelling}
+                        >
+                          Non, annuler
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {selectedAction.action_description?.startsWith('[ANNULÉE]') && (
+                    <div className="bg-gray-100 border border-gray-300 rounded-lg p-3">
+                      <p className="text-sm text-gray-600 font-medium">
+                        Cette distribution a été annulée
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
